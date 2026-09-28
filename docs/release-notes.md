@@ -1,5 +1,12 @@
 # Release Notes
 
+## v0.1.1
+
+Fix: the AppImage `service` command exited immediately because
+`service_cli` lacked its `__main__` guard, so the installed user service
+never came up and the GUI showed "service unreachable". Reinstall with the
+one-line installer or rerun `install.sh`.
+
 ## v0.1.0
 
 First usable release of Naga Control, a personal control panel for the Razer

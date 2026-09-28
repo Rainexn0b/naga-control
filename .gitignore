@@ -18,3 +18,7 @@ dist/
 
 # Local captures can contain device identifiers or input activity.
 hardware-captures/
+
+# local tooling
+.codex/
+.opencode/

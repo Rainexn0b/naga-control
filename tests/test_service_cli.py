@@ -108,3 +108,17 @@ async def _exercise_run() -> None:
 
 async def _bus(bus: Bus) -> Bus:
     return bus
+
+
+def test_module_entrypoint_prints_usage() -> None:
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "naga_control.service.service_cli", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0
+    assert "usage" in result.stdout.lower()

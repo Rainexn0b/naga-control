@@ -116,3 +116,7 @@ async def run(
         await service.stop()
         if bus is not None:
             bus.disconnect()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
