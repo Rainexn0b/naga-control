@@ -1,0 +1,12 @@
+# Grant the active local session access only to Naga V3 Pro event nodes.
+ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="1532", ATTRS{idProduct}=="00e7", TAG+="uaccess"
+ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="1532", ATTRS{idProduct}=="00e8", TAG+="uaccess"
+
+# Creating virtual devices is inherently session-wide. This is the standard
+# desktop uaccess model also used by Steam and KDE Connect.
+ACTION=="add", KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"
+
+# Naga Control creates deterministic virtual devices (forwarding proxies,
+# replacement keyboard/mouse). Grant the active session read access so
+# diagnostics and clients can observe them; writes stay restricted.
+ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Naga Control *", TAG+="uaccess"

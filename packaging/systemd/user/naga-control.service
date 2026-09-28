@@ -1,0 +1,12 @@
+[Unit]
+Description=Naga Control remapping service
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env naga-control-service
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "product_id": "00e8",
+  "plate_layout": 2,
+  "controls": [
+    {
+      "control_id": "side_2_front",
+      "interface_number": "00",
+      "event_type": 1,
+      "event_code": 276,
+      "scan_code": 589829
+    },
+    {
+      "control_id": "side_2_rear",
+      "interface_number": "00",
+      "event_type": 1,
+      "event_code": 275,
+      "scan_code": 589828
+    }
+  ]
+}

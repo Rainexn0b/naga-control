@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Naga Control
+GenericName=Mouse configuration
+Comment=Configure the Razer Naga V3 Pro remapping service
+Exec=naga-control-gui
+Icon=org.nagacontrol.NagaControl
+Categories=Settings;HardwareSettings;Qt;
+Keywords=mouse;razer;naga;dpi;remapping;
+StartupNotify=true
+StartupWMClass=naga-control
+Terminal=false

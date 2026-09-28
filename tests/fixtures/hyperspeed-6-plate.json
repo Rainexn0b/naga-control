@@ -1,0 +1,49 @@
+{
+  "schema_version": 2,
+  "product_id": "00e8",
+  "plate_layout": 6,
+  "controls": [
+    {
+      "control_id": "side_6_1",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 2,
+      "scan_code": 458782
+    },
+    {
+      "control_id": "side_6_2",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 3,
+      "scan_code": 458783
+    },
+    {
+      "control_id": "side_6_3",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 4,
+      "scan_code": 458784
+    },
+    {
+      "control_id": "side_6_4",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 5,
+      "scan_code": 458785
+    },
+    {
+      "control_id": "side_6_5",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 6,
+      "scan_code": 458786
+    },
+    {
+      "control_id": "side_6_6",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 7,
+      "scan_code": 458787
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+{
+  "schema_version": 2,
+  "product_id": "00e7",
+  "plate_layout": 12,
+  "controls": [
+    {
+      "control_id": "dpi_up",
+      "interface_number": "01",
+      "event_type": 1,
+      "event_code": 183,
+      "scan_code": 458856
+    },
+    {
+      "control_id": "dpi_down",
+      "interface_number": "01",
+      "event_type": 1,
+      "event_code": 184,
+      "scan_code": 458857
+    },
+    {
+      "control_id": "ring_finger",
+      "interface_number": "01",
+      "event_type": 1,
+      "event_code": 187,
+      "scan_code": 458860
+    },
+    {
+      "control_id": "top_front",
+      "interface_number": "01",
+      "event_type": 1,
+      "event_code": 98,
+      "scan_code": 458836
+    },
+    {
+      "control_id": "top_rear",
+      "interface_number": "01",
+      "event_type": 1,
+      "event_code": 188,
+      "scan_code": 458861
+    },
+    {
+      "control_id": "wheel_tilt_left",
+      "interface_number": "00",
+      "event_type": 1,
+      "event_code": 185,
+      "scan_code": null
+    },
+    {
+      "control_id": "wheel_tilt_right",
+      "interface_number": "00",
+      "event_type": 1,
+      "event_code": 186,
+      "scan_code": null
+    },
+    {
+      "control_id": "side_12_1",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 2,
+      "scan_code": 458782
+    },
+    {
+      "control_id": "side_12_2",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 3,
+      "scan_code": 458783
+    },
+    {
+      "control_id": "side_12_3",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 4,
+      "scan_code": 458784
+    },
+    {
+      "control_id": "side_12_4",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 5,
+      "scan_code": 458785
+    },
+    {
+      "control_id": "side_12_5",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 6,
+      "scan_code": 458786
+    },
+    {
+      "control_id": "side_12_6",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 7,
+      "scan_code": 458787
+    },
+    {
+      "control_id": "side_12_7",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 8,
+      "scan_code": 458788
+    },
+    {
+      "control_id": "side_12_8",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 9,
+      "scan_code": 458789
+    },
+    {
+      "control_id": "side_12_9",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 10,
+      "scan_code": 458790
+    },
+    {
+      "control_id": "side_12_10",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 11,
+      "scan_code": 458791
+    },
+    {
+      "control_id": "side_12_11",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 12,
+      "scan_code": 458797
+    },
+    {
+      "control_id": "side_12_12",
+      "interface_number": "02",
+      "event_type": 1,
+      "event_code": 13,
+      "scan_code": 458798
+    }
+  ]
+}

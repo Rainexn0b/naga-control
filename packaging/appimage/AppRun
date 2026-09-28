@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# AppRun dispatcher for the Naga Control AppImage.
+set -u
+HERE="$(dirname "$(readlink -f "${APPIMAGE:-$0}")")"
+APPDIR="${APPDIR:-$HERE}"
+
+PYLIB="$(ls -d "$APPDIR"/usr/lib/python3.* 2>/dev/null | head -n 1)"
+PYTHON="$APPDIR/usr/bin/python3"
+
+export PYTHONHOME="$APPDIR/usr"
+export LD_LIBRARY_PATH="$APPDIR/usr/lib${PYLIB:+:$PYLIB/site-packages/PySide6/Qt/lib}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export PATH="$APPDIR/usr/bin:$PATH"
+export QT_PLUGIN_PATH="${QT_PLUGIN_PATH:-}"
+export APPDIR
+
+command="${1:-gui}"
+case "$command" in
+  gui)
+    shift 2>/dev/null || true
+    exec "$PYTHON" -m naga_control.gui.app "$@"
+    ;;
+  service)
+    shift 2>/dev/null || true
+    exec "$PYTHON" -m naga_control.service.service_cli "$@"
+    ;;
+  capture)
+    shift 2>/dev/null || true
+    exec "$PYTHON" -m naga_control.diagnostics.capture_cli "$@"
+    ;;
+  integration|--install|--uninstall)
+    case "$command" in
+      --install)
+        shift
+        set -- install --exec-prefix "${APPIMAGE:-$0}" "$@"
+        ;;
+      --uninstall)
+        shift
+        set -- remove "$@"
+        ;;
+      *)
+        shift
+        ;;
+    esac
+    exec "$PYTHON" -m naga_control.integration_cli "$@"
+    ;;
+  python)
+    shift 2>/dev/null || true
+    exec "$PYTHON" "$@"
+    ;;
+  *)
+    exec "$PYTHON" -m naga_control.gui.app "$@"
+    ;;
+esac

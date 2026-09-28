@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    name: Build + Upload AppImage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prepare build venv used by build-appimage.sh
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e ".[dev]"
+
+      - name: Build AppImage
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: packaging/appimage/build-appimage.sh
+
+      - name: Verify AppImage output
+        run: |
+          ls -la dist
+          test -f dist/Naga-Control-*-x86_64.AppImage
+
+      - name: Generate SHA-256 sidecar
+        working-directory: dist
+        run: |
+          sha256sum Naga-Control-*-x86_64.AppImage > Naga-Control.sha256
+          cat Naga-Control.sha256
+
+      - name: Upload AppImage to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/Naga-Control-*-x86_64.AppImage \
+            dist/Naga-Control.sha256 \
+            --generate-notes
