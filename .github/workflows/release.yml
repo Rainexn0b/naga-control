@@ -25,10 +25,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install system deps for headless Qt
+      - name: Install system deps for headless Qt and AppImage packing
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 squashfs-tools file
 
       - name: Prepare build venv used by build-appimage.sh
         run: |
