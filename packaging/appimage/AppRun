@@ -17,7 +17,13 @@ export APPDIR
 # daemon) together with the bundled dbus-python bindings.
 HOST_OPENRAZER="$(env -u PYTHONHOME -u PYTHONPATH -u LD_LIBRARY_PATH /usr/bin/python3 -c 'import openrazer, os; print(os.path.dirname(os.path.dirname(openrazer.__file__)))' 2>/dev/null || true)"
 if [ -n "$HOST_OPENRAZER" ]; then
-  export PYTHONPATH="$HOST_OPENRAZER${PYTHONPATH:+:$PYTHONPATH}"
+  # Expose only the openrazer package (not the whole host site-packages,
+  # which would shadow bundled builds of evdev and friends).
+  LINK_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/naga-control/host-openrazer"
+  mkdir -p "$LINK_DIR"
+  rm -f "$LINK_DIR/openrazer"
+  ln -s "$HOST_OPENRAZER" "$LINK_DIR/openrazer"
+  export PYTHONPATH="$LINK_DIR${PYTHONPATH:+:$PYTHONPATH}"
 fi
 
 command="${1:-gui}"

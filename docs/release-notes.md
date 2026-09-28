@@ -1,5 +1,11 @@
 # Release Notes
 
+## v0.1.5
+
+Fix: adding the host site-packages to `PYTHONPATH` shadowed the bundled
+`evdev` build. The AppImage now exposes only the host's openrazer package
+through an isolated symlink directory.
+
 ## v0.1.4
 
 Fix: AppRun added the openrazer package directory itself to `PYTHONPATH`
