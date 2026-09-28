@@ -70,7 +70,7 @@ UDEV_TMP=""
 if [ ! -f "$UDEV_SRC" ]; then
   # Not running from a checkout: fetch the rule from the same release tag.
   UDEV_TMP="$(mktemp)"
-  curl -fsSL -o "$UDEV_TMP" "https://raw.githubusercontent.com/$REPO/${VERSION#v}/packaging/udev/70-naga-control.rules"     || curl -fsSL -o "$UDEV_TMP" "https://raw.githubusercontent.com/$REPO/main/packaging/udev/70-naga-control.rules"     || die "could not download the udev rule"
+  curl -fsSL -o "$UDEV_TMP" "https://raw.githubusercontent.com/$REPO/$VERSION/packaging/udev/70-naga-control.rules"     || curl -fsSL -o "$UDEV_TMP" "https://raw.githubusercontent.com/$REPO/main/packaging/udev/70-naga-control.rules"     || die "could not download the udev rule"
   UDEV_SRC="$UDEV_TMP"
 fi
 if command -v sudo >/dev/null; then

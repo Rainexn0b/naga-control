@@ -22,19 +22,19 @@ Requires a Linux desktop, OpenRazer with the Naga V3 Pro baseline (see
 [release notes](docs/release-notes.md)), and `curl`. Standard install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/scripts/install_user.sh -o install.sh && bash install.sh
+curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh -o install.sh && bash install.sh
 ```
 
 Pinned release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/scripts/install_user.sh -o install.sh && bash install.sh --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh -o install.sh && bash install.sh --version v0.1.0
 ```
 
 Uninstall:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/scripts/uninstall.sh -o uninstall.sh && bash uninstall.sh --yes --purge-config
+curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/uninstall.sh -o uninstall.sh && bash uninstall.sh --yes --purge-config
 ```
 
 This installs the AppImage to `~/.local/bin`, the systemd user unit,
