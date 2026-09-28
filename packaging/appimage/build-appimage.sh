@@ -86,6 +86,7 @@ curl -L --fail --silent --show-error \
 chmod +x "$APPIMAGETOOL"
 
 echo "==> creating AppImage"
+mkdir -p "$ROOT/dist"
 VERSION="$( "$ROOT/.venv/bin/python" -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
 OUTPUT="$ROOT/dist/Naga-Control-${VERSION}-${ARCH}.AppImage"
 ARCH="$ARCH" "$APPIMAGETOOL" --appimage-extract-and-run "$APPDIR" "$OUTPUT"
