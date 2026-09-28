@@ -82,7 +82,7 @@ echo "==> downloading appimagetool"
 APPIMAGETOOL="$BUILD/appimagetool"
 curl -L --fail --silent --show-error \
   -o "$APPIMAGETOOL" \
-  "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${ARCH}.AppImage"
+  "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-${ARCH}.AppImage"
 chmod +x "$APPIMAGETOOL"
 
 echo "==> creating AppImage"
