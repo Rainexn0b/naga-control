@@ -15,7 +15,7 @@ export APPDIR
 
 # Use the host's openrazer client package (pure Python, must match the host
 # daemon) together with the bundled dbus-python bindings.
-HOST_OPENRAZER="$(/usr/bin/python3 -c 'import openrazer, os; print(os.path.dirname(openrazer.__file__))' 2>/dev/null || true)"
+HOST_OPENRAZER="$(env -u PYTHONHOME -u PYTHONPATH -u LD_LIBRARY_PATH /usr/bin/python3 -c 'import openrazer, os; print(os.path.dirname(openrazer.__file__))' 2>/dev/null || true)"
 if [ -n "$HOST_OPENRAZER" ]; then
   export PYTHONPATH="$HOST_OPENRAZER${PYTHONPATH:+:$PYTHONPATH}"
 fi

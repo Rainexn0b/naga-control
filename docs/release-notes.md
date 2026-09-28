@@ -1,5 +1,11 @@
 # Release Notes
 
+## v0.1.3
+
+Fix: the AppRun host-openrazer probe crashed because `PYTHONHOME` pointed
+at the bundled interpreter, so the service still could not reach OpenRazer.
+The probe now sanitizes `PYTHONHOME`/`PYTHONPATH`/`LD_LIBRARY_PATH`.
+
 ## v0.1.2
 
 Fix: the AppImage could not import the host's `openrazer.client`
