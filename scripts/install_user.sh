@@ -39,15 +39,23 @@ else
 fi
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/$ASSET_DEFAULT"
 
-mkdir -p "$BIN_DIR"
-if [ ! -f "$APPIMAGE_DST" ] || [ -n "${NAGA_CONTROL_FORCE_DOWNLOAD:-}" ]; then
-  log "downloading AppImage for $VERSION"
+mkdir -p "$BIN_DIR" "$HOME/.local/share/naga-control"
+STAMP="$HOME/.local/share/naga-control/installed-tag"
+INSTALLED_TAG=""
+[ -f "$STAMP" ] && INSTALLED_TAG="$(cat "$STAMP" 2>/dev/null || true)"
+if [ ! -f "$APPIMAGE_DST" ] || [ -n "${NAGA_CONTROL_FORCE_DOWNLOAD:-}" ] || [ "$INSTALLED_TAG" != "$VERSION" ]; then
+  if [ -n "$INSTALLED_TAG" ] && [ "$INSTALLED_TAG" != "$VERSION" ]; then
+    log "updating AppImage ($INSTALLED_TAG -> $VERSION)"
+  else
+    log "downloading AppImage for $VERSION"
+  fi
   curl -fsSL -o "$APPIMAGE_DST.tmp" "$DOWNLOAD_URL" \
     || die "download failed: $DOWNLOAD_URL"
   mv "$APPIMAGE_DST.tmp" "$APPIMAGE_DST"
   chmod +x "$APPIMAGE_DST"
+  printf '%s\n' "$VERSION" > "$STAMP"
 else
-  log "AppImage already present; skipping download"
+  log "AppImage $VERSION already present; skipping download"
 fi
 
 log "installing wrapper launcher"
