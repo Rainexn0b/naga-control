@@ -19,11 +19,22 @@ frontend and it does not reimplement OpenRazer's HID protocol.
 ## Install
 
 Requires a Linux desktop, OpenRazer with the Naga V3 Pro baseline (see
-[release notes](docs/release-notes.md)), and `curl`:
+[release notes](docs/release-notes.md)), and `curl`. Standard install:
 
 ```bash
-scripts/install_user.sh              # latest release
-scripts/install_user.sh --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/scripts/install_user.sh -o install.sh && bash install.sh
+```
+
+Pinned release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/scripts/install_user.sh -o install.sh && bash install.sh --version v0.1.0
+```
+
+Uninstall:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/scripts/uninstall.sh -o uninstall.sh && bash uninstall.sh --yes --purge-config
 ```
 
 This installs the AppImage to `~/.local/bin`, the systemd user unit,

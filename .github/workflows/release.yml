@@ -41,22 +41,23 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: packaging/appimage/build-appimage.sh
 
-      - name: Verify AppImage output
+      - name: Verify and normalize AppImage output
         run: |
           ls -la dist
           test -f dist/Naga-Control-*-x86_64.AppImage
+          cp dist/Naga-Control-*-x86_64.AppImage dist/Naga-Control-x86_64.AppImage
 
       - name: Generate SHA-256 sidecar
         working-directory: dist
         run: |
-          sha256sum Naga-Control-*-x86_64.AppImage > Naga-Control.sha256
-          cat Naga-Control.sha256
+          sha256sum Naga-Control-x86_64.AppImage > Naga-Control-x86_64.AppImage.sha256
+          cat Naga-Control-x86_64.AppImage.sha256
 
       - name: Upload AppImage to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            dist/Naga-Control-*-x86_64.AppImage \
-            dist/Naga-Control.sha256 \
-            --generate-notes
+            dist/Naga-Control-x86_64.AppImage \
+            dist/Naga-Control-x86_64.AppImage.sha256 \
+            --notes-file docs/release-notes.md

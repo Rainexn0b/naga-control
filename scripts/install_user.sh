@@ -9,7 +9,7 @@
 set -euo pipefail
 
 REPO="Rainexn0b/naga-control"
-ASSET_DEFAULT="x86_64.AppImage"
+ASSET_DEFAULT="Naga-Control-x86_64.AppImage"
 VERSION="${NAGA_CONTROL_VERSION:-}"
 BIN_DIR="$HOME/.local/bin"
 APPIMAGE_DST="$BIN_DIR/naga-control.AppImage"
@@ -65,14 +65,22 @@ rm -rf "$TMP_UDEV"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UDEV_SRC="$SCRIPT_DIR/../packaging/udev/70-naga-control.rules"
-if [ -f "$UDEV_SRC" ] && command -v sudo >/dev/null; then
+UDEV_TMP=""
+if [ ! -f "$UDEV_SRC" ]; then
+  # Not running from a checkout: fetch the rule from the same release tag.
+  UDEV_TMP="$(mktemp)"
+  curl -fsSL -o "$UDEV_TMP" "https://raw.githubusercontent.com/$REPO/${VERSION#v}/packaging/udev/70-naga-control.rules"     || curl -fsSL -o "$UDEV_TMP" "https://raw.githubusercontent.com/$REPO/main/packaging/udev/70-naga-control.rules"     || die "could not download the udev rule"
+  UDEV_SRC="$UDEV_TMP"
+fi
+if command -v sudo >/dev/null; then
   log "installing udev rule (sudo)"
   sudo install -m 644 "$UDEV_SRC" /etc/udev/rules.d/70-naga-control.rules
   sudo udevadm control --reload 2>/dev/null || true
   sudo udevadm trigger 2>/dev/null || true
 else
-  log "udev rule not installed automatically; copy packaging/udev/70-naga-control.rules to /etc/udev/rules.d/"
+  log "sudo unavailable; copy the udev rule to /etc/udev/rules.d/ manually: $UDEV_SRC"
 fi
+[ -z "$UDEV_TMP" ] || rm -f "$UDEV_TMP"
 
 log "enabling user service"
 systemctl --user daemon-reload

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "naga-control"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Linux control service and Qt UI for the Razer Naga V3 Pro"
 readme = "README.md"
 license = "MIT"
