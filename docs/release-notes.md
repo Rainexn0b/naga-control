@@ -1,5 +1,11 @@
 # Release Notes
 
+## v0.1.4
+
+Fix: AppRun added the openrazer package directory itself to `PYTHONPATH`
+instead of its parent, so `import openrazer` still failed. Reinstall with
+the one-line installer.
+
 ## v0.1.3
 
 Fix: the AppRun host-openrazer probe crashed because `PYTHONHOME` pointed
