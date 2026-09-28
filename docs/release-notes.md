@@ -1,5 +1,13 @@
 # Release Notes
 
+## v0.1.2
+
+Fix: the AppImage could not import the host's `openrazer.client`
+(pure Python) because the bundled interpreter lacked the `dbus` bindings.
+The AppImage now bundles `dbus-python` and points `PYTHONPATH` at the
+host's openrazer package, so the service reaches the hardware from inside
+the AppImage.
+
 ## v0.1.1
 
 Fix: the AppImage `service` command exited immediately because

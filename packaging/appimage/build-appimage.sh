@@ -19,6 +19,7 @@ echo "==> collecting runtime dependencies in a staging venv"
 "$PYTHON_BIN" -m venv "$BUILD/venv"
 "$BUILD/venv/bin/pip" install --quiet --upgrade pip
 "$BUILD/venv/bin/pip" install --quiet "$WHEEL"
+"$BUILD/venv/bin/pip" install --quiet dbus-python
 
 PYVER="$("$BUILD/venv/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
 SITE="$BUILD/venv/lib/python$PYVER/site-packages"
