@@ -30,19 +30,20 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -n "$VERSION" ]; then
-  RELEASE_URL="https://github.com/$REPO/releases/expanded_assets/$VERSION"
+  :
 else
   log "resolving latest release"
-  RELEASE_URL="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")" \
+  resolved="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")" \
     || die "could not resolve the latest release; pass --version <tag>"
-  VERSION="${RELEASE_URL##*/}"
+  VERSION="${resolved##*/}"
 fi
+DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/$ASSET_DEFAULT"
 
 mkdir -p "$BIN_DIR"
 if [ ! -f "$APPIMAGE_DST" ] || [ -n "${NAGA_CONTROL_FORCE_DOWNLOAD:-}" ]; then
   log "downloading AppImage for $VERSION"
-  curl -fsSL -o "$APPIMAGE_DST.tmp" "$RELEASE_URL/$ASSET_DEFAULT" \
-    || die "download failed (asset $ASSET_DEFAULT)"
+  curl -fsSL -o "$APPIMAGE_DST.tmp" "$DOWNLOAD_URL" \
+    || die "download failed: $DOWNLOAD_URL"
   mv "$APPIMAGE_DST.tmp" "$APPIMAGE_DST"
   chmod +x "$APPIMAGE_DST"
 else
