@@ -60,4 +60,8 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             dist/Naga-Control-x86_64.AppImage \
             dist/Naga-Control-x86_64.AppImage.sha256 \
-            --notes-file docs/release-notes.md
+            --notes-file docs/release-notes.md \
+          || gh release upload "$GITHUB_REF_NAME" \
+            dist/Naga-Control-x86_64.AppImage \
+            dist/Naga-Control-x86_64.AppImage.sha256 \
+            --clobber
