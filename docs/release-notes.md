@@ -1,5 +1,39 @@
 # Release Notes
 
+## v0.2.0
+
+First hardware-validated release with the full remapping GUI. Includes the
+unpublished v0.1.5 AppImage openrazer-path fix.
+
+### Hardware validation
+
+The HyperSpeed 12-button first slice now passes end to end on real hardware:
+F13/F14 change the OpenRazer DPI stage up/down, F17 emits exactly
+LEFTALT down/up, and teardown releases the grab and removes the virtual
+devices. Fixes found during validation: OpenRazer `dbus.Int32` identifiers
+were rejected in the backend, numeric scroll modes were mishandled, and
+modifier keys repeated while held. Remaining validation work (wired
+transport, sleep/wake, reconnect, disconnect-while-held) is tracked in
+`docs/hardware-validation.md`.
+
+### GUI
+
+- System tray icon with a battery percentage overlay on the bottom half,
+  status/transport/charging tooltip, click-to-toggle, and close-to-tray
+- Interactive mapping illustration on the Buttons page: click a highlighted
+  zone (DPI pair, wheel tilts, top front/rear, ring finger, side grid 1–12)
+  to jump to and highlight its binding row; zones show the current binding
+  on hover and gray out when the attached plate does not match
+- Application icon for the KDE start menu / desktop entry, installed in
+  hicolor sizes 64–512 by `--install`
+
+### Required OpenRazer
+
+Unchanged from v0.1.0: the custom OpenRazer
+`add-razer-naga-v3-pro-support` baseline at commit
+`2416bfebf0175db6aae519a450f55fe9eba255e9`. Without this baseline the Naga
+V3 Pro is not recognized and the service stays `absent`.
+
 ## v0.1.5
 
 Fix: adding the host site-packages to `PYTHONPATH` shadowed the bundled

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -29,6 +30,7 @@ from naga_control.gui.actions_view import (
     parse_action,
 )
 from naga_control.gui.editors import set_bindings, set_plate_layout
+from naga_control.gui.mapping_map import MappingMapView
 from naga_control.gui.models import ServiceModel
 from naga_control.gui.presenter import ApplyOutcome, GuiPresenter
 from naga_control.gui.worker import Runner
@@ -91,9 +93,19 @@ class ButtonsPage(QWidget):
 
         self.rows_area = QWidget()
         self.rows_layout = QFormLayout(self.rows_area)
-        scroll = QScrollArea()
-        scroll.setWidget(self.rows_area)
-        scroll.setWidgetResizable(True)
+        self.rows_scroll = QScrollArea()
+        self.rows_scroll.setWidget(self.rows_area)
+        self.rows_scroll.setWidgetResizable(True)
+
+        self.mapping_map = MappingMapView()
+        self.mapping_map.zone_selected.connect(self.select_control)
+        map_hint = QLabel("Click a highlighted zone to jump to its binding")
+        map_hint.setWordWrap(True)
+        map_column = QVBoxLayout()
+        map_column.addWidget(self.mapping_map)
+        map_column.addWidget(map_hint)
+        map_panel = QWidget()
+        map_panel.setLayout(map_column)
 
         header = QFormLayout()
         header.addRow("Profile", self.profile_label)
@@ -102,10 +114,20 @@ class ButtonsPage(QWidget):
         actions.addWidget(self.apply_button)
         column = QVBoxLayout()
         column.addLayout(header)
-        column.addWidget(scroll)
+        column.addWidget(self.rows_scroll)
         column.addLayout(actions)
         column.addWidget(self.status_label)
-        self.setLayout(column)
+        rows_panel = QWidget()
+        rows_panel.setLayout(column)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(map_panel)
+        splitter.addWidget(rows_panel)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
+        outer = QVBoxLayout()
+        outer.addWidget(splitter)
+        self.setLayout(outer)
 
         self.apply_button.clicked.connect(self._apply)
         self._on_model_changed()
@@ -137,12 +159,29 @@ class ButtonsPage(QWidget):
         for row in self.rows:
             row.root.deleteLater()
         self.rows = []
+        self._highlighted_row: ButtonRow | None = None
         for control in controls_for_layout(layout):
             action = profile.bindings.action_for(control, profile.plate_layout)
             self._loaded_actions[control] = action
             self.rows.append(self._build_row(control, action))
             self.rows_layout.addRow(control_display_name(control), self.rows[-1].root)
+        self.mapping_map.set_plate_layout(layout)
+        self.mapping_map.set_actions(self._loaded_actions)
+        self.mapping_map.set_selected(None)
         self._update_dirty()
+
+    def select_control(self, control_id: str) -> None:
+        """Focus the binding row for a control picked on the mapping image."""
+        row = next((row for row in self.rows if row.control_id == control_id), None)
+        if row is None:
+            return
+        if self._highlighted_row is not None and self._highlighted_row is not row:
+            self._highlighted_row.root.setStyleSheet("")
+        self._highlighted_row = row
+        row.root.setStyleSheet("background-color: rgba(68, 255, 136, 40);")
+        self.mapping_map.set_selected(control_id)
+        self.rows_scroll.ensureWidgetVisible(row.root)
+        row.kind_box.setFocus()
 
     def _build_row(self, control: str, action: Action | None) -> ButtonRow:
         kind_box = QComboBox()

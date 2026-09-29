@@ -26,6 +26,10 @@ def _source(tmp_path: Path) -> Path:
         "[Desktop Entry]\nExec=naga-control-gui\n"
     )
     (source / "udev/70-naga-control.rules").write_text('ACTION=="add", TAG+="uaccess"\n')
+    for size in (64, 128, 256, 512):
+        icon = source / f"appimage/icons/hicolor/{size}x{size}/apps"
+        icon.mkdir(parents=True)
+        (icon / "org.nagacontrol.NagaControl.png").write_bytes(b"\x89PNG")
     return source
 
 
@@ -42,7 +46,7 @@ def test_install_writes_user_files_and_udev_rule(tmp_path: Path) -> None:
     assert (home / ".local/share/dbus-1/services/org.nagacontrol.Service1.service").is_file()
     assert (home / ".local/share/applications/org.nagacontrol.NagaControl.desktop").is_file()
     assert (udev / "70-naga-control.rules").is_file()
-    assert len(installed) == 4
+    assert len(installed) == 8
 
 
 def test_install_rewrites_exec_lines_for_the_appimage(tmp_path: Path) -> None:
@@ -80,7 +84,7 @@ def test_remove_and_status_round_trip(tmp_path: Path) -> None:
 
     removed = remove(home=home, udev_dir=udev)
 
-    assert len(removed) == 4
+    assert len(removed) == 8
     assert not any(present for _name, present in status(home=home, udev_dir=udev))
 
 
@@ -94,3 +98,16 @@ def test_status_without_udev_dir_skips_the_rule(tmp_path: Path) -> None:
     assert report["D-Bus session service"] is True
     assert report["desktop entry"] is True
     assert report["udev rule"] is False
+
+
+def test_install_places_hicolor_icons(tmp_path: Path) -> None:
+    source, home, udev = _dirs(tmp_path)
+
+    installed = install(source, home=home, udev_dir=udev)
+
+    for size in (64, 128, 256, 512):
+        target = (
+            home / f".local/share/icons/hicolor/{size}x{size}/apps/org.nagacontrol.NagaControl.png"
+        )
+        assert target.is_file(), size
+    assert any("icons" in path for path in installed)

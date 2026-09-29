@@ -3,6 +3,7 @@
 import argparse
 import contextlib
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,7 @@ SYSTEMD_UNIT = "naga-control.service"
 UDEV_RULE = "70-naga-control.rules"
 DBUS_SERVICE = "org.nagacontrol.Service1.service"
 DESKTOP_ENTRY = "org.nagacontrol.NagaControl.desktop"
+ICON_SIZES = (64, 128, 256, 512)
 
 
 @dataclass(frozen=True)
@@ -45,11 +47,26 @@ INTEGRATION_FILES: tuple[IntegrationFile, ...] = (
         system_path="",
         rewrite_command="gui",
     ),
+    *(
+        IntegrationFile(
+            name=f"application icon {size}x{size}",
+            relative_source=(
+                f"appimage/icons/hicolor/{size}x{size}/apps/org.nagacontrol.NagaControl.png"
+            ),
+            user_path=(
+                f".local/share/icons/hicolor/{size}x{size}/apps/org.nagacontrol.NagaControl.png"
+            ),
+            system_path="",
+            rewrite_command="",
+        )
+        for size in ICON_SIZES
+    ),
     IntegrationFile(
         name="udev rule",
         relative_source=f"udev/{UDEV_RULE}",
         user_path="",
         system_path=f"/etc/udev/rules.d/{UDEV_RULE}",
+        rewrite_command="",
     ),
 )
 
@@ -74,9 +91,12 @@ def install(
         target = _target(item, home=home, udev_dir=udev_dir)
         if target is None:
             continue
-        content = _render(source.read_text(encoding="utf-8"), exec_prefix, item)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        if item.relative_source.endswith(".png"):
+            shutil.copyfile(source, target)
+        else:
+            content = _render(source.read_text(encoding="utf-8"), exec_prefix, item)
+            target.write_text(content, encoding="utf-8")
         target.chmod(0o644)
         installed.append(str(target))
     return installed

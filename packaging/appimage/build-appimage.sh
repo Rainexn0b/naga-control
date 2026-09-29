@@ -49,32 +49,14 @@ if [ -n "${LIBPYTHON:-}" ]; then
 fi
 
 cp -a "$ROOT/packaging" "$APPDIR/usr/share/naga-control/packaging"
+mkdir -p "$APPDIR/usr/share/icons"
+cp -a "$ROOT/packaging/appimage/icons/hicolor" "$APPDIR/usr/share/icons/hicolor"
 
-echo "==> rendering icon"
-QT_QPA_PLATFORM=offscreen "$ROOT/.venv/bin/python" - \
-  "$ROOT/packaging/appimage/org.nagacontrol.NagaControl.svg" "$BUILD" << 'PYEOF'
-import sys
-
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QPainter
-from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QApplication
-
-svg, outdir = sys.argv[1], sys.argv[2]
-app = QApplication(sys.argv[:1])
-renderer = QSvgRenderer(svg)
-for size in (128, 256):
-    image = QImage(size, size, QImage.Format.Format_ARGB32)
-    image.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(image)
-    renderer.render(painter)
-    painter.end()
-    image.save(f"{outdir}/icon-{size}.png")
-PYEOF
-
-cp "$BUILD/icon-128.png" "$APPDIR/.DirIcon"
-cp "$BUILD/icon-256.png" "$APPDIR/org.nagacontrol.NagaControl.png"
-cp "$ROOT/packaging/appimage/org.nagacontrol.NagaControl.svg" "$APPDIR/org.nagacontrol.NagaControl.svg"
+echo "==> assembling icons from the prepared start asset"
+APP_ICON="$APPDIR/usr/share/icons/hicolor/256x256/apps/org.nagacontrol.NagaControl.png"
+cp "$APP_ICON" "$APPDIR/.DirIcon"
+cp "$APP_ICON" "$APPDIR/org.nagacontrol.NagaControl.png"
+cp "$ROOT/packaging/appimage/org.nagacontrol.NagaControl.svg" "$APPDIR/"
 cp "$ROOT/packaging/appimage/org.nagacontrol.NagaControl.desktop" "$APPDIR/"
 cp "$ROOT/packaging/appimage/AppRun" "$APPDIR/AppRun"
 chmod +x "$APPDIR/AppRun"
@@ -91,6 +73,6 @@ mkdir -p "$ROOT/dist"
 VERSION="$( "$ROOT/.venv/bin/python" -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
 OUTPUT="$ROOT/dist/Naga-Control-${VERSION}-${ARCH}.AppImage"
 ARCH="$ARCH" "$APPIMAGETOOL" --appimage-extract-and-run "$APPDIR" "$OUTPUT"
-rm -f "$BUILD/appimagetool" "$BUILD/icon-128.png" "$BUILD/icon-256.png"
+rm -f "$BUILD/appimagetool"
 
 echo "==> built $OUTPUT"

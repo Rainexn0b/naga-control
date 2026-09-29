@@ -184,3 +184,36 @@ def test_selecting_a_plate_rebuilds_rows_and_applies_layout(qapp: QApplication) 
     assert profile.plate_layout == 2
     assert page.status_label.text() == "applied"
     assert not page.apply_button.isEnabled()
+
+
+def test_mapping_map_click_selects_the_binding_row(qapp: QApplication) -> None:
+    from naga_control.gui.mapping_zones import zone_for_control
+
+    page, _client = _page(qapp)
+    zone = zone_for_control("dpi_up")
+    assert zone is not None
+
+    page.mapping_map.zone_clicked(zone)
+    qapp.processEvents()
+
+    selected = _row(page, "dpi_up")
+    assert "rgba(68, 255, 136" in selected.root.styleSheet()
+
+
+def test_mapping_map_shows_current_bindings(qapp: QApplication) -> None:
+    page, _client = _page(qapp)
+
+    dpi_up = next(item for item in page.mapping_map.zone_items if item.zone.control_id == "dpi_up")
+    assert dpi_up.toolTip().startswith("DPI up — ")
+
+
+def test_mapping_map_tracks_the_plate_selector(qapp: QApplication) -> None:
+    page, _client = _page(qapp)
+
+    page.plate_box.setCurrentText("6-button")
+    qapp.processEvents()
+
+    side_1 = next(
+        item for item in page.mapping_map.zone_items if item.zone.control_id == "side_12_1"
+    )
+    assert side_1.toolTip() == "Side 1 — not on the attached plate"
