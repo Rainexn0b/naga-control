@@ -98,8 +98,18 @@ def install(
             content = _render(source.read_text(encoding="utf-8"), exec_prefix, item)
             target.write_text(content, encoding="utf-8")
         target.chmod(0o644)
+        _open_icon_dirs(target)
         installed.append(str(target))
     return installed
+
+
+def _open_icon_dirs(target: Path) -> None:
+    """Icon theme directories are shared; they must be world-readable."""
+    icons_dir = target.parent
+    while icons_dir.name != "icons" and icons_dir != icons_dir.parent:
+        with contextlib.suppress(OSError):
+            icons_dir.chmod(0o755)
+        icons_dir = icons_dir.parent
 
 
 def remove(*, home: Path, udev_dir: Path | None = None) -> list[str]:

@@ -27,12 +27,7 @@ def overlay_battery(base: QImage, percent: int) -> QImage:
     overlay = QImage(base)
     painter = QPainter(overlay)
     banner_height = size // 2
-    banner_top = size - banner_height
-
-    banner = QRectF(0, banner_top, size, banner_height)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor(0, 0, 0, 190))
-    painter.drawRect(banner)
+    banner = QRectF(0, size - banner_height, size, banner_height)
 
     font = QFont()
     font.setBold(True)

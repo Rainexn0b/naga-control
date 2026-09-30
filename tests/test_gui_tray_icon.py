@@ -35,13 +35,18 @@ def test_bundled_tray_icon_exists_and_is_square() -> None:
 def test_overlay_covers_the_bottom_half_only(qapp: QApplication) -> None:
     base = QImage(str(tray_icon_path()))
     top_before = base.pixelColor(2, 2)
+    bottom_corner_before = base.pixelColor(2, base.height() - 2)
 
     overlay = overlay_battery(base, 42)
 
     assert overlay.size() == base.size()
     assert overlay.pixelColor(2, 2) == top_before
-    banner = overlay.pixelColor(base.width() // 2, base.height() - 2)
-    assert banner.value() < 80
+    assert overlay.pixelColor(2, base.height() - 2) == bottom_corner_before
+    assert any(
+        overlay.pixelColor(x, y) != base.pixelColor(x, y)
+        for x in range(base.width() // 4, 3 * base.width() // 4, 8)
+        for y in range(base.height() // 2, base.height(), 8)
+    )
 
 
 def test_overlay_is_deterministic(qapp: QApplication) -> None:
