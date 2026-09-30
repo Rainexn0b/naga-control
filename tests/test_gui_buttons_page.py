@@ -216,4 +216,4 @@ def test_mapping_map_tracks_the_plate_selector(qapp: QApplication) -> None:
     side_1 = next(
         item for item in page.mapping_map.zone_items if item.zone.control_id == "side_12_1"
     )
-    assert side_1.toolTip() == "Side 1 — not on the attached plate"
+    assert side_1.toolTip() == "Side 1 — needs the 12-button plate"

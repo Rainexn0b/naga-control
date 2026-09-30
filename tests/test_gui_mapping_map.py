@@ -109,7 +109,7 @@ def test_action_tooltips_reflect_bindings_and_plate(qapp: QApplication) -> None:
 
     assert dpi_up.toolTip() == "DPI up — device: dpi_stage_up"  # type: ignore[attr-defined]
     assert dpi_down.toolTip() == "DPI down — passthrough"  # type: ignore[attr-defined]
-    assert side_1.toolTip() == "Side 1 — not on the attached plate"  # type: ignore[attr-defined]
+    assert side_1.toolTip() == "Side 1 — needs the 12-button plate"  # type: ignore[attr-defined]
     assert wheel.toolTip() == "Scroll wheel click — passthrough (not remappable in v0.1)"  # type: ignore[attr-defined]
 
 

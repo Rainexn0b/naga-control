@@ -9,7 +9,12 @@ from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsS
 
 from naga_control.domain.actions import Action
 from naga_control.gui.actions_view import action_kind, format_action_detail
-from naga_control.gui.mapping_zones import MappingZone, all_zones, zone_assignable
+from naga_control.gui.mapping_zones import (
+    MAIN_GRID_HINT_ZONE,
+    MappingZone,
+    all_zones,
+    zone_assignable,
+)
 
 _ACCENT = QColor(68, 255, 136)
 _DISABLED = QColor(128, 128, 128)
@@ -114,9 +119,14 @@ class MappingMapView(QGraphicsView):
         for item in self.zone_items:
             control = item.zone.control_id
             if control is None:
-                item.setToolTip(f"{item.zone.label} — passthrough (not remappable in v0.1)")
+                if item.zone is MAIN_GRID_HINT_ZONE:
+                    item.setToolTip(
+                        f"{item.zone.label} — pick the matching plate illustration on the left"
+                    )
+                else:
+                    item.setToolTip(f"{item.zone.label} — passthrough (not remappable in v0.1)")
             elif not zone_assignable(item.zone, self._plate_layout):
-                item.setToolTip(f"{item.zone.label} — not on the attached plate")
+                item.setToolTip(f"{item.zone.label} — needs the {item.zone.plate}-button plate")
             else:
                 action = actions.get(control)
                 if action is None:
