@@ -74,6 +74,9 @@ class HardwareWorker:
             generation, lambda: self._backend.rescan(connections), is_rescan=True
         )
 
+    async def refresh_state(self) -> HardwareState:
+        return await self._submit_current(self._backend.refresh_state)
+
     async def move_dpi_stage(self, direction: int) -> HardwareState:
         return await self._submit_current(lambda: self._backend.move_dpi_stage(direction))
 

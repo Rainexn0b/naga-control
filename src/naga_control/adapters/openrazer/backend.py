@@ -161,6 +161,13 @@ class OpenRazerBackend:
         self._state = state
         return state
 
+    def refresh_state(self) -> HardwareState:
+        """Re-read observed device state without mutating anything."""
+        client = self._client_for_operation()
+        if client is None:
+            return self._state
+        return self._refresh_after_operation(client)
+
     def move_dpi_stage(self, direction: int) -> HardwareState:
         if direction not in {-1, 1}:
             raise ValueError("direction must be -1 or 1")

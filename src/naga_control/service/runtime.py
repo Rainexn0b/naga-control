@@ -1,5 +1,7 @@
 """Lifecycle core for one active Naga transport and its remapping session."""
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from dataclasses import replace
@@ -38,6 +40,8 @@ class ServiceHardwareWorker(Protocol):
 
     async def rescan(self, connections: tuple[NagaTopology, ...]) -> HardwareState: ...
 
+    async def refresh_state(self) -> HardwareState: ...
+
     async def apply_profile_settings(
         self, profile: Profile
     ) -> tuple[HardwareState, tuple[SettingsFailure, ...]]: ...
@@ -63,6 +67,7 @@ class NagaService:
         worker: ServiceHardwareWorker,
         session_factory: Callable[[NagaConnection, Configuration], RemappingSession],
         store: ConfigurationStore | None = None,
+        state_poll_interval: float = 30.0,
     ) -> None:
         self._discover = discover
         self._load_configuration = load_configuration
@@ -75,6 +80,8 @@ class NagaService:
         self._settings_failures: tuple[SettingsFailure, ...] = ()
         self._started = False
         self._calibrating = False
+        self._state_poll_task: asyncio.Task[None] | None = None
+        self._state_poll_interval = state_poll_interval
 
     async def start(self) -> HardwareState:
         if self._started:
@@ -83,9 +90,26 @@ class NagaService:
         try:
             self._configuration = self._load_configuration() or default_configuration()
             await self._worker.start()
+            self._state_poll_task = asyncio.create_task(self._poll_observed_state())
             return await self.apply_topology(self._discover())
         except BaseException:
             await self.stop()
+            raise
+
+    async def _poll_observed_state(self) -> None:
+        """Refresh observed hardware state (battery, DPI) cheaply in the background."""
+        assert self._state_poll_interval > 0
+        try:
+            while True:
+                await asyncio.sleep(self._state_poll_interval)
+                state = self._state
+                if state is None or state.status == "absent":
+                    continue
+                try:
+                    self._state = await self._worker.refresh_state()
+                except Exception:
+                    logger.debug("periodic state refresh failed", exc_info=True)
+        except asyncio.CancelledError:
             raise
 
     async def apply_topology(self, connections: tuple[NagaConnection, ...]) -> HardwareState:
@@ -254,6 +278,11 @@ class NagaService:
     async def stop(self) -> None:
         session = self._session
         self._session = None
+        poll_task, self._state_poll_task = self._state_poll_task, None
+        if poll_task is not None:
+            poll_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await poll_task
         if session is not None:
             await session.stop()
         if self._started:

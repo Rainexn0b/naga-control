@@ -22,6 +22,8 @@ class Worker:
         self.applied: list[object] = []
         self.settings_failures: tuple[SettingsFailure, ...] = ()
         self.rescan_state: HardwareState | None = None
+        self.refreshed_state: HardwareState | None = None
+        self.refresh_calls = 0
 
     async def start(self) -> None:
         self.events.append("start")
@@ -33,6 +35,12 @@ class Worker:
         self.events.append(f"rescan:{len(connections)}")
         if self.rescan_state is not None:
             return self.rescan_state
+        return HardwareState("unavailable", 1)
+
+    async def refresh_state(self) -> HardwareState:
+        self.refresh_calls += 1
+        if self.refreshed_state is not None:
+            return self.refreshed_state
         return HardwareState("unavailable", 1)
 
     async def apply_profile_settings(

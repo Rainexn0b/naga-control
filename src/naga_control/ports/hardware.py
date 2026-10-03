@@ -49,9 +49,11 @@ class HardwareTopologyRescanController(Protocol):
 
 
 class HardwareBackend(Protocol):
-    """Blocking operations that must be called only by the hardware worker."""
+    """Synchronous, thread-confined backend contract."""
 
     def rescan(self, connections: tuple[NagaTopology, ...]) -> HardwareState: ...
+
+    def refresh_state(self) -> HardwareState: ...
 
     def move_dpi_stage(self, direction: int) -> HardwareState: ...
 

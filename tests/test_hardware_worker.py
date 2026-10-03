@@ -24,6 +24,11 @@ class FakeBackend:
         self.thread_ids: list[int] = []
         self._move_count = 0
         self._rescan_count = 0
+        self.state = HardwareState("unavailable", 1)
+
+    def refresh_state(self) -> HardwareState:
+        self.calls.append("refresh")
+        return self.state
 
     def rescan(self, connections: tuple[NagaTopology, ...]) -> HardwareState:
         del connections
