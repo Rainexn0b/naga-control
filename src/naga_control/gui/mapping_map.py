@@ -89,7 +89,6 @@ class MappingMapView(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.pixmap_item = QGraphicsPixmapItem(QPixmap(str(mapping_image_path())))
         self.scene().addItem(self.pixmap_item)
-        self._plate_layout = 12
         self._actions_cache: dict[str, Action | None] = {}
         self.zone_items: list[_ZoneItem] = []
         for zone in all_zones():
@@ -106,12 +105,6 @@ class MappingMapView(QGraphicsView):
         if zone.control_id is not None:
             self.set_selected(zone.control_id)
             self.zone_selected.emit(zone.control_id)
-
-    def set_plate_layout(self, plate_layout: int) -> None:
-        if plate_layout == self._plate_layout:
-            return
-        self._plate_layout = plate_layout
-        self._apply_availability()
 
     def set_actions(self, actions: dict[str, Action | None]) -> None:
         self._actions_cache = dict(actions)
@@ -139,7 +132,5 @@ class MappingMapView(QGraphicsView):
 
     def _apply_availability(self) -> None:
         for item in self.zone_items:
-            active = item.zone.plate is None or item.zone.plate == self._plate_layout
             item.set_zone_enabled(item.zone.control_id is not None)
-            item.setOpacity(1.0 if active else 0.55)
         self.set_actions(self._actions_cache)

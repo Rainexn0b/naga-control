@@ -25,6 +25,7 @@ class LoopWorker:
     def start(self, timeout: float = 5.0) -> None:
         if self.running:
             return
+        self._ready.clear()
         self._thread = threading.Thread(target=self._run_loop, name="naga-gui-service", daemon=True)
         self._thread.start()
         if not self._ready.wait(timeout):
@@ -51,5 +52,10 @@ class LoopWorker:
         try:
             loop.run_forever()
         finally:
+            tasks = asyncio.all_tasks(loop)
+            for task in tasks:
+                task.cancel()
+            if tasks:
+                loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
             loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()

@@ -100,16 +100,27 @@ def _row(page: ButtonsPage, control_id: str):
     raise AssertionError(f"no row for {control_id}")
 
 
-def test_page_lists_all_plate_groups_in_numeric_order(qapp: QApplication) -> None:
+def test_page_lists_controls_in_illustration_number_order(qapp: QApplication) -> None:
     page, _client = _page(qapp)
 
     controls = [row.control_id for row in page.rows]
     assert len(controls) == 7 + 12 + 6 + 2
-    plate_12 = controls[7:19]
-    assert plate_12 == [f"side_12_{number}" for number in range(1, 13)]
-    plate_6 = controls[19:25]
-    assert plate_6 == [f"side_6_{number}" for number in range(1, 7)]
+    assert controls[:7] == [
+        "dpi_up",
+        "dpi_down",
+        "wheel_tilt_left",
+        "wheel_tilt_right",
+        "top_front",
+        "top_rear",
+        "ring_finger",
+    ]
+    assert controls[7:19] == [
+        f"side_12_{number}" for number in (3, 6, 9, 12, 2, 5, 8, 11, 1, 4, 7, 10)
+    ]
+    assert controls[19:25] == [f"side_6_{number}" for number in (1, 2, 3, 6, 5, 4)]
     assert controls[25:] == ["side_2_front", "side_2_rear"]
+    assert [int(row.number_label.text()) for row in page.rows] == [3, 4, *range(6, 31)]
+    assert page.rows_layout.count() == 31  # Header and all 30 illustration numbers.
     assert _row(page, "top_front").kind_box.currentText() == "passthrough"
     assert not _row(page, "top_front").detail_edit.isEnabled()
     assert not page.apply_button.isEnabled()
@@ -159,33 +170,18 @@ def test_invalid_combo_is_rejected_before_sending(qapp: QApplication) -> None:
     assert page.model.apply_status is not None
 
 
-def test_selecting_a_plate_rebuilds_rows_and_applies_layout(qapp: QApplication) -> None:
+def test_repeated_applies_do_not_leave_orphan_labels(qapp: QApplication) -> None:
     page, client = _page(qapp)
-
-    page.plate_box.setCurrentText("2-button")
-    qapp.processEvents()
-
-    controls = [row.control_id for row in page.rows]
-    assert len(controls) == 7 + 12 + 6 + 2
-    assert controls[:7] == [
-        "dpi_down",
-        "dpi_up",
-        "ring_finger",
-        "top_front",
-        "top_rear",
-        "wheel_tilt_left",
-        "wheel_tilt_right",
-    ]
-    assert page.apply_button.isEnabled()
-
-    page.apply_button.click()
-    qapp.processEvents()
-
-    configuration = parse_toml(client.applied[0])
-    profile = configuration.profile(configuration.active_profile)
-    assert profile.plate_layout == 2
-    assert page.status_label.text() == "applied"
-    assert not page.apply_button.isEnabled()
+    for button in ("forward", "back", "middle"):
+        row = _row(page, "dpi_up")
+        row.kind_box.setCurrentText("mouse_button")
+        row.detail_edit.setCurrentText(button)
+        page.apply_button.click()
+        qapp.processEvents()
+        assert page.rows_layout.count() == 31
+        assert len(page.rows) == 27
+        assert not page.apply_button.isEnabled()
+    assert len(client.applied) == 3
 
 
 def test_mapping_map_click_selects_the_binding_row(qapp: QApplication) -> None:
@@ -209,17 +205,27 @@ def test_mapping_map_shows_current_bindings(qapp: QApplication) -> None:
     assert dpi_up.toolTip().startswith("DPI up — ")
 
 
-def test_mapping_map_tracks_the_plate_selector(qapp: QApplication) -> None:
-    page, _client = _page(qapp)
+def test_editing_all_plates_preserves_runtime_layout(qapp: QApplication) -> None:
+    from naga_control.gui.actions_view import action_for_control
+    from naga_control.gui.mapping_zones import all_zones
 
-    page.plate_box.setCurrentText("6-button")
+    page, client = _page(qapp)
+    for control in ("side_12_3", "side_6_6", "side_2_rear"):
+        row = _row(page, control)
+        row.kind_box.setCurrentText("mouse_button")
+        row.detail_edit.setCurrentText("middle")
+    page.apply_button.click()
     qapp.processEvents()
 
-    side_12 = next(
-        item for item in page.mapping_map.zone_items if item.zone.control_id == "side_12_1"
-    )
-    side_6 = next(
-        item for item in page.mapping_map.zone_items if item.zone.control_id == "side_6_1"
-    )
-    assert side_12.opacity() == 0.55
-    assert side_6.opacity() == 1.0
+    configuration = parse_toml(client.document)
+    profile = configuration.profile(configuration.active_profile)
+    assert profile.plate_layout == 12
+    for control in ("side_12_3", "side_6_6", "side_2_rear"):
+        assert action_for_control(profile.bindings, control) == MouseButtonAction(button="middle")
+        assert _row(page, control).detail_edit.currentText() == "middle"
+    for zone in all_zones():
+        if zone.control_id is not None:
+            page.mapping_map.zone_clicked(zone)
+            row = _row(page, zone.control_id)
+            assert int(row.number_label.text()) == zone.number
+            assert "rgba(68, 255, 136" in row.root.styleSheet()

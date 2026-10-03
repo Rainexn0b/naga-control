@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "naga-control"
-version = "0.2.0"
+version = "0.3.0"
 description = "Linux control service and Qt UI for the Razer Naga V3 Pro"
 readme = "README.md"
 license = "MIT"
@@ -21,6 +21,7 @@ classifiers = [
 dependencies = [
   "dbus-next>=0.2.3,<0.3",
   "evdev>=2,<3",
+  "packaging>=24,<27",
   "PySide6>=6.8,<7",
   "pyudev>=0.24,<1",
   "tomli-w>=1.2,<2",

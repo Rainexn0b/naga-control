@@ -1,4 +1,5 @@
 import asyncio
+import threading
 
 import pytest
 
@@ -41,3 +42,29 @@ def test_submit_rejects_a_stopped_worker() -> None:
         raise AssertionError("expected RuntimeError")
     except RuntimeError:
         pass
+
+
+def test_shutdown_cancels_pending_coroutines_and_worker_can_restart() -> None:
+    worker = LoopWorker()
+    worker.start()
+    started, cleaned = threading.Event(), threading.Event()
+
+    async def pending() -> None:
+        started.set()
+        try:
+            await asyncio.sleep(3600)
+        finally:
+            cleaned.set()
+
+    future = worker.submit(pending)
+    assert started.wait(5)
+    worker.stop(timeout=1)
+    assert cleaned.is_set()
+    assert future.cancelled()
+    worker.start()
+
+    async def value() -> int:
+        return 42
+
+    assert worker.submit(value).result(timeout=5) == 42
+    worker.stop()

@@ -81,7 +81,6 @@ def test_clicking_a_zone_emits_its_control(qapp: QApplication) -> None:
 
 def test_clicking_any_plate_zone_emits_regardless_of_profile(qapp: QApplication) -> None:
     view = _view(qapp)
-    view.set_plate_layout(6)
     selected: list[str] = []
     view.zone_selected.connect(selected.append)
 
@@ -111,7 +110,6 @@ def test_action_tooltips_reflect_bindings_and_plate(qapp: QApplication) -> None:
     view = _view(qapp)
 
     view.set_actions({"dpi_up": DeviceAction(action="dpi_stage_up"), "dpi_down": None})
-    view.set_plate_layout(6)
 
     dpi_up = _item(view, "dpi_up")
     dpi_down = _item(view, "dpi_down")
@@ -124,13 +122,12 @@ def test_action_tooltips_reflect_bindings_and_plate(qapp: QApplication) -> None:
     assert wheel.toolTip().endswith("— passthrough (not remappable in v0.1)")  # type: ignore[attr-defined]
 
 
-def test_inactive_plates_are_dimmed_but_clickable(qapp: QApplication) -> None:
+def test_all_plates_are_equally_visible_and_clickable(qapp: QApplication) -> None:
     view = _view(qapp)
 
-    view.set_plate_layout(6)
     side_12 = _item(view, "side_12_1")
     side_6 = _item(view, "side_6_1")
-    assert side_12.opacity() == 0.55  # type: ignore[attr-defined]
+    assert side_12.opacity() == 1.0  # type: ignore[attr-defined]
     assert side_6.opacity() == 1.0  # type: ignore[attr-defined]
     assert side_12.isEnabled()  # type: ignore[attr-defined]
 

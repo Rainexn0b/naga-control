@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install
 Pinned release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh -o install.sh && bash install.sh --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh -o install.sh && bash install.sh --version v0.3.0
 ```
 
 Uninstall:
@@ -60,7 +60,7 @@ live wired-to-HyperSpeed switch have also passed. The service now applies
 desired DPI stages, scroll settings, power settings, poll rate, and all three
 lighting zones to the hardware with per-setting failure reporting, and the
 snapshot publishes observed DPI, scroll, poll-rate, battery, charging, and
-firmware values for the GUI overview, the buttons page selects the side-plate
+firmware values for the GUI Device tab, profile management selects the side-plate
 layout (12/6/2) with revision-checked apply, and a calibration mode rebuilds
 forwarding as pure passthrough and adopts the observed DPI stages and scroll
 settings into the active profile on end. Broader passthrough and wired
@@ -74,6 +74,52 @@ This is a project prerequisite, not a development blocker. See
 required capabilities, and known wireless behavior. Release notes pin the
 exact tested OpenRazer revision in [release notes](docs/release-notes.md);
 see also [troubleshooting](docs/troubleshooting.md).
+
+## Control Panel
+
+The native interface has three tabs and one shared active-profile selector:
+
+- **Device:** connection and battery status, power settings, profile management,
+  manual attached-plate selection, and update checks. Diagnostics and recovery tools are
+  collapsed by default; hardware errors remain visible.
+- **Buttons:** clickable mouse artwork and a flat binding list numbered to
+  match the illustration. All three plate groups are editable.
+- **Settings:** compact DPI stages and polling rate, scroll behavior, and all
+  three lighting zones. One Apply Settings action saves these sections together
+  in a single revision-checked update.
+
+Device and Settings use two columns on desktop and stack vertically in a narrow
+window. Unrelated saves and service refreshes retain unsaved drafts; changing
+profiles asks before discarding them. Edits retained after an external profile
+switch remain attached to their original profile until saved or discarded.
+Plate identity is not detected automatically: select the attached plate under
+Device's Profiles section before using that plate's bindings on hardware.
+
+**Device > Updates** shows the installed version and checks GitHub releases when
+you click **Check for updates**. Stable releases are the default; **Include
+pre-releases** is an optional saved preference. Checking runs in the background,
+does not contact GitHub automatically, and does not install or downgrade the
+application. **Release notes** opens the selected release in your browser.
+
+See the root [changelog](changelog.md) for the formal release history and
+[release prerequisites](docs/release-notes.md) before upgrading.
+
+## Screenshots
+
+The three-tab layout on the maintainer's desktop. In v0.3.0, update controls
+also appear below Profiles on the Device tab.
+
+### Device
+
+![Device tab with connection status, power settings, and profiles](assets/screenshots/Device.png)
+
+### Buttons
+
+![Buttons tab with clickable mouse artwork and numbered bindings](assets/screenshots/Buttons.png)
+
+### Settings
+
+![Settings tab with DPI stages, polling rate, scroll behavior, and lighting](assets/screenshots/Settings.png)
 
 ## Design
 

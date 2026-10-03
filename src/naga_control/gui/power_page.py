@@ -21,9 +21,11 @@ class PowerPage(ProfileSettingsPage):
         self.idle_spin.setRange(60, 900)
         self.idle_spin.setSingleStep(30)
         self.idle_spin.setSuffix(" s")
+        self.idle_spin.setMaximumWidth(140)
         self.threshold_spin = QSpinBox()
         self.threshold_spin.setRange(0, 25)
         self.threshold_spin.setSuffix(" %")
+        self.threshold_spin.setMaximumWidth(140)
         self.form.addRow("Sleep after idle", self.idle_spin)
         self.form.addRow("Low battery warning", self.threshold_spin)
         self._loaded: tuple[int, int] = (60, 0)
@@ -46,4 +48,6 @@ class PowerPage(ProfileSettingsPage):
 
     def _build_document(self, document: str) -> str:
         idle, threshold = self._current()
-        return set_power(document, parse_toml(document).active_profile, idle, threshold)
+        return set_power(
+            document, self.profile_id or parse_toml(document).active_profile, idle, threshold
+        )

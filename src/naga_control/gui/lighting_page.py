@@ -41,8 +41,10 @@ class ZoneRow:
 class LightingPage(ProfileSettingsPage):
     """Per-zone brightness, effect, and effect payload editors."""
 
-    def __init__(self, presenter: GuiPresenter, model: ServiceModel, run: Runner) -> None:
-        super().__init__(presenter, model, run)
+    def __init__(
+        self, presenter: GuiPresenter, model: ServiceModel, run: Runner, *, managed: bool = False
+    ) -> None:
+        super().__init__(presenter, model, run, managed=managed)
         self.rows: list[ZoneRow] = []
         self._loaded: dict[str, tuple[int, LightingEffect]] = {}
         for zone in ZONES:
@@ -54,14 +56,18 @@ class LightingPage(ProfileSettingsPage):
         brightness_spin = QSpinBox()
         brightness_spin.setRange(0, 100)
         brightness_spin.setSuffix(" %")
+        brightness_spin.setMaximumWidth(140)
         kind_box = QComboBox()
         kind_box.addItems(kinds)
+        kind_box.setMaximumWidth(240)
         color_edit = QLineEdit()
         color_edit.setMaximumWidth(120)
         speed_box = QComboBox()
         speed_box.addItems([str(speed) for speed in LIGHTING_SPEEDS])
+        speed_box.setMaximumWidth(140)
         direction_box = QComboBox()
         direction_box.addItems(LIGHTING_DIRECTIONS)
+        direction_box.setMaximumWidth(140)
 
         row = ZoneRow(
             zone=zone,
@@ -152,4 +158,6 @@ class LightingPage(ProfileSettingsPage):
                 for zone, (brightness, effect) in zones.items()
             }
         )
-        return set_lighting(document, parse_toml(document).active_profile, lighting)
+        return set_lighting(
+            document, self.profile_id or parse_toml(document).active_profile, lighting
+        )

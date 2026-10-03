@@ -15,10 +15,13 @@ from naga_control.gui.worker import Runner
 class ScrollPage(ProfileSettingsPage):
     """Three controls for the scroll wheel behavior."""
 
-    def __init__(self, presenter: GuiPresenter, model: ServiceModel, run: Runner) -> None:
-        super().__init__(presenter, model, run)
+    def __init__(
+        self, presenter: GuiPresenter, model: ServiceModel, run: Runner, *, managed: bool = False
+    ) -> None:
+        super().__init__(presenter, model, run, managed=managed)
         self.mode_box = QComboBox()
         self.mode_box.addItems(SCROLL_MODES)
+        self.mode_box.setMaximumWidth(240)
         self.acceleration_check = QCheckBox("Acceleration")
         self.smart_reel_check = QCheckBox("Smart Reel")
         self.form.addRow("Mode", self.mode_box)
@@ -58,7 +61,7 @@ class ScrollPage(ProfileSettingsPage):
         mode, acceleration, smart_reel = self._current()
         return set_scroll(
             document,
-            parse_toml(document).active_profile,
+            self.profile_id or parse_toml(document).active_profile,
             mode,  # pyright: ignore[reportArgumentType]
             acceleration,
             smart_reel,

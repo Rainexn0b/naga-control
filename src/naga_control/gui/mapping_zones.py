@@ -45,6 +45,7 @@ class MappingZone:
     plate: int | None = None
     hint: str = ""
     region_key: str = ""
+    number: int = 0
 
     def contains(self, x: float, y: float) -> bool:
         return _point_in_polygon(x, y, self.polygon)
@@ -119,6 +120,7 @@ def _zone_from_region(region: dict[str, object]) -> MappingZone:
         plate=plate_layout,
         hint=hint,
         region_key=key,
+        number=int(region["region_id"]),  # type: ignore[arg-type]
     )
 
 

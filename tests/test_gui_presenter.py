@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 
 from naga_control.config import dump_toml
 from naga_control.domain.defaults import default_configuration
@@ -50,9 +51,9 @@ class FakeClient(NagaControlClient):
         return self.script.document
 
     async def apply_configuration(self, expected_revision: int, document: str) -> int:
+        self.script.applied = (expected_revision, document)
         if self.script.apply_error is not None:
             raise self.script.apply_error
-        self.script.applied = (expected_revision, document)
         return self.script.new_revision
 
     async def select_profile(self, profile_id: str) -> int:
@@ -137,6 +138,7 @@ def test_refresh_failure_drops_the_client_and_marks_unreachable() -> None:
 
 def test_apply_configuration_reports_outcomes() -> None:
     model = ServiceModel()
+    document = dump_toml(replace(default_configuration(), revision=1))
     cases: list[tuple[Exception | None, ApplyOutcome]] = [
         (None, ApplyOutcome.APPLIED),
         (StaleRevisionError("stale"), ApplyOutcome.STALE),
@@ -145,12 +147,12 @@ def test_apply_configuration_reports_outcomes() -> None:
     for error, expected in cases:
         script = ClientScript(apply_error=error)
         presenter, _ = _presenter(script, model)
-        outcome = asyncio.run(presenter.apply_configuration("new-document"))
+        outcome = asyncio.run(presenter.apply_configuration(document))
         assert outcome is expected
         if error is None:
-            assert script.applied == (0, "new-document")
+            assert script.applied == (0, document)
             assert model.configuration_revision == 6
-            assert model.configuration_document == "new-document"
+            assert model.configuration_document == document
 
 
 def test_apply_configuration_requires_a_known_revision() -> None:
@@ -185,3 +187,15 @@ def test_release_all_refreshes_after_release() -> None:
 
     assert script.released
     assert model.connection.reachable
+
+
+def test_queued_apply_retains_its_base_revision_after_model_refresh() -> None:
+    script = ClientScript(apply_error=StaleRevisionError("stale"))
+    model = ServiceModel()
+    presenter, _clients = _presenter(script, model)
+    document = dump_toml(replace(default_configuration(), revision=1))
+    newer = dump_toml(replace(default_configuration(), revision=9))
+    model.apply_configuration(9, newer)
+
+    assert asyncio.run(presenter.apply_configuration(document)) is ApplyOutcome.STALE
+    assert script.applied == (0, document)

@@ -104,6 +104,11 @@ class GuiPresenter:
             if expected is None:
                 return ApplyOutcome.UNREACHABLE
         try:
+            # Anchor a queued write to the document's base, not a later model refresh.
+            expected = parse_toml(document).revision - 1
+        except ConfigValidationError:
+            return ApplyOutcome.INVALID
+        try:
             client = await self._ensure_client()
             revision = await client.apply_configuration(expected, document)
         except StaleRevisionError:

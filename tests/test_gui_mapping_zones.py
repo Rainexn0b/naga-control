@@ -13,6 +13,7 @@ def test_the_sidecar_defines_every_control_zone() -> None:
 
     control_ids = {zone.control_id for zone in zones if zone.control_id is not None}
     assert len(zones) == 30
+    assert sorted(zone.number for zone in zones) == list(range(1, 31))
     expected_common = {
         "dpi_up",
         "dpi_down",
