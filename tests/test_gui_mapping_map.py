@@ -37,6 +37,14 @@ def _item(view: MappingMapView, control_id: str | None) -> object:
     )
 
 
+def _item_by_key(view: MappingMapView, region_key: str) -> object:
+    return next(
+        item
+        for item in view.zone_items
+        if item.zone.region_key == region_key  # type: ignore[attr-defined]
+    )
+
+
 def _click_zone(qapp: QApplication, view: MappingMapView, zone: MappingZone) -> None:
     x, y, w, h = zone.rect
     scene_point = QPointF(
@@ -56,7 +64,7 @@ def test_bundled_mapping_image_loads() -> None:
 
     image = QImage(str(mapping_image_path()))
     assert not image.isNull()
-    assert image.width() == 1448 and image.height() == 1086
+    assert image.width() == 2048 and image.height() == 1536
 
 
 def test_clicking_a_zone_emits_its_control(qapp: QApplication) -> None:
@@ -89,9 +97,11 @@ def test_clicking_the_passthrough_wheel_zone_does_not_emit(qapp: QApplication) -
     selected: list[str] = []
     view.zone_selected.connect(selected.append)
 
-    from naga_control.gui.mapping_zones import WHEEL_CLICK_ZONE
+    from naga_control.gui.mapping_zones import zone_for_key
 
-    _click_zone(qapp, view, WHEEL_CLICK_ZONE)
+    wheel = zone_for_key("main.wheel")
+    assert wheel is not None
+    _click_zone(qapp, view, wheel)
 
     assert selected == []
 
@@ -105,12 +115,12 @@ def test_action_tooltips_reflect_bindings_and_plate(qapp: QApplication) -> None:
     dpi_up = _item(view, "dpi_up")
     dpi_down = _item(view, "dpi_down")
     side_1 = _item(view, "side_12_1")
-    wheel = _item(view, None)
+    wheel = _item_by_key(view, "main.wheel")
 
     assert dpi_up.toolTip() == "DPI up — device: dpi_stage_up"  # type: ignore[attr-defined]
     assert dpi_down.toolTip() == "DPI down — passthrough"  # type: ignore[attr-defined]
     assert side_1.toolTip() == "Side 1 — needs the 12-button plate"  # type: ignore[attr-defined]
-    assert wheel.toolTip() == "Scroll wheel click — passthrough (not remappable in v0.1)"  # type: ignore[attr-defined]
+    assert wheel.toolTip().endswith("— passthrough (not remappable in v0.1)")  # type: ignore[attr-defined]
 
 
 def test_selection_outlines_the_zone(qapp: QApplication) -> None:

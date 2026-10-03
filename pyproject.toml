@@ -45,7 +45,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-"naga_control.gui" = ["assets/*.png"]
+"naga_control.gui" = ["assets/*.png", "assets/*.json"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers -m 'not hardware'"

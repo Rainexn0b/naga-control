@@ -3,18 +3,18 @@
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QRectF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsScene, QGraphicsView
+from PySide6.QtCore import QPointF, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtWidgets import (
+    QGraphicsPixmapItem,
+    QGraphicsPolygonItem,
+    QGraphicsScene,
+    QGraphicsView,
+)
 
 from naga_control.domain.actions import Action
 from naga_control.gui.actions_view import action_kind, format_action_detail
-from naga_control.gui.mapping_zones import (
-    MAIN_GRID_HINT_ZONE,
-    MappingZone,
-    all_zones,
-    zone_assignable,
-)
+from naga_control.gui.mapping_zones import MappingZone, all_zones, zone_assignable
 
 _ACCENT = QColor(68, 255, 136)
 _DISABLED = QColor(128, 128, 128)
@@ -23,10 +23,10 @@ _SELECT_WIDTH = 3.0
 
 def mapping_image_path() -> Path:
     """Return the bundled mapping illustration path."""
-    return Path(__file__).resolve().parent / "assets" / "Mapping.png"
+    return Path(__file__).resolve().parent / "assets" / "Mapping.preview.png"
 
 
-class _ZoneItem(QGraphicsRectItem):
+class _ZoneItem(QGraphicsPolygonItem):
     """One hotspot rectangle with hover and click handling."""
 
     def __init__(self, zone: MappingZone, parent_map: "MappingMapView") -> None:
@@ -94,10 +94,9 @@ class MappingMapView(QGraphicsView):
         self.zone_items: list[_ZoneItem] = []
         for zone in all_zones():
             item = _ZoneItem(zone, self)
-            x, y, w, h = zone.rect
             width = self.pixmap_item.pixmap().width()
             height = self.pixmap_item.pixmap().height()
-            item.setRect(QRectF(x * width, y * height, w * width, h * height))
+            item.setPolygon(QPolygonF([QPointF(x * width, y * height) for x, y in zone.polygon]))
             self.scene().addItem(item)
             self.zone_items.append(item)
         self._apply_availability()
@@ -119,12 +118,8 @@ class MappingMapView(QGraphicsView):
         for item in self.zone_items:
             control = item.zone.control_id
             if control is None:
-                if item.zone is MAIN_GRID_HINT_ZONE:
-                    item.setToolTip(
-                        f"{item.zone.label} — pick the matching plate illustration on the left"
-                    )
-                else:
-                    item.setToolTip(f"{item.zone.label} — passthrough (not remappable in v0.1)")
+                hint = item.zone.hint or "decorative"
+                item.setToolTip(f"{item.zone.label} — {hint}")
             elif not zone_assignable(item.zone, self._plate_layout):
                 item.setToolTip(f"{item.zone.label} — needs the {item.zone.plate}-button plate")
             else:

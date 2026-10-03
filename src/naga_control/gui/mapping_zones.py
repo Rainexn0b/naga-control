@@ -1,15 +1,36 @@
-"""Qt-free zone layout of the mapping illustration.
+"""Qt-free zone layout loaded from the mapping sidecar.
 
-All rectangles are normalized (0..1) against the 1448x1086 source image
-``assets/Mapping.png``. The image shows the main mouse on the right (common
-controls plus a decorative attached 12-button grid) and, on the left, the
-three side plates: 12-button (4x3), 6-button (3x2), and 2-button.
+The interactive zones come from ``assets/Mapping.regions.json`` (schema 1),
+produced alongside the mapping artwork. Regions carry exact polygons and a
+label anchor guaranteed inside the region; region keys map onto the
+application control identifiers. Artwork updates need no code changes.
 """
 
+import json
 from dataclasses import dataclass
+from functools import cache
+from pathlib import Path
+from typing import Any, cast
 
-_IMAGE_WIDTH = 1448
-_IMAGE_HEIGHT = 1086
+MAIN_CONTROL_KEYS: dict[str, str] = {
+    "main.upper_left_front": "dpi_up",
+    "main.upper_left_rear": "dpi_down",
+    "main.wheel_tilt_left": "wheel_tilt_left",
+    "main.wheel_tilt_right": "wheel_tilt_right",
+    "main.top_front": "top_front",
+    "main.top_rear": "top_rear",
+    "main.ring_finger": "ring_finger",
+}
+
+_PASSTHROUGH_HINTS: dict[str, str] = {
+    "main.wheel": "passthrough (not remappable in v0.1)",
+    "main.primary_left": "not remappable in v0.1",
+    "main.primary_right": "not remappable in v0.1",
+}
+
+PLATE_LABELS = {12: "12-button plate", 6: "6-button plate", 2: "2-button plate"}
+
+Point = tuple[float, float]
 
 
 @dataclass(frozen=True)
@@ -19,98 +40,31 @@ class MappingZone:
     control_id: str | None
     label: str
     rect: tuple[float, float, float, float]
+    polygon: tuple[Point, ...]
+    anchor: Point
     plate: int | None = None
+    hint: str = ""
+    region_key: str = ""
 
     def contains(self, x: float, y: float) -> bool:
-        rx, ry, rw, rh = self.rect
-        return rx <= x < rx + rw and ry <= y < ry + rh
+        return _point_in_polygon(x, y, self.polygon)
 
 
-def _normalized(x: int, y: int, w: int, h: int, pad: int = 4) -> tuple[float, float, float, float]:
-    px, py = x - pad, y - pad
-    pw, ph = w + 2 * pad, h + 2 * pad
-    return (
-        max(0.0, px / _IMAGE_WIDTH),
-        max(0.0, py / _IMAGE_HEIGHT),
-        min(1.0, pw / _IMAGE_WIDTH),
-        min(1.0, ph / _IMAGE_HEIGHT),
-    )
+def regions_path() -> Path:
+    return Path(__file__).resolve().parent / "assets" / "Mapping.regions.json"
 
 
-def _common() -> tuple[MappingZone, ...]:
-    return (
-        MappingZone("dpi_up", "DPI up", _normalized(676, 204, 46, 46)),
-        MappingZone("dpi_down", "DPI down", _normalized(676, 250, 46, 44)),
-        MappingZone("wheel_tilt_left", "Wheel tilt left", _normalized(840, 208, 16, 84)),
-        MappingZone("wheel_tilt_right", "Wheel tilt right", _normalized(944, 208, 20, 84)),
-        MappingZone("top_front", "Top front", _normalized(880, 368, 44, 52)),
-        MappingZone("top_rear", "Top rear", _normalized(880, 440, 44, 56)),
-        MappingZone("ring_finger", "Ring finger", _normalized(1140, 284, 56, 200)),
-    )
-
-
-def _plate12() -> tuple[MappingZone, ...]:
-    boxes = (
-        (252, 230, 36, 34),
-        (296, 228, 36, 34),
-        (338, 228, 36, 34),
-        (378, 226, 38, 34),
-        (256, 270, 36, 32),
-        (300, 268, 36, 32),
-        (342, 266, 36, 32),
-        (384, 264, 36, 32),
-        (262, 308, 36, 34),
-        (304, 306, 36, 34),
-        (348, 304, 36, 34),
-        (390, 302, 34, 34),
-    )
-    return tuple(
-        MappingZone(f"side_12_{number}", f"Side {number}", _normalized(*box), plate=12)
-        for number, box in enumerate(boxes, start=1)
-    )
-
-
-def _plate6() -> tuple[MappingZone, ...]:
-    boxes = (
-        (258, 452, 48, 38),
-        (308, 452, 46, 36),
-        (360, 450, 50, 38),
-        (262, 494, 44, 34),
-        (314, 492, 42, 32),
-        (366, 492, 44, 32),
-    )
-    return tuple(
-        MappingZone(f"side_6_{number}", f"Side {number}", _normalized(*box), plate=6)
-        for number, box in enumerate(boxes, start=1)
-    )
-
-
-def _plate2() -> tuple[MappingZone, ...]:
-    return (
-        MappingZone("side_2_front", "Side front", _normalized(264, 684, 62, 46), plate=2),
-        MappingZone("side_2_rear", "Side rear", _normalized(334, 682, 46, 46), plate=2),
-    )
-
-
-WHEEL_CLICK_ZONE = MappingZone(
-    None,
-    "Scroll wheel click",
-    _normalized(868, 188, 64, 148),
-)
-
-MAIN_GRID_HINT_ZONE = MappingZone(
-    None,
-    "Side buttons",
-    _normalized(592, 408, 160, 300),
-)
-
-COMMON_ZONES: tuple[MappingZone, ...] = _common()
-PLATE_ZONES: tuple[MappingZone, ...] = (*_plate12(), *_plate6(), *_plate2())
-
-
+@cache
 def all_zones() -> tuple[MappingZone, ...]:
-    """Every zone, including decorative passthrough regions."""
-    return (*COMMON_ZONES, WHEEL_CLICK_ZONE, MAIN_GRID_HINT_ZONE, *PLATE_ZONES)
+    """Load every region from the bundled sidecar."""
+    document = json.loads(regions_path().read_text(encoding="utf-8"))
+    if document.get("schema_version") != 1:
+        raise ValueError("unsupported mapping sidecar schema")
+    zones = tuple(_zone_from_region(region) for region in document["regions"])
+    identifiers = [zone.control_id for zone in zones if zone.control_id is not None]
+    if len(identifiers) != len(set(identifiers)):
+        raise ValueError("mapping sidecar maps a control more than once")
+    return zones
 
 
 def zone_at(x: float, y: float, *, plate_layout: int = 12) -> MappingZone | None:
@@ -128,8 +82,106 @@ def zone_for_control(control_id: str) -> MappingZone | None:
     return None
 
 
+def zone_for_key(region_key: str) -> MappingZone | None:
+    for zone in all_zones():
+        if zone.region_key == region_key:
+            return zone
+    return None
+
+
 def zone_assignable(zone: MappingZone, plate_layout: int) -> bool:
     """A zone can be assigned when its plate is the attached one."""
     if zone.control_id is None:
         return False
     return zone.plate is None or zone.plate == plate_layout
+
+
+def _zone_from_region(region: dict[str, object]) -> MappingZone:
+    bounds_raw = _field(region, "bounds_px_ltrb_exclusive")
+    left, top, right, bottom = (float(value) for value in bounds_raw)
+    width, height = 4096.0, 3072.0
+    polygon = tuple(
+        (float(point[0]) / width, float(point[1]) / height)
+        for point in _field(region, "polygon_px")
+    )
+    anchor_raw = _field(region, "label_anchor_px")
+    anchor = (float(anchor_raw[0]) / width, float(anchor_raw[1]) / height)
+    key = str(region["region_key"])
+    plate = region.get("sideplate_buttons")
+    plate_layout = int(plate) if isinstance(plate, int) else None
+    control_id = _control_for(key, region, plate_layout)
+    label = _label_for(region, control_id, plate_layout)
+    hint = "" if control_id is not None else _PASSTHROUGH_HINTS.get(key, "decorative")
+    return MappingZone(
+        control_id=control_id,
+        label=label,
+        rect=(left / width, top / height, (right - left) / width, (bottom - top) / height),
+        polygon=polygon,
+        anchor=anchor,
+        plate=plate_layout,
+        hint=hint,
+        region_key=key,
+    )
+
+
+def _field(region: dict[str, object], name: str) -> list[Any]:
+    value = region.get(name)
+    if not isinstance(value, list):
+        raise ValueError(f"mapping sidecar region lacks {name}")
+    return cast("list[Any]", value)
+
+
+def _control_for(key: str, region: dict[str, object], plate: int | None) -> str | None:
+    if plate is None:
+        return MAIN_CONTROL_KEYS.get(key)
+    row, column = int(region["row"]), int(region["column"])  # type: ignore[index]
+    if plate == 12:
+        return f"side_12_{(row - 1) * 4 + column}"
+    if plate == 6:
+        return f"side_6_{(row - 1) * 3 + column}"
+    if plate == 2:
+        return "side_2_front" if column == 1 else "side_2_rear"
+    return None
+
+
+def _label_for(region: dict[str, object], control_id: str | None, plate: int | None) -> str:
+    if control_id is not None:
+        return _control_label(control_id)
+    label = str(region.get("label") or region["region_key"])
+    if plate is not None:
+        return f"{label} ({PLATE_LABELS.get(plate, plate)})"
+    return label
+
+
+def _control_label(control_id: str) -> str:
+    if control_id.startswith("side_"):
+        parts = control_id.split("_")
+        if parts[-1].isdigit():
+            return f"Side {parts[-1]}"
+        return f"Side {parts[-1]}"
+    labels = {
+        "dpi_up": "DPI up",
+        "dpi_down": "DPI down",
+        "wheel_tilt_left": "Wheel tilt left",
+        "wheel_tilt_right": "Wheel tilt right",
+        "top_front": "Top front",
+        "top_rear": "Top rear",
+        "ring_finger": "Ring finger",
+    }
+    return labels.get(control_id, control_id)
+
+
+def _point_in_polygon(x: float, y: float, polygon: tuple[Point, ...]) -> bool:
+    if not polygon:
+        return False
+    inside = False
+    previous = polygon[-1]
+    for current in polygon:
+        x0, y0 = previous
+        x1, y1 = current
+        if (y0 > y) != (y1 > y):
+            crossing = x0 + (y - y0) * (x1 - x0) / (y1 - y0)
+            if x < crossing:
+                inside = not inside
+        previous = current
+    return inside
