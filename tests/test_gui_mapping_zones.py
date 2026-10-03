@@ -69,7 +69,7 @@ def test_the_dpi_pair_is_two_separate_zones() -> None:
     assert zone_at(*_center(rear)) is rear
 
 
-def test_plate_zones_follow_the_attached_plate() -> None:
+def test_plate_zones_are_always_assignable() -> None:
     expectations = [
         ("side_12_1", 12),
         ("side_6_1", 6),
@@ -78,10 +78,8 @@ def test_plate_zones_follow_the_attached_plate() -> None:
     for control_id, plate in expectations:
         zone = zone_for_control(control_id)
         assert zone is not None and zone.plate == plate
-        assert zone_assignable(zone, plate)
-        for other in (2, 6, 12):
-            if other != plate:
-                assert not zone_assignable(zone, other)
+        for layout in (2, 6, 12):
+            assert zone_assignable(zone, layout)
 
     dpi_up = zone_for_control("dpi_up")
     assert dpi_up is not None
@@ -89,13 +87,29 @@ def test_plate_zones_follow_the_attached_plate() -> None:
         assert zone_assignable(dpi_up, layout)
 
 
-def test_sideplate_numbering_runs_left_to_right_top_to_bottom() -> None:
-    first = zone_for_control("side_12_1")
-    second = zone_for_control("side_12_2")
-    fifth = zone_for_control("side_12_5")
-    assert first is not None and second is not None and fifth is not None
-    assert first.rect[0] < second.rect[0]
-    assert first.rect[1] < fifth.rect[1]
+def test_sideplate_numbering_matches_the_physical_plate() -> None:
+    expectations = {
+        "side12.r1c1": "side_12_3",
+        "side12.r2c1": "side_12_2",
+        "side12.r3c1": "side_12_1",
+        "side12.r1c4": "side_12_12",
+        "side12.r2c3": "side_12_8",
+        "side12.r3c4": "side_12_10",
+        "side6.r1c1": "side_6_1",
+        "side6.r1c3": "side_6_3",
+        "side6.r2c1": "side_6_6",
+        "side6.r2c3": "side_6_4",
+        "side2.r1c1": "side_2_front",
+        "side2.r1c2": "side_2_rear",
+    }
+    for region_key, control_id in expectations.items():
+        zone = zone_for_key(region_key)
+        assert zone is not None and zone.control_id == control_id, region_key
+
+    one = zone_for_control("side_12_1")
+    three = zone_for_control("side_12_3")
+    assert one is not None and three is not None
+    assert one.rect[1] > three.rect[1]
 
 
 def _center(zone: "MappingZone") -> tuple[float, float]:

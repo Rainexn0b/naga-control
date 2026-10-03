@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 
 from naga_control.domain.actions import Action
 from naga_control.gui.actions_view import action_kind, format_action_detail
-from naga_control.gui.mapping_zones import MappingZone, all_zones, zone_assignable
+from naga_control.gui.mapping_zones import MappingZone, all_zones
 
 _ACCENT = QColor(68, 255, 136)
 _DISABLED = QColor(128, 128, 128)
@@ -103,7 +103,7 @@ class MappingMapView(QGraphicsView):
         self.setMinimumHeight(280)
 
     def zone_clicked(self, zone: MappingZone) -> None:
-        if zone.control_id is not None and zone_assignable(zone, self._plate_layout):
+        if zone.control_id is not None:
             self.set_selected(zone.control_id)
             self.zone_selected.emit(zone.control_id)
 
@@ -120,8 +120,6 @@ class MappingMapView(QGraphicsView):
             if control is None:
                 hint = item.zone.hint or "decorative"
                 item.setToolTip(f"{item.zone.label} — {hint}")
-            elif not zone_assignable(item.zone, self._plate_layout):
-                item.setToolTip(f"{item.zone.label} — needs the {item.zone.plate}-button plate")
             else:
                 action = actions.get(control)
                 if action is None:
@@ -141,5 +139,7 @@ class MappingMapView(QGraphicsView):
 
     def _apply_availability(self) -> None:
         for item in self.zone_items:
-            item.set_zone_enabled(zone_assignable(item.zone, self._plate_layout))
+            active = item.zone.plate is None or item.zone.plate == self._plate_layout
+            item.set_zone_enabled(item.zone.control_id is not None)
+            item.setOpacity(1.0 if active else 0.55)
         self.set_actions(self._actions_cache)

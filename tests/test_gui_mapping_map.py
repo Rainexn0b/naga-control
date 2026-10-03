@@ -79,7 +79,7 @@ def test_clicking_a_zone_emits_its_control(qapp: QApplication) -> None:
     assert selected == ["dpi_up"]
 
 
-def test_clicking_a_plate_zone_on_a_6_plate_does_not_emit(qapp: QApplication) -> None:
+def test_clicking_any_plate_zone_emits_regardless_of_profile(qapp: QApplication) -> None:
     view = _view(qapp)
     view.set_plate_layout(6)
     selected: list[str] = []
@@ -88,8 +88,9 @@ def test_clicking_a_plate_zone_on_a_6_plate_does_not_emit(qapp: QApplication) ->
     zone = zone_for_control("side_12_1")
     assert zone is not None
     _click_zone(qapp, view, zone)
+    _click_zone(qapp, view, zone_for_control("side_6_4") or zone)
 
-    assert selected == []
+    assert selected == ["side_12_1", "side_6_4"]
 
 
 def test_clicking_the_passthrough_wheel_zone_does_not_emit(qapp: QApplication) -> None:
@@ -119,8 +120,19 @@ def test_action_tooltips_reflect_bindings_and_plate(qapp: QApplication) -> None:
 
     assert dpi_up.toolTip() == "DPI up — device: dpi_stage_up"  # type: ignore[attr-defined]
     assert dpi_down.toolTip() == "DPI down — passthrough"  # type: ignore[attr-defined]
-    assert side_1.toolTip() == "Side 1 — needs the 12-button plate"  # type: ignore[attr-defined]
+    assert side_1.toolTip() == "Side 1 — passthrough"  # type: ignore[attr-defined]
     assert wheel.toolTip().endswith("— passthrough (not remappable in v0.1)")  # type: ignore[attr-defined]
+
+
+def test_inactive_plates_are_dimmed_but_clickable(qapp: QApplication) -> None:
+    view = _view(qapp)
+
+    view.set_plate_layout(6)
+    side_12 = _item(view, "side_12_1")
+    side_6 = _item(view, "side_6_1")
+    assert side_12.opacity() == 0.55  # type: ignore[attr-defined]
+    assert side_6.opacity() == 1.0  # type: ignore[attr-defined]
+    assert side_12.isEnabled()  # type: ignore[attr-defined]
 
 
 def test_selection_outlines_the_zone(qapp: QApplication) -> None:

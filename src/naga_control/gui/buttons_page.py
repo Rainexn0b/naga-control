@@ -23,9 +23,10 @@ from naga_control.domain.errors import ConfigValidationError
 from naga_control.domain.profiles import Configuration, LogicalControlId
 from naga_control.gui.actions_view import (
     ACTION_KINDS,
+    action_for_control,
     action_kind,
     control_display_name,
-    controls_for_layout,
+    control_groups,
     format_action_detail,
     parse_action,
 )
@@ -101,9 +102,12 @@ class ButtonsPage(QWidget):
         self.mapping_map.zone_selected.connect(self.select_control)
         map_hint = QLabel("Click a highlighted zone to jump to its binding")
         map_hint.setWordWrap(True)
+        self.plate_caption = QLabel("")
+        self.plate_caption.setWordWrap(True)
         map_column = QVBoxLayout()
         map_column.addWidget(self.mapping_map)
         map_column.addWidget(map_hint)
+        map_column.addWidget(self.plate_caption)
         map_panel = QWidget()
         map_panel.setLayout(map_column)
 
@@ -160,13 +164,19 @@ class ButtonsPage(QWidget):
             row.root.deleteLater()
         self.rows = []
         self._highlighted_row: ButtonRow | None = None
-        for control in controls_for_layout(layout):
-            action = profile.bindings.action_for(control, profile.plate_layout)
-            self._loaded_actions[control] = action
-            self.rows.append(self._build_row(control, action))
-            self.rows_layout.addRow(control_display_name(control), self.rows[-1].root)
+        for title, controls in control_groups():
+            self.rows_layout.addRow(QLabel(f"<b>{title}</b>"))
+            for control in controls:
+                action = action_for_control(profile.bindings, control)
+                self._loaded_actions[control] = action  # type: ignore[assignment]
+                self.rows.append(self._build_row(control, action))  # type: ignore[arg-type]
+                self.rows_layout.addRow(control_display_name(control), self.rows[-1].root)
+        self.plate_caption.setText(
+            f"Profile plate: {layout}-button. All plate groups stay editable; "
+            "the profile plate decides which one is active on the hardware."
+        )
         self.mapping_map.set_plate_layout(layout)
-        self.mapping_map.set_actions(self._loaded_actions)
+        self.mapping_map.set_actions(self._loaded_actions)  # type: ignore[arg-type]
         self.mapping_map.set_selected(None)
         self._update_dirty()
 

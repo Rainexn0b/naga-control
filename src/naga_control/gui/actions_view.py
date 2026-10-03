@@ -15,7 +15,7 @@ from naga_control.domain.actions import (
     MouseButtonAction,
 )
 from naga_control.domain.errors import ConfigValidationError
-from naga_control.domain.profiles import LogicalControlId
+from naga_control.domain.profiles import Binding, Bindings, LogicalControlId
 
 ACTION_KINDS = ("passthrough", "disabled", "key", "key_combo", "mouse_button", "device")
 
@@ -118,11 +118,48 @@ def _require(text: str, field_path: str) -> None:
         raise ConfigValidationError(field_path, "must not be empty")
 
 
+def _control_sort_key(control_id: str) -> tuple[str, int, str]:
+    parts = control_id.rpartition("_")
+    number = int(parts[2]) if parts[2].isdigit() else 0
+    return (parts[0], number, parts[2])
+
+
+def _numeric_sorted(control_ids: frozenset[str]) -> tuple[str, ...]:
+    return tuple(sorted(control_ids, key=_control_sort_key))
+
+
 def controls_for_layout(plate_layout: int) -> tuple[LogicalControlId, ...]:
     from typing import cast
 
     from naga_control.domain.profiles import COMMON_CONTROL_IDS, PLATE_CONTROL_IDS, PlateLayout
 
-    common = sorted(COMMON_CONTROL_IDS)
-    plate = sorted(PLATE_CONTROL_IDS[cast(PlateLayout, plate_layout)])
+    common = _numeric_sorted(COMMON_CONTROL_IDS)
+    plate = _numeric_sorted(PLATE_CONTROL_IDS[cast(PlateLayout, plate_layout)])
     return cast("tuple[LogicalControlId, ...]", (*common, *plate))
+
+
+def control_groups() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Every control grouped by plate, numerically ordered."""
+    from naga_control.domain.profiles import COMMON_CONTROL_IDS, PLATE_CONTROL_IDS
+
+    return (
+        ("Common controls", _numeric_sorted(COMMON_CONTROL_IDS)),
+        ("12-button plate", _numeric_sorted(PLATE_CONTROL_IDS[12])),
+        ("6-button plate", _numeric_sorted(PLATE_CONTROL_IDS[6])),
+        ("2-button plate", _numeric_sorted(PLATE_CONTROL_IDS[2])),
+    )
+
+
+def action_for_control(bindings: Bindings, control_id: str) -> Action | None:
+    """Read a binding from its own plate group, whatever plate is attached."""
+    groups: dict[str, tuple[Binding, ...]] = {
+        "side_12": bindings.plate_12,
+        "side_6": bindings.plate_6,
+        "side_2": bindings.plate_2,
+    }
+    prefix = "_".join(control_id.split("_")[:2])
+    search: tuple[Binding, ...] = groups.get(prefix, bindings.common)
+    for binding in search:
+        if binding.control_id == control_id:
+            return binding.action
+    return None

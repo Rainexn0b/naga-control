@@ -90,10 +90,8 @@ def zone_for_key(region_key: str) -> MappingZone | None:
 
 
 def zone_assignable(zone: MappingZone, plate_layout: int) -> bool:
-    """A zone can be assigned when its plate is the attached one."""
-    if zone.control_id is None:
-        return False
-    return zone.plate is None or zone.plate == plate_layout
+    """Every control zone is assignable; plate_layout only styles the view."""
+    return zone.control_id is not None
 
 
 def _zone_from_region(region: dict[str, object]) -> MappingZone:
@@ -136,9 +134,9 @@ def _control_for(key: str, region: dict[str, object], plate: int | None) -> str 
         return MAIN_CONTROL_KEYS.get(key)
     row, column = int(region["row"]), int(region["column"])  # type: ignore[index]
     if plate == 12:
-        return f"side_12_{(row - 1) * 4 + column}"
+        return f"side_12_{(column - 1) * 3 + (4 - row)}"
     if plate == 6:
-        return f"side_6_{(row - 1) * 3 + column}"
+        return f"side_6_{column if row == 1 else 7 - column}"
     if plate == 2:
         return "side_2_front" if column == 1 else "side_2_rear"
     return None

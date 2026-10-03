@@ -100,14 +100,16 @@ def _row(page: ButtonsPage, control_id: str):
     raise AssertionError(f"no row for {control_id}")
 
 
-def test_page_lists_active_profile_controls(qapp: QApplication) -> None:
+def test_page_lists_all_plate_groups_in_numeric_order(qapp: QApplication) -> None:
     page, _client = _page(qapp)
-    profile = default_configuration().profile(default_configuration().active_profile)
 
-    from naga_control.gui.actions_view import controls_for_layout
-
-    expected = controls_for_layout(profile.plate_layout)
-    assert [row.control_id for row in page.rows] == list(expected)
+    controls = [row.control_id for row in page.rows]
+    assert len(controls) == 7 + 12 + 6 + 2
+    plate_12 = controls[7:19]
+    assert plate_12 == [f"side_12_{number}" for number in range(1, 13)]
+    plate_6 = controls[19:25]
+    assert plate_6 == [f"side_6_{number}" for number in range(1, 7)]
+    assert controls[25:] == ["side_2_front", "side_2_rear"]
     assert _row(page, "top_front").kind_box.currentText() == "passthrough"
     assert not _row(page, "top_front").detail_edit.isEnabled()
     assert not page.apply_button.isEnabled()
@@ -163,7 +165,9 @@ def test_selecting_a_plate_rebuilds_rows_and_applies_layout(qapp: QApplication) 
     page.plate_box.setCurrentText("2-button")
     qapp.processEvents()
 
-    assert [row.control_id for row in page.rows] == [
+    controls = [row.control_id for row in page.rows]
+    assert len(controls) == 7 + 12 + 6 + 2
+    assert controls[:7] == [
         "dpi_down",
         "dpi_up",
         "ring_finger",
@@ -171,8 +175,6 @@ def test_selecting_a_plate_rebuilds_rows_and_applies_layout(qapp: QApplication) 
         "top_rear",
         "wheel_tilt_left",
         "wheel_tilt_right",
-        "side_2_front",
-        "side_2_rear",
     ]
     assert page.apply_button.isEnabled()
 
@@ -213,7 +215,11 @@ def test_mapping_map_tracks_the_plate_selector(qapp: QApplication) -> None:
     page.plate_box.setCurrentText("6-button")
     qapp.processEvents()
 
-    side_1 = next(
+    side_12 = next(
         item for item in page.mapping_map.zone_items if item.zone.control_id == "side_12_1"
     )
-    assert side_1.toolTip() == "Side 1 — needs the 12-button plate"
+    side_6 = next(
+        item for item in page.mapping_map.zone_items if item.zone.control_id == "side_6_1"
+    )
+    assert side_12.opacity() == 0.55
+    assert side_6.opacity() == 1.0
