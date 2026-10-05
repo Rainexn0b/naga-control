@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import replace
 
-from naga_control.config import dump_toml
+from naga_control.config import dump_toml, parse_toml
 from naga_control.domain.defaults import default_configuration
 from naga_control.gui.models import ServiceModel
 from naga_control.gui.presenter import ApplyOutcome, GuiPresenter
@@ -31,7 +31,18 @@ class ClientScript:
         self.released = False
         self.applied: tuple[int, str] | None = None
         self.selected: str | None = None
-        self.document = dump_toml(default_configuration())
+        configuration = default_configuration()
+        self.document = dump_toml(
+            replace(
+                configuration,
+                profiles=(
+                    *configuration.profiles,
+                    ("fps", replace(configuration.profile("default"), display_name="FPS")),
+                ),
+            )
+        )
+        self.fail_refresh_after_select = False
+        self.skip_select_update = False
 
 
 class FakeClient(NagaControlClient):
@@ -40,6 +51,8 @@ class FakeClient(NagaControlClient):
         self.script = script
 
     async def snapshot_document(self) -> str:
+        if self.script.selected is not None and self.script.fail_refresh_after_select:
+            raise RuntimeError("readback failed")
         if self.script.snapshot_error is not None:
             raise self.script.snapshot_error
         return SNAPSHOT
@@ -60,6 +73,13 @@ class FakeClient(NagaControlClient):
         if self.script.select_error is not None:
             raise self.script.select_error
         self.script.selected = profile_id
+        if not self.script.skip_select_update:
+            configuration = parse_toml(self.script.document)
+            self.script.document = dump_toml(
+                replace(
+                    configuration, active_profile=profile_id, revision=configuration.revision + 1
+                )
+            )
         return self.script.new_revision
 
 
@@ -176,6 +196,24 @@ def test_select_profile_reports_invalid_and_applied() -> None:
         assert asyncio.run(presenter.select_profile("fps")) is expected
 
     assert script.selected == "fps"
+
+
+def test_select_profile_never_reports_success_without_confirmed_readback() -> None:
+    for failed_readback, unchanged, expected in (
+        (True, False, ApplyOutcome.UNREACHABLE),
+        (False, True, ApplyOutcome.INVALID),
+    ):
+        script = ClientScript()
+        script.fail_refresh_after_select = failed_readback
+        script.skip_select_update = unchanged
+        model = ServiceModel()
+        presenter, _ = _presenter(script, model)
+
+        assert asyncio.run(presenter.select_profile("fps")) is expected
+        assert script.selected == "fps"
+        assert model.connection.reachable is not failed_readback
+        if unchanged:
+            assert parse_toml(script.document).active_profile == "default"
 
 
 def test_release_all_refreshes_after_release() -> None:

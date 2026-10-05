@@ -13,6 +13,8 @@ class ObservedView:
     dpi: tuple[int, int] | None = None
     active_dpi_stage: int | None = None
     scroll_mode: str | None = None
+    scroll_acceleration: bool | None = None
+    scroll_smart_reel: bool | None = None
     poll_rate: int | None = None
     battery_percent: float | None = None
     charging: bool | None = None
@@ -30,6 +32,10 @@ class ServiceSnapshotView:
     error: str | None
     calibrating: bool = False
     observed: ObservedView = ObservedView()
+    desired_mode: str | None = None
+    observed_mode: str | None = None
+    mode_ready: bool = False
+    mode_error: str | None = None
 
 
 def parse_snapshot(document: str) -> ServiceSnapshotView:
@@ -39,6 +45,8 @@ def parse_snapshot(document: str) -> ServiceSnapshotView:
         dpi=_optional_pair(raw_observed.get("dpi")),
         active_dpi_stage=_optional_int(raw_observed.get("active_dpi_stage")),
         scroll_mode=_optional_str(raw_observed.get("scroll_mode")),
+        scroll_acceleration=_optional_bool(raw_observed.get("scroll_acceleration")),
+        scroll_smart_reel=_optional_bool(raw_observed.get("scroll_smart_reel")),
         poll_rate=_optional_int(raw_observed.get("poll_rate")),
         battery_percent=_optional_float(raw_observed.get("battery_percent")),
         charging=_optional_bool(raw_observed.get("charging")),
@@ -52,6 +60,10 @@ def parse_snapshot(document: str) -> ServiceSnapshotView:
         error=_optional_str(payload.get("error")),
         calibrating=payload.get("calibrating") is True,
         observed=observed,
+        desired_mode=_optional_str(payload.get("desired_mode")),
+        observed_mode=_optional_str(payload.get("observed_mode")),
+        mode_ready=payload.get("mode_ready") is True,
+        mode_error=_optional_str(payload.get("mode_error")),
     )
 
 
@@ -128,6 +140,8 @@ class ServiceModel:
             self._changed()
 
     def apply_configuration(self, revision: int, document: str) -> None:
+        if self.configuration_revision is not None and revision < self.configuration_revision:
+            return
         changed = self.configuration_revision != revision or self.configuration_document != document
         if changed:
             self.configuration_revision = revision

@@ -94,6 +94,11 @@ class GuiPresenter:
             await self._drop_client(_describe(exc))
             return ApplyOutcome.UNREACHABLE
         await self.refresh()
+        if not self._model.connection.reachable:
+            return ApplyOutcome.UNREACHABLE
+        document = self._model.configuration_document
+        if document is None or parse_toml(document).active_profile != profile_id:
+            return ApplyOutcome.INVALID
         return ApplyOutcome.APPLIED
 
     async def apply_configuration(self, document: str) -> ApplyOutcome:

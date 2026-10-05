@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from importlib import import_module
 from typing import cast
 
 import pytest
@@ -40,6 +41,23 @@ def test_keyboard_writes_framed_down_repeat_and_up() -> None:
     output.emit(KeyOutputIntent("left_alt", 0))
 
     assert device.events == [(1, 56, 1), "syn", (1, 56, 2), "syn", (1, 56, 0), "syn"]
+
+
+def test_f12_binding_uses_linux_f12_code() -> None:
+    device = FakeUInput()
+    codes = keyboard.resolve_key_codes(import_module("evdev.ecodes"))
+    assert codes["f12"] == 88
+    output = VirtualKeyboard(device, event_type=1, key_codes=codes)
+
+    output.emit(KeyOutputIntent("f12", 1))
+    output.emit(KeyOutputIntent("f12", 0))
+
+    assert device.events == [
+        (1, 88, 1),
+        "syn",
+        (1, 88, 0),
+        "syn",
+    ]
 
 
 def test_write_failure_releases_held_keys_and_closes_the_device() -> None:

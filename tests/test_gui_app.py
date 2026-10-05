@@ -92,6 +92,7 @@ def _window(qapp: QApplication) -> tuple[MainWindow, FakeClient]:
     model = ServiceModel()
     presenter = GuiPresenter(model, open_client=lambda: _opened(client))
     window = MainWindow(presenter, model, _sync_run)
+    window._poll_timer.stop()  # pyright: ignore[reportPrivateUsage]
     _sync_run(presenter.refresh)
     qapp.processEvents()
     return window, client

@@ -230,6 +230,10 @@ Acceptance:
 
 ## Deferred Work
 
+Post-0.3 requests and their sequential delivery queue are tracked separately in
+[Post-0.3 UI Implementation Tracker](post-0.3-ui-tracker.md). Plate identity and
+mode switching retain their evidence and input-ownership safety gates.
+
 - per-application profile detection
 - macros and command execution
 - generic OpenRazer devices

@@ -12,6 +12,7 @@ from naga_control.domain.actions import (
     MouseButtonAction,
 )
 from naga_control.domain.errors import ConfigValidationError
+from naga_control.domain.hardware import DeviceMode
 from naga_control.domain.profiles import (
     COMMON_CONTROL_IDS,
     PLATE_CONTROL_IDS,
@@ -31,8 +32,9 @@ from naga_control.domain.profiles import (
 )
 
 ROOT_FIELDS = frozenset(
-    {"schema_version", "revision", "default_profile", "active_profile", "profiles"}
+    {"schema_version", "revision", "default_profile", "active_profile", "profiles", "mode"}
 )
+ROOT_OPTIONAL_FIELDS = frozenset({"mode"})
 PROFILE_FIELDS = frozenset(
     {"display_name", "plate_layout", "bindings", "dpi", "scroll", "lighting", "power", "poll_rate"}
 )
@@ -45,11 +47,14 @@ def parse_toml(document: str) -> Configuration:
     except tomllib.TOMLDecodeError as exc:
         raise ConfigValidationError("document", f"invalid TOML: {exc}") from exc
     root = _table(raw, "root")
-    _fields(root, ROOT_FIELDS, "root")
+    _fields(root, ROOT_FIELDS, "root", optional=ROOT_OPTIONAL_FIELDS)
     _integer(_required(root, "schema_version", "root"), "schema_version", 1, 1)
     revision = _integer(_required(root, "revision", "root"), "revision", 0, 2**63 - 1)
     default_profile = _slug(_required(root, "default_profile", "root"), "default_profile")
     active_profile = _slug(_required(root, "active_profile", "root"), "active_profile")
+    mode = _string(root.get("mode", "software"), "mode")
+    if mode not in {"software", "firmware"}:
+        raise ConfigValidationError("mode", "must be software or firmware")
     profile_table = _table(_required(root, "profiles", "root"), "profiles")
     if not profile_table:
         raise ConfigValidationError("profiles", "must contain at least one profile")
@@ -57,7 +62,9 @@ def parse_toml(document: str) -> Configuration:
         (_slug(identifier, "profiles"), _parse_profile(value, f"profiles.{identifier}"))
         for identifier, value in profile_table.items()
     )
-    return Configuration(revision, default_profile, active_profile, profiles)
+    return Configuration(
+        revision, default_profile, active_profile, profiles, mode=cast(DeviceMode, mode)
+    )
 
 
 def _parse_profile(value: object, path: str) -> Profile:

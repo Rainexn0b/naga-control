@@ -14,6 +14,58 @@ installing or upgrading.
 
 No changes recorded yet.
 
+## [0.4.0] - 2026-10-05
+
+This release adds direct key recording, cleaner button artwork, lighting color
+editing, and profile/scroll tray shortcuts.
+
+### Added
+
+- The Buttons tab can record a key or shortcut without requiring manual token
+  syntax. Direct entry remains available, and native Linux key information
+  distinguishes right- and left-side modifiers when Qt provides it.
+- A second GUI launch now activates the existing window, including when it is
+  hidden in the tray or minimized, without creating a second service client.
+- Each lighting zone now has a color swatch and hue/saturation wheel with a
+  separate value control. The manual RGB field remains available for precise
+  entry. Colors are staged per zone and only written on Apply Settings.
+- The system tray now includes an Active profile submenu. It shows the
+  service-selected profile and uses the same unsaved-edit confirmation as the
+  window header before switching profiles.
+- The tray's Scroll wheel submenu can change the active profile's saved scroll
+  mode, acceleration, and Smart Reel settings. It distinguishes desired values
+  from observed hardware status and displays scroll-related write failures.
+- Experimental service-wide firmware/driver mode policy in configuration, with
+  OpenRazer mode readback, fail-open input handoff, and desired/observed mode
+  status. Software mode remains the default; no tray mode switch is exposed.
+
+### Fixed
+
+- KDE Plasma/Wayland can match the running GUI to its desktop launcher instead
+  of treating a source launch as a generic `python3` window.
+- The Buttons list and artwork use the same natural button-number order, with
+  click regions matched to the aligned mask, preview, and sidecar assets.
+- Buttons-tab action and binding editors now require a direct click before
+  mouse-wheel gestures can change their values. Unarmed gestures scroll the
+  binding list instead, and leaving the editor resets wheel editing.
+- Profile switches only report success after readback confirms the new active
+  profile; tray entries refresh when profiles are changed by another client.
+- A rejected profile switch or tray scroll write no longer discards confirmed
+  drafts. A successful tray scroll change reconciles only the Scroll editor,
+  preserving unrelated Settings edits.
+- An older background configuration refresh cannot overwrite a newer saved
+  revision in the GUI.
+- Remapping session teardown now closes grabbed readers even when their read
+  tasks are cancelled before their first event-loop turn.
+
+### Known Limitations
+
+- The mode policy's held-output and wireless wake hardware checks remain
+  inconclusive. Do not rely on firmware-mode persistence for daily use or
+  enable a tray switch before those checks are complete.
+- Wired 6- and 2-button signatures remain uncaptured, so those wired plate
+  layouts are not enabled. Attached-plate selection remains manual.
+
 ## [0.3.0] - 2026-10-03
 
 This release brings a simpler control panel, safer editing, and manual update

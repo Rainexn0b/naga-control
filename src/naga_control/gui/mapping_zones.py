@@ -61,7 +61,9 @@ def all_zones() -> tuple[MappingZone, ...]:
     document = json.loads(regions_path().read_text(encoding="utf-8"))
     if document.get("schema_version") != 1:
         raise ValueError("unsupported mapping sidecar schema")
-    zones = tuple(_zone_from_region(region) for region in document["regions"])
+    width = float(document["coordinate_system"]["width"])
+    height = float(document["coordinate_system"]["height"])
+    zones = tuple(_zone_from_region(region, width, height) for region in document["regions"])
     identifiers = [zone.control_id for zone in zones if zone.control_id is not None]
     if len(identifiers) != len(set(identifiers)):
         raise ValueError("mapping sidecar maps a control more than once")
@@ -95,10 +97,9 @@ def zone_assignable(zone: MappingZone, plate_layout: int) -> bool:
     return zone.control_id is not None
 
 
-def _zone_from_region(region: dict[str, object]) -> MappingZone:
+def _zone_from_region(region: dict[str, object], width: float, height: float) -> MappingZone:
     bounds_raw = _field(region, "bounds_px_ltrb_exclusive")
     left, top, right, bottom = (float(value) for value in bounds_raw)
-    width, height = 4096.0, 3072.0
     polygon = tuple(
         (float(point[0]) / width, float(point[1]) / height)
         for point in _field(region, "polygon_px")
@@ -109,6 +110,11 @@ def _zone_from_region(region: dict[str, object]) -> MappingZone:
     plate = region.get("sideplate_buttons")
     plate_layout = int(plate) if isinstance(plate, int) else None
     control_id = _control_for(key, region, plate_layout)
+    number = int(region["region_id"])  # type: ignore[arg-type]
+    if plate_layout in (12, 6) and control_id is not None:
+        number = (10 if plate_layout == 12 else 22) + int(control_id.rpartition("_")[2])
+    elif plate_layout == 2:
+        number = 29 if control_id == "side_2_front" else 30
     label = _label_for(region, control_id, plate_layout)
     hint = "" if control_id is not None else _PASSTHROUGH_HINTS.get(key, "decorative")
     return MappingZone(
@@ -120,7 +126,7 @@ def _zone_from_region(region: dict[str, object]) -> MappingZone:
         plate=plate_layout,
         hint=hint,
         region_key=key,
-        number=int(region["region_id"]),  # type: ignore[arg-type]
+        number=number,
     )
 
 

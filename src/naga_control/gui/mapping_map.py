@@ -4,11 +4,12 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QPointF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsPolygonItem,
     QGraphicsScene,
+    QGraphicsSimpleTextItem,
     QGraphicsView,
 )
 
@@ -91,6 +92,9 @@ class MappingMapView(QGraphicsView):
         self.scene().addItem(self.pixmap_item)
         self._actions_cache: dict[str, Action | None] = {}
         self.zone_items: list[_ZoneItem] = []
+        label_font = QFont()
+        label_font.setPixelSize(21)
+        label_font.setWeight(QFont.Weight.Bold)
         for zone in all_zones():
             item = _ZoneItem(zone, self)
             width = self.pixmap_item.pixmap().width()
@@ -98,6 +102,17 @@ class MappingMapView(QGraphicsView):
             item.setPolygon(QPolygonF([QPointF(x * width, y * height) for x, y in zone.polygon]))
             self.scene().addItem(item)
             self.zone_items.append(item)
+            number = QGraphicsSimpleTextItem(str(zone.number), self.pixmap_item)
+            number.setFont(label_font)
+            number.setBrush(QBrush(Qt.GlobalColor.white))
+            number.setPen(QPen(Qt.GlobalColor.black, 0.8))
+            number.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            number.setZValue(1)
+            label_bounds = number.boundingRect()
+            number.setPos(
+                zone.anchor[0] * width - label_bounds.center().x(),
+                zone.anchor[1] * height - label_bounds.center().y(),
+            )
         self._apply_availability()
         self.setMinimumHeight(280)
 

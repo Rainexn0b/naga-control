@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import TypeVar, cast
 
-from naga_control.domain.hardware import HardwareScrollMode, HardwareState, SettingsFailure
+from naga_control.domain.hardware import (
+    DeviceMode,
+    HardwareScrollMode,
+    HardwareState,
+    SettingsFailure,
+)
 from naga_control.domain.profiles import Profile
 from naga_control.ports.hardware import HardwareBackend, NagaTopology
 
@@ -76,6 +81,12 @@ class HardwareWorker:
 
     async def refresh_state(self) -> HardwareState:
         return await self._submit_current(self._backend.refresh_state)
+
+    async def read_device_mode(self) -> DeviceMode:
+        return await self._submit_current(self._backend.read_device_mode)
+
+    async def set_device_mode(self, mode: DeviceMode) -> DeviceMode:
+        return await self._submit_current(lambda: self._backend.set_device_mode(mode))
 
     async def move_dpi_stage(self, direction: int) -> HardwareState:
         return await self._submit_current(lambda: self._backend.move_dpi_stage(direction))

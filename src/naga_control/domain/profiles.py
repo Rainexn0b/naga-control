@@ -6,6 +6,7 @@ from typing import Literal, cast
 
 from naga_control.domain.actions import Action
 from naga_control.domain.errors import ConfigValidationError
+from naga_control.domain.hardware import DeviceMode
 
 type PlateLayout = Literal[2, 6, 12]
 type ScrollMode = Literal["tactile", "free_spin", "precision_tactile"]
@@ -216,11 +217,14 @@ class Configuration:
     active_profile: str
     profiles: tuple[tuple[str, Profile], ...]
     schema_version: Literal[1] = 1
+    mode: DeviceMode = "software"
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "profiles", tuple(self.profiles))
         if self.schema_version != 1:
             raise ConfigValidationError("schema_version", "must be 1")
+        if type(self.mode) is not str or self.mode not in {"software", "firmware"}:
+            raise ConfigValidationError("mode", "must be software or firmware")
         _validate_range(self.revision, "revision", 0, 2**63 - 1)
         if not self.profiles:
             raise ConfigValidationError("profiles", "must contain at least one profile")

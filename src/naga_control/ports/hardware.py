@@ -3,6 +3,7 @@
 from typing import Protocol
 
 from naga_control.domain.hardware import (
+    DeviceMode,
     HardwareScrollMode,
     HardwareState,
     HardwareTransport,
@@ -54,6 +55,10 @@ class HardwareBackend(Protocol):
     def rescan(self, connections: tuple[NagaTopology, ...]) -> HardwareState: ...
 
     def refresh_state(self) -> HardwareState: ...
+
+    def read_device_mode(self) -> DeviceMode: ...
+
+    def set_device_mode(self, mode: DeviceMode) -> DeviceMode: ...
 
     def move_dpi_stage(self, direction: int) -> HardwareState: ...
 

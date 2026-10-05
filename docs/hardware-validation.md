@@ -457,6 +457,131 @@ OpenRazer serial collision. Do not repeat that physical test unless OpenRazer's
 identity design changes. Simulated discovery of the recorded state must produce
 a clear Naga Control conflict without grabbing either transport.
 
+## Device-Mode Handoff (UI-06, Not Yet Validated)
+
+Do not enable the tray firmware/driver switch or rely on experimental firmware
+mode for daily use until these opt-in tests have been performed with a second
+keyboard available and Input Remapper stopped. Use only one transport at a
+time; repeat the sequence separately for `00E7` and `00E8`. Keep the physical
+serial and USB path out of committed results.
+
+1. Record the current device mode and DPI/profile state through OpenRazer.
+   With the Naga Control service running, hold F17 and request the revisioned
+   service-wide `mode = "firmware"` configuration. Confirm the generated
+   LEFTALT release, disappearance of all forwarding proxies and grabs, and
+   readback `0:0` *in that order*. Test wheel, click, and onboard buttons.
+2. Request `mode = "software"`. Confirm readback `3:0` before new forwarding
+   proxies and grabs appear, then verify F13/F14 stage changes and held F17
+   LEFTALT down/up. Repeat with a queued hardware action and a deliberately
+   failed/uncertain OpenRazer write; failed handoffs must stay ungrabbed and
+   show desired versus observed/error separately.
+3. With firmware requested, test OpenRazer daemon restart, receiver reconnect,
+   cable reconnect (receiver removed first), wireless sleep/wake, and service
+   restart. Record whether OpenRazer reasserts `3:0`, how soon the service
+   detects it, and whether/how it recovers `0:0`. Confirm that no remapping
+   session is rebuilt while firmware is requested.
+4. Repeat lifecycle tests with software requested. Confirm that uncertain
+   mode readback drops grabs and releases held outputs, and that recovery does
+   not grab a source before proxy readiness or mode verification. Exercise
+   calibration rejection while firmware is requested and check both clean
+   shutdown and service crash cleanup.
+5. Restore the original mode and user profile settings. Decide with OpenRazer
+   ownership evidence whether firmware policy can be maintained through wake
+   without an interval of unexpected driver mode. Document any unavoidable
+   interval before presenting the tray switch as persistent.
+
+The default test suite uses fakes and must not read or change real device mode.
+The guided results below cover only a subset of these checks.
+
+### UI-06 Guided Results (2026-10-04)
+
+- A source-only opt-in test passed the firmware/driver handoff on HyperSpeed
+  `00E8` and wired `00E7` separately. Firmware readback confirmed `0:0` after
+  release of all source grabs; returning to `3:0` established fresh forwarding
+  sessions. Each test restored its initial hardware mode without saving config.
+- A test switching modes immediately after service startup exposed a real
+  cancellation-before-first-read race: a started reader's task could be
+  cancelled without entering its cleanup `finally`, leaving the evdev grab
+  alive until process exit. Session teardown now explicitly stops every
+  started reader. A fake regression and repeat HyperSpeed handoff passed.
+- OpenRazer daemon restart while firmware was requested passed on wired and
+  HyperSpeed using the live lifecycle monitor. The service re-read/reapplied
+  `0:0` without establishing remapping grabs.
+- Wireless idle/wake remains **unverified**. The first guided attempt changed
+  the idle timeout to 60 seconds after the mouse had already been idle long
+  enough to sleep immediately. A later 75-second attempt observed an
+  unavailable mode and no successful lifecycle rescan before its timeout;
+  test-output timing did not reliably synchronize the physical wake. This
+  neither proves nor rules out recovery after a correctly timed wake. The
+  60-second timeout was manually restored to 300 after waking, the mouse's
+  original `0:0` mode was confirmed, and the installed user service restarted
+  successfully. At the user's request the mouse was then placed in verified
+  driver mode `3:0` for daily remapping, with the idle timeout still 300.
+  Do not automate this idle test unattended.
+- A held physical `KEY_0` and later `BTN_RIGHT` blocked two test activations;
+  the no-held-keys gate correctly declined to grab. After tapping/releasing
+  those buttons, HyperSpeed handoff passed. Tests of a *generated held output*
+  during handoff, uncertain writes, sleep/wake, and reconnect are still needed
+  before the tray control is enabled. At the time, no UI-06 AppImage was installed.
+
+### Next Guided Checks
+
+Source-only regression tests now cover recovery from an unavailable startup,
+transient mode reads, lost hardware during a device action, and a lifecycle
+signal whose provider never completes a rescan. Generated outputs are released
+and the worker is fenced before the old session releases its grabs. A later
+recovery attempts verified mode/readback and proxy-before-grab startup; an
+uncertain mode write is still not retried by periodic polling.
+
+The remaining physical checks require an **interactive terminal**, a backup
+keyboard, one transport at a time, the installed Naga Control service stopped,
+the GUI quit, and other remappers stopped. The tests refuse to run without a
+TTY and `NAGA_UI06_HARDWARE=1`, use only in-memory configuration, and attempt
+to restore the original mode on cleanup. Read each test's prompt/timeout notes
+before running; do not run these through an API command that hides live output.
+
+```bash
+NAGA_UI06_HARDWARE=1 .venv/bin/pytest -m hardware -s tests/hardware/test_ui06_guided.py
+NAGA_UI06_HARDWARE=1 .venv/bin/pytest -m hardware -s tests/hardware/test_ui06_sleep.py
+```
+
+The first check observes a genuinely held F17-to-LEFTALT output, requires its
+release and removal of grabs before the firmware-mode write, then verifies
+software mode only after all physical buttons are released. The second waits
+for *visually confirmed natural* HyperSpeed sleep; it never changes idle time
+and requires an explicit keyboard acknowledgement before waking the mouse.
+Neither guided check has passed yet. Restore the installed
+user service only after the test has stopped and mode readback is checked;
+if the original mode was firmware but daily remapping is desired, explicitly
+select driver mode `3:0` through OpenRazer before using the older installed
+service. A failed cleanup or lost transport requires manual recovery.
+
+On 2026-10-05, the guided held-F17 check was attempted on HyperSpeed but did
+not reach a verified handoff. Two runs timed out at operator prompts. A later
+run observed generated LEFTALT down and a held physical F17, then failed its
+strict event-order assertion before recording the actual sequence. Another run
+found physical F17 held *before* forwarding startup; the no-held-keys safety
+gate correctly refused the grab. The test now advances automatically after
+LEFTALT down, prints a preparation prompt, and reports sanitized event order
+if the handoff assertion fails. No new guided test has passed. The installed
+user service was restarted, with OpenRazer reporting available HyperSpeed in
+verified driver mode `3:0` and no held physical keys before startup.
+
+Later on 2026-10-05, F17 stopped remapping during normal HyperSpeed use.
+OpenRazer read back onboard firmware mode `0:0` despite the service requesting
+software mode. The service was running, but its snapshot reported unavailable,
+no observed mode, and `hardware topology rescan is pending`. A verified
+OpenRazer write restored `3:0`; the service still lacked a forwarding session
+until it was restarted with no mouse keys held. After restart its snapshot
+reported available, mode ready, and no settings failures; the user confirmed
+F17 worked again. The old AppImage process dumped core during shutdown, as it
+has on earlier stops. There is no timestamped evidence of the exact trigger
+that returned the device to firmware mode. Source-only follow-up fixes a
+recovery loop: stopping a session fences the worker, so the next periodic
+mode read cannot succeed until the service requests a rescan. A fake-worker
+  regression covers that path. v0.4.0 includes the source fix, but physical
+  recovery after a mode drift still needs confirmation.
+
 ## Exit Criteria For First Slice
 
 The first vertical slice is complete only when:

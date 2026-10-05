@@ -1,7 +1,7 @@
 # Release Notes
 
 The root [changelog.md](../changelog.md) is the authoritative versioned release
-history. It contains Unreleased changes and the 0.3.0, 0.2.0, and 0.1.4 entries.
+history. It contains Unreleased changes and the 0.4.0, 0.3.0, 0.2.0, and 0.1.4 entries.
 Release publishing extracts only the
 matching version section, not this overview or the entire changelog.
 
@@ -28,7 +28,7 @@ and results. Run neither the GUI nor the service as root.
 - The 12-button plate has captured signatures for both transports. The 6- and
   2-button tables are HyperSpeed-only; wired alternate-plate signatures remain
   uncaptured and are not enabled.
-- Attached-plate selection is manual under **Device > Profiles** in 0.3.0.
+- Attached-plate selection is manual under **Device > Profiles** in 0.4.0.
   Editing every plate's bindings does not detect the attached plate or enable
   an uncaptured wired mapping. The 6- and 2-button plates are unlit by design.
 - Primary clicks and wheel scrolling remain passthrough, not editable bindings.
@@ -39,10 +39,15 @@ and results. Run neither the GUI nor the service as root.
 - Scroll acceleration and Smart Reel default to off; enable them in Settings
   if wanted. Settings Apply is atomic for the configuration document, not for
   the sequence of OpenRazer hardware writes.
-- The 0.3.0 notes do not establish new hardware validation. Consult
-  [Hardware Validation](hardware-validation.md) for existing wired/HyperSpeed
-  first-slice, lifecycle, settings, and passthrough evidence and remaining work,
-  including plate removal while held and broader passthrough coverage.
+- v0.4.0 includes an experimental service-wide firmware/driver mode policy in
+  configuration, but no tray switch. Held-output and wireless wake safety
+  checks are inconclusive; do not rely on firmware-mode persistence for daily
+  use until those checks pass. Software mode remains the default.
+- Guided source-only mode handoffs passed on wired and HyperSpeed, but held-output
+  ordering, natural wireless sleep/wake, and recovery from a real device-mode
+  drift remain unverified. Consult [Hardware Validation](hardware-validation.md)
+  for dated evidence and safety instructions; v0.4.0 does not claim full
+  hardware validation.
 
 ## Historical Notes
 

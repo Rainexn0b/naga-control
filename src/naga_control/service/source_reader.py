@@ -41,6 +41,10 @@ class SourceReader:
         try:
             return await read_parsed_frames(self._source, self._parser, self._sink.consume)
         finally:
-            if self._started:
-                self._started = False
-                self._sink.stop()
+            self.stop()
+
+    def stop(self) -> None:
+        """Close a started source even if its read task never got to run."""
+        if self._started:
+            self._started = False
+            self._sink.stop()

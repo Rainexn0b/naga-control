@@ -7,10 +7,13 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QKeyEvent
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from naga_control.config import dump_toml, parse_toml
-from naga_control.domain.actions import MouseButtonAction
+from naga_control.domain.actions import KeyAction, KeyComboAction, MouseButtonAction
 from naga_control.domain.defaults import default_configuration
 from naga_control.gui.buttons_page import ButtonsPage
 from naga_control.gui.models import ServiceModel
@@ -100,7 +103,9 @@ def _row(page: ButtonsPage, control_id: str):
     raise AssertionError(f"no row for {control_id}")
 
 
-def test_page_lists_controls_in_illustration_number_order(qapp: QApplication) -> None:
+def test_page_lists_side_buttons_in_numeric_order_with_illustration_numbers(
+    qapp: QApplication,
+) -> None:
     page, _client = _page(qapp)
 
     controls = [row.control_id for row in page.rows]
@@ -114,12 +119,16 @@ def test_page_lists_controls_in_illustration_number_order(qapp: QApplication) ->
         "top_rear",
         "ring_finger",
     ]
-    assert controls[7:19] == [
-        f"side_12_{number}" for number in (3, 6, 9, 12, 2, 5, 8, 11, 1, 4, 7, 10)
-    ]
-    assert controls[19:25] == [f"side_6_{number}" for number in (1, 2, 3, 6, 5, 4)]
+    assert controls[7:19] == [f"side_12_{number}" for number in range(1, 13)]
+    assert controls[19:25] == [f"side_6_{number}" for number in range(1, 7)]
     assert controls[25:] == ["side_2_front", "side_2_rear"]
     assert [int(row.number_label.text()) for row in page.rows] == [3, 4, *range(6, 31)]
+    from naga_control.gui.mapping_zones import zone_for_control
+
+    for row in page.rows:
+        zone = zone_for_control(row.control_id)
+        assert zone is not None
+        assert int(row.number_label.text()) == zone.number
     assert page.rows_layout.count() == 31  # Header and all 30 illustration numbers.
     assert _row(page, "top_front").kind_box.currentText() == "passthrough"
     assert not _row(page, "top_front").detail_edit.isEnabled()
@@ -168,6 +177,135 @@ def test_invalid_combo_is_rejected_before_sending(qapp: QApplication) -> None:
     assert client.applied == []
     assert page.status_label.text().startswith("rejected:")
     assert page.model.apply_status is not None
+
+
+def test_record_key_and_shortcut_apply_through_existing_editor(qapp: QApplication) -> None:
+    page, client = _page(qapp)
+    page.show()
+    qapp.processEvents()
+    row = _row(page, "ring_finger")
+    assert row.record_button.isVisible()
+
+    row.record_button.click()
+    QTest.keyClick(row.record_button, Qt.Key.Key_K)
+    assert row.kind_box.currentText() == "key"
+    assert row.detail_edit.currentText() == "k"
+    assert page.apply_button.isEnabled()
+
+    row.record_button.click()
+    QTest.keyClick(
+        row.record_button,
+        Qt.Key.Key_T,
+        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
+    )
+    assert row.kind_box.currentText() == "key_combo"
+    assert row.detail_edit.currentText() == "left_ctrl+left_shift+t"
+    page.apply_button.click()
+    qapp.processEvents()
+
+    configuration = parse_toml(client.applied[0])
+    assert configuration.profile(configuration.active_profile).bindings.action_for(
+        "ring_finger", 12
+    ) == KeyComboAction(modifiers=("left_ctrl", "left_shift"), key="t")
+
+
+def test_record_modifier_alone_and_switch_back_to_key(qapp: QApplication) -> None:
+    page, client = _page(qapp)
+    page.show()
+    qapp.processEvents()
+    row = _row(page, "top_front")
+    row.kind_box.setCurrentText("key_combo")
+    row.record_button.click()
+    QTest.keyClick(row.record_button, Qt.Key.Key_Control)
+
+    assert row.kind_box.currentText() == "key"
+    assert row.detail_edit.currentText() == "left_ctrl"
+    page.apply_button.click()
+    qapp.processEvents()
+    configuration = parse_toml(client.applied[0])
+    assert configuration.profile(configuration.active_profile).bindings.action_for(
+        "top_front", 12
+    ) == KeyAction(key="left_ctrl")
+
+
+@pytest.mark.parametrize(
+    ("key", "scan", "expected"),
+    [
+        (Qt.Key.Key_Control, 105, "right_ctrl"),
+        (Qt.Key.Key_Alt, 108, "right_alt"),
+    ],
+)
+def test_record_right_modifier_applies_to_button(
+    qapp: QApplication, key: Qt.Key, scan: int, expected: str
+) -> None:
+    page, client = _page(qapp)
+    page.show()
+    qapp.processEvents()
+    row = _row(page, "ring_finger")
+    row.record_button.click()
+    modifier = (
+        Qt.KeyboardModifier.ControlModifier
+        if key == Qt.Key.Key_Control
+        else Qt.KeyboardModifier.AltModifier
+    )
+    for event_type in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+        qapp.sendEvent(row.record_button, QKeyEvent(event_type, key, modifier, scan, 0, 0, ""))
+
+    assert row.detail_edit.currentText() == expected
+    page.apply_button.click()
+    qapp.processEvents()
+    configuration = parse_toml(client.applied[0])
+    assert configuration.profile(configuration.active_profile).bindings.action_for(
+        "ring_finger", 12
+    ) == KeyAction(expected)
+
+
+def test_record_f12_for_ring_finger_applies_as_a_key(qapp: QApplication) -> None:
+    page, client = _page(qapp)
+    page.show()
+    qapp.processEvents()
+    row = _row(page, "ring_finger")
+    row.record_button.click()
+    QTest.keyClick(row.record_button, Qt.Key.Key_F12)
+
+    assert row.detail_edit.currentText() == "f12"
+    page.apply_button.click()
+    qapp.processEvents()
+    configuration = parse_toml(client.applied[0])
+    assert configuration.profile(configuration.active_profile).bindings.action_for(
+        "ring_finger", 12
+    ) == KeyAction("f12")
+
+
+def test_record_cancel_focus_loss_and_unsupported_key_keep_binding(qapp: QApplication) -> None:
+    page, _client = _page(qapp)
+    page.show()
+    qapp.processEvents()
+    row = _row(page, "ring_finger")
+    original = row.detail_edit.currentText()
+
+    row.record_button.click()
+    QTest.keyClick(row.record_button, Qt.Key.Key_Escape)
+    assert row.record_button.text() == "Record"
+    row.record_button.click()
+    QTest.keyClick(row.record_button, Qt.Key.Key_F13)
+    assert row.record_button.text() == "Unsupported key"
+    assert row.detail_edit.currentText() == original
+    row.kind_box.setFocus()
+    qapp.processEvents()
+    assert row.record_button.text() == "Record"
+    assert not page.apply_button.isEnabled()
+
+
+def test_record_only_offered_for_keyboard_actions(qapp: QApplication) -> None:
+    page, _client = _page(qapp)
+    page.show()
+    row = _row(page, "dpi_up")
+    assert not row.record_button.isVisible()
+    row.kind_box.setCurrentText("key")
+    assert row.record_button.isVisible()
+    row.kind_box.setCurrentText("mouse_button")
+    assert not row.record_button.isVisible()
 
 
 def test_repeated_applies_do_not_leave_orphan_labels(qapp: QApplication) -> None:

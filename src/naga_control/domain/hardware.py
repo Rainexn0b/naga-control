@@ -25,6 +25,18 @@ type HardwareIssueCode = Literal[
     "ambiguous_matching_device",
 ]
 type HardwareScrollMode = Literal["tactile", "free_spin", "precision_tactile"]
+type DeviceMode = Literal["software", "firmware"]
+type DeviceModeErrorCode = Literal[
+    "unavailable", "unsupported", "invalid_response", "read_failed", "write_failed", "mismatch"
+]
+
+
+class DeviceModeError(RuntimeError):
+    """A mode request could not be confirmed against OpenRazer readback."""
+
+    def __init__(self, code: DeviceModeErrorCode, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True, slots=True)

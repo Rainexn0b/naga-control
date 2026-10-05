@@ -1,6 +1,9 @@
+import hashlib
+import json
 import os
 from collections.abc import Iterator
-from typing import cast
+from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -8,11 +11,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QGraphicsSimpleTextItem
 
 from naga_control.domain.actions import DeviceAction
 from naga_control.gui.mapping_map import MappingMapView, mapping_image_path
-from naga_control.gui.mapping_zones import MappingZone, zone_for_control
+from naga_control.gui.mapping_zones import (
+    MappingZone,
+    regions_path,
+    zone_at,
+    zone_for_control,
+)
 
 
 @pytest.fixture(scope="module")
@@ -64,7 +72,68 @@ def test_bundled_mapping_image_loads() -> None:
 
     image = QImage(str(mapping_image_path()))
     assert not image.isNull()
-    assert image.width() == 2048 and image.height() == 1536
+    assert image.width() == 1448 and image.height() == 1086
+
+
+def test_bundled_regions_match_the_preview_and_source_mask() -> None:
+    from PySide6.QtGui import QImage
+
+    source = Path(__file__).resolve().parents[1] / "assets"
+    mask_path = source / "Mapping.mask.png"
+    mask = QImage(str(mask_path))
+    document = json.loads(regions_path().read_text(encoding="utf-8"))
+    size = (mask.width(), mask.height())
+    assert size == (1448, 1086)
+    assert size == (
+        document["coordinate_system"]["width"],
+        document["coordinate_system"]["height"],
+    )
+    assert hashlib.sha256(mask_path.read_bytes()).hexdigest() == document["mask"]["sha256"]
+    assert (
+        hashlib.sha256(mapping_image_path().read_bytes()).hexdigest()
+        == document["artwork"]["sha256"]
+    )
+
+    for region in cast("list[dict[str, Any]]", document["regions"]):
+        x, y = region["label_anchor_px"]
+        color = mask.pixelColor(x, y)
+        assert (color.red(), color.green(), color.blue()) == tuple(region["rgb"])
+        zone = zone_at((x + 0.5) / size[0], (y + 0.5) / size[1])
+        assert zone is not None and zone.region_key == region["region_key"]
+
+
+def test_drawn_numbers_match_side_button_anchors_and_remain_click_through(
+    qapp: QApplication,
+) -> None:
+    view = _view(qapp)
+    labels = {
+        int(item.text()): item
+        for item in view.pixmap_item.childItems()
+        if isinstance(item, QGraphicsSimpleTextItem)
+    }
+    assert set(labels) == set(range(1, 31))
+    zone = zone_for_control("side_12_1")
+    assert zone is not None
+    label = labels[11]
+    center = label.pos() + label.boundingRect().center()
+    assert center.x() == pytest.approx(zone.anchor[0] * view.pixmap_item.pixmap().width())
+    assert center.y() == pytest.approx(zone.anchor[1] * view.pixmap_item.pixmap().height())
+    assert label.acceptedMouseButtons() == Qt.MouseButton.NoButton
+    assert label.font().pixelSize() == 21
+    assert label.pen().widthF() < 1
+
+    rear = zone_for_control("top_rear")
+    assert rear is not None and rear.number == 9
+    rear_center = labels[9].pos() + labels[9].boundingRect().center()
+    assert rear_center.x() == pytest.approx(rear.anchor[0] * view.pixmap_item.pixmap().width())
+    assert rear_center.y() == pytest.approx(rear.anchor[1] * view.pixmap_item.pixmap().height())
+
+    selected: list[str] = []
+    view.zone_selected.connect(selected.append)
+    view_point = view.mapFromScene(center)
+    viewport_point = view.viewport().mapFrom(view, view_point)
+    QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=viewport_point)
+    assert selected == ["side_12_1"]
 
 
 def test_clicking_a_zone_emits_its_control(qapp: QApplication) -> None:

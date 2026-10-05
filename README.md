@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install
 Pinned release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh -o install.sh && bash install.sh --version v0.3.0
+curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh -o install.sh && bash install.sh --version v0.4.0
 ```
 
 Uninstall:
@@ -86,7 +86,8 @@ The native interface has three tabs and one shared active-profile selector:
   match the illustration. All three plate groups are editable.
 - **Settings:** compact DPI stages and polling rate, scroll behavior, and all
   three lighting zones. One Apply Settings action saves these sections together
-  in a single revision-checked update.
+  in a single revision-checked update. Each lighting zone has a color wheel and
+  manual RGB entry for effects that support color.
 
 Device and Settings use two columns on desktop and stack vertically in a narrow
 window. Unrelated saves and service refreshes retain unsaved drafts; changing
@@ -94,6 +95,11 @@ profiles asks before discarding them. Edits retained after an external profile
 switch remain attached to their original profile until saved or discarded.
 Plate identity is not detected automatically: select the attached plate under
 Device's Profiles section before using that plate's bindings on hardware.
+The tray menu includes Active profile and Scroll wheel submenus alongside Show
+and Quit. Profile changes use the same unsaved-edit confirmation as the window
+header. Tray scroll shortcuts save the active profile's desired mode,
+acceleration, and Smart Reel settings; observed hardware state is displayed
+separately and may take time to catch up.
 
 **Device > Updates** shows the installed version and checks GitHub releases when
 you click **Check for updates**. Stable releases are the default; **Include

@@ -68,4 +68,5 @@ def default_configuration() -> Configuration:
         default_profile="default",
         active_profile="default",
         profiles=(("default", profile),),
+        mode="software",
     )

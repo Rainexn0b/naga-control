@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from typing import cast
 
 import pytest
@@ -8,6 +8,7 @@ import tomli_w
 from naga_control.config import dump_toml, parse_toml, to_toml_data
 from naga_control.domain import ConfigValidationError, default_configuration
 from naga_control.domain.actions import DeviceAction, KeyAction, KeyComboAction, MouseButtonAction
+from naga_control.domain.hardware import DeviceMode
 from naga_control.domain.profiles import Configuration, Profile, as_logical_control
 
 
@@ -17,6 +18,7 @@ def test_defaults_are_complete_and_immutable() -> None:
 
     assert configuration.schema_version == 1
     assert configuration.revision == 0
+    assert configuration.mode == "software"
     assert profile.plate_layout == 12
     assert profile.bindings.action_for("dpi_up", 12) == DeviceAction("dpi_stage_up")
     assert profile.bindings.action_for("dpi_down", 12) == DeviceAction("dpi_stage_down")
@@ -67,6 +69,49 @@ def test_tomli_w_round_trip_preserves_every_v1_setting() -> None:
     assert parse_toml(dump_toml(parsed)) == parsed
     assert parsed.profile("default").bindings.action_for("wheel_tilt_left", 12) is not None
     assert parsed.profile("default").lighting.scroll_wheel.effect.direction == "right"
+
+
+def test_root_mode_defaults_for_legacy_toml_without_changing_revision() -> None:
+    data = to_toml_data(default_configuration())
+    data["revision"] = 7
+    del data["mode"]
+
+    parsed = parse_toml(tomli_w.dumps(data))
+
+    assert parsed.mode == "software"
+    assert parsed.revision == 7
+    assert to_toml_data(parsed)["mode"] == "software"
+    assert parse_toml(dump_toml(parsed)) == parsed
+
+
+def test_firmware_mode_round_trips_as_a_service_wide_revisioned_setting() -> None:
+    original = default_configuration()
+    updated = replace(original, mode="firmware", revision=original.revision + 1)
+
+    assert updated.profiles == original.profiles
+    assert updated.active_profile == original.active_profile
+    assert updated.revision == 1
+    assert to_toml_data(updated)["mode"] == "firmware"
+    assert parse_toml(dump_toml(updated)) == updated
+    assert replace(updated, active_profile=updated.default_profile, revision=2).mode == "firmware"
+
+
+@pytest.mark.parametrize("mode", ["invalid", "Software", "", True, 1])
+def test_invalid_root_mode_reports_mode_field(mode: object) -> None:
+    data = to_toml_data(default_configuration())
+    data["mode"] = mode
+
+    with pytest.raises(ConfigValidationError) as error:
+        parse_toml(tomli_w.dumps(data))
+
+    assert error.value.field_path == "mode"
+
+
+def test_configuration_constructor_rejects_invalid_mode() -> None:
+    with pytest.raises(ConfigValidationError) as error:
+        replace(default_configuration(), mode=cast(DeviceMode, "invalid"))
+
+    assert error.value.field_path == "mode"
 
 
 def test_poll_rate_defaults_when_missing_and_round_trips_when_present() -> None:

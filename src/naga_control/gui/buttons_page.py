@@ -28,9 +28,11 @@ from naga_control.gui.actions_view import (
     format_action_detail,
     parse_action,
 )
+from naga_control.gui.click_wheel_combo import ClickWheelComboBox
 from naga_control.gui.editors import set_bindings
+from naga_control.gui.key_recorder import KeyRecorder
 from naga_control.gui.mapping_map import MappingMapView
-from naga_control.gui.mapping_zones import all_zones
+from naga_control.gui.mapping_zones import MappingZone, all_zones
 from naga_control.gui.models import ServiceModel
 from naga_control.gui.presenter import ApplyOutcome, GuiPresenter
 from naga_control.gui.worker import Runner
@@ -43,12 +45,20 @@ _OUTCOME_TEXT = {
 }
 
 
+def _zone_order(zone: MappingZone) -> tuple[int, int]:
+    plate_rank = {None: 0, 12: 1, 6: 2, 2: 3}[zone.plate]
+    if zone.plate in (12, 6) and zone.control_id is not None:
+        return plate_rank, int(zone.control_id.rpartition("_")[2])
+    return plate_rank, zone.number
+
+
 @dataclass
 class ButtonRow:
     root: QWidget
     control_id: str
     kind_box: QComboBox
     detail_edit: QComboBox
+    record_button: KeyRecorder
     number_label: QLabel
 
     def selected_kind(self) -> str:
@@ -189,7 +199,7 @@ class ButtonsPage(QWidget):
                 label.setFixedWidth(width)
             header.addWidget(label, 0 if width else 1)
         self.rows_layout.addWidget(headings)
-        for zone in sorted(all_zones(), key=lambda zone: zone.number):
+        for zone in sorted(all_zones(), key=_zone_order):
             control = zone.control_id
             if control is None:
                 root = QWidget()
@@ -228,12 +238,13 @@ class ButtonsPage(QWidget):
         row.kind_box.setFocus()
 
     def _build_row(self, control: str, action: Action | None, number: int, label: str) -> ButtonRow:
-        kind_box = QComboBox()
+        kind_box = ClickWheelComboBox()
         kind_box.addItems(ACTION_KINDS)
         kind_box.setCurrentText(action_kind(action) if action is not None else "passthrough")
-        detail_edit = QComboBox()
+        detail_edit = ClickWheelComboBox()
         detail_edit.setEditable(True)
         detail_edit.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        record_button = KeyRecorder()
         row = QHBoxLayout()
         row.setContentsMargins(4, 2, 4, 2)
         number_label = QLabel(str(number))
@@ -255,6 +266,7 @@ class ButtonsPage(QWidget):
         )
         row.addWidget(kind_box, 1)
         row.addWidget(detail_edit, 1)
+        row.addWidget(record_button)
         root = QWidget()
         root.setLayout(row)
         button_row = ButtonRow(
@@ -262,14 +274,21 @@ class ButtonsPage(QWidget):
             control_id=control,
             kind_box=kind_box,
             detail_edit=detail_edit,
+            record_button=record_button,
             number_label=number_label,
         )
         kind_box.currentTextChanged.connect(partial(self._kind_changed, button_row))
         detail_edit.currentTextChanged.connect(self._detail_changed)
+        record_button.recorded.connect(partial(self._recorded, button_row))
         self._sync_detail_options(button_row, action)
         return button_row
 
+    def _recorded(self, row: ButtonRow, kind: str, detail: str) -> None:
+        row.kind_box.setCurrentText(kind)
+        row.detail_edit.setCurrentText(detail)
+
     def _kind_changed(self, row: ButtonRow, text: str) -> None:
+        row.record_button.cancel()
         self._sync_detail_options(row)
         self._update_dirty()
 
@@ -295,6 +314,7 @@ class ButtonsPage(QWidget):
         finally:
             row.detail_edit.blockSignals(False)
         row.detail_edit.setEnabled(kind not in ("disabled", "passthrough"))
+        row.record_button.setVisible(kind in ("key", "key_combo"))
 
     def _current_actions(self) -> dict[str, tuple[str, str]]:
         return {row.control_id: (row.selected_kind(), row.selected_detail()) for row in self.rows}

@@ -213,6 +213,44 @@ def test_charging_is_independent_of_battery_readback(
     assert page.charging_label.text() == {True: "yes", False: "no", None: "unknown"}[charging]
 
 
+def test_overview_shows_firmware_mode_without_claiming_software_mapping(
+    qapp: QApplication,
+) -> None:
+    presenter, model, _client = make_presenter("")
+    page = OverviewPage(presenter, model, sync_run)
+    model.apply_snapshot(
+        ServiceSnapshotView(
+            "available",
+            1,
+            "wired",
+            None,
+            desired_mode="firmware",
+            observed_mode="firmware",
+            mode_ready=True,
+        )
+    )
+    qapp.processEvents()
+    assert page.status_label.text() == "firmware (software mapping off)"
+    assert page.mode_label.text() == "firmware (desired firmware)"
+    assert not page.calibrate_button.isEnabled()
+
+    model.apply_snapshot(
+        ServiceSnapshotView(
+            "unavailable",
+            2,
+            "wired",
+            None,
+            desired_mode="firmware",
+            observed_mode="software",
+            mode_error="driver reasserted",
+        )
+    )
+    qapp.processEvents()
+    assert page.mode_label.text() == "software (desired firmware)"
+    assert page.mode_error_label.text() == "driver reasserted"
+    page.close()
+
+
 def test_diagnostics_actions_still_dispatch_through_presenter(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:

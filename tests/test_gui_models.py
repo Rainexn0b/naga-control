@@ -19,11 +19,25 @@ def test_parse_snapshot_accepts_error_and_missing_transport() -> None:
     assert view.error == "boom"
 
 
+def test_parse_snapshot_distinguishes_desired_and_observed_device_mode() -> None:
+    view = parse_snapshot(
+        '{"status":"unavailable","generation":2,"desired_mode":"firmware",'
+        '"observed_mode":"software","mode_ready":false,"mode_error":"driver reasserted"}'
+    )
+    assert (view.desired_mode, view.observed_mode, view.mode_ready, view.mode_error) == (
+        "firmware",
+        "software",
+        False,
+        "driver reasserted",
+    )
+
+
 def test_parse_snapshot_reads_optional_observed_values() -> None:
     view = parse_snapshot(
         '{"status":"available","generation":6,"transport":"wired","error":null,'
         '"settings_failures":["scroll_mode: boom"],'
         '"observed":{"dpi":[1600,1600],"active_dpi_stage":2,"scroll_mode":"tactile",'
+        '"scroll_acceleration":false,"scroll_smart_reel":true,'
         '"poll_rate":500,"battery_percent":88.0,"charging":false,"firmware_version":"v1.0"}}'
     )
 
@@ -31,6 +45,8 @@ def test_parse_snapshot_reads_optional_observed_values() -> None:
     assert observed.dpi == (1600, 1600)
     assert observed.active_dpi_stage == 2
     assert observed.scroll_mode == "tactile"
+    assert observed.scroll_acceleration is False
+    assert observed.scroll_smart_reel is True
     assert observed.poll_rate == 500
     assert observed.battery_percent == 88.0
     assert observed.charging is False
@@ -47,6 +63,8 @@ def test_parse_snapshot_defaults_observed_when_absent() -> None:
     ).calibrating
 
     assert view.observed.dpi is None
+    assert view.observed.scroll_acceleration is None
+    assert view.observed.scroll_smart_reel is None
     assert view.observed.settings_failures == ()
 
 
@@ -96,3 +114,22 @@ def test_model_tracks_unreachable_detail() -> None:
     model.mark_reachable()
 
     assert model.connection == ConnectionState(reachable=True)
+
+
+def test_configuration_revision_never_moves_backward_or_notifies_on_older_document() -> None:
+    model = ServiceModel()
+    notifications: list[bool] = []
+    model.add_listener(lambda: notifications.append(True))
+
+    model.apply_configuration(8, "new document")
+    model.apply_configuration(7, "different older document")
+
+    assert model.configuration_revision == 8
+    assert model.configuration_document == "new document"
+    assert notifications == [True]
+
+    model.apply_configuration(9, "newest document")
+
+    assert model.configuration_revision == 9
+    assert model.configuration_document == "newest document"
+    assert notifications == [True, True]

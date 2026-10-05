@@ -29,6 +29,9 @@ class OverviewPage(QWidget):
         self.revision_label = QLabel("unknown")
         self.error_label = QLabel("none")
         self.error_label.setWordWrap(True)
+        self.mode_label = QLabel("unknown")
+        self.mode_error_label = QLabel("none")
+        self.mode_error_label.setWordWrap(True)
         self.observed_dpi_label = QLabel("unknown")
         self.scroll_mode_label = QLabel("unknown")
         self.poll_rate_label = QLabel("unknown")
@@ -44,6 +47,8 @@ class OverviewPage(QWidget):
         form = QFormLayout()
         form.addRow("Service", self.connection_label)
         form.addRow("Mapping status", self.status_label)
+        form.addRow("Device mode", self.mode_label)
+        form.addRow("Mode error", self.mode_error_label)
         form.addRow("Transport", self.transport_label)
         form.addRow("Hardware error", self.error_label)
         form.addRow("Observed DPI", self.observed_dpi_label)
@@ -103,7 +108,22 @@ class OverviewPage(QWidget):
             "online" if connection.reachable else f"offline: {connection.detail}"
         )
         snapshot = self.model.snapshot
-        self.status_label.setText(snapshot.status if snapshot else "unknown")
+        self.status_label.setText(
+            "firmware (software mapping off)"
+            if snapshot and snapshot.desired_mode == "firmware" and snapshot.mode_ready
+            else snapshot.status
+            if snapshot
+            else "unknown"
+        )
+        if snapshot and snapshot.desired_mode:
+            observed_mode = snapshot.observed_mode or "unknown"
+            self.mode_label.setText(f"{observed_mode} (desired {snapshot.desired_mode})")
+        else:
+            self.mode_label.setText("unknown")
+        self.mode_error_label.setText(
+            snapshot.mode_error if snapshot and snapshot.mode_error else "none"
+        )
+        self.calibrate_button.setEnabled(not (snapshot and snapshot.desired_mode == "firmware"))
         self.transport_label.setText(
             snapshot.transport if snapshot and snapshot.transport else "none"
         )

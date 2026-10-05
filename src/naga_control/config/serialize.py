@@ -30,6 +30,7 @@ def to_toml_data(configuration: Configuration) -> dict[str, object]:
         "revision": configuration.revision,
         "default_profile": configuration.default_profile,
         "active_profile": configuration.active_profile,
+        "mode": configuration.mode,
         "profiles": {
             identifier: _profile_data(profile) for identifier, profile in configuration.profiles
         },

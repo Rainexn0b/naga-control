@@ -3,7 +3,12 @@ from threading import Event, get_ident
 
 import pytest
 
-from naga_control.domain.hardware import HardwareScrollMode, HardwareState, SettingsFailure
+from naga_control.domain.hardware import (
+    DeviceMode,
+    HardwareScrollMode,
+    HardwareState,
+    SettingsFailure,
+)
 from naga_control.domain.profiles import Profile
 from naga_control.ports.hardware import NagaTopology
 from naga_control.service.hardware_worker import (
@@ -29,6 +34,14 @@ class FakeBackend:
     def refresh_state(self) -> HardwareState:
         self.calls.append("refresh")
         return self.state
+
+    def read_device_mode(self) -> DeviceMode:
+        self._record("mode:read")
+        return "firmware"
+
+    def set_device_mode(self, mode: DeviceMode) -> DeviceMode:
+        self._record(f"mode:set:{mode}")
+        return mode
 
     def rescan(self, connections: tuple[NagaTopology, ...]) -> HardwareState:
         del connections
@@ -137,3 +150,32 @@ async def test_lifecycle_staleness_blocks_mutations_until_a_current_rescan_finis
     await worker.stop()
 
     assert backend.calls == ["rescan", "rescan", "dpi:1", "close"]
+
+
+async def test_mode_requests_are_serialized_and_fenced_before_a_rescan() -> None:
+    backend = FakeBackend(block_first_move=True)
+    worker = HardwareWorker(backend)
+    await worker.start()
+    first = asyncio.create_task(worker.move_dpi_stage(1))
+    await asyncio.to_thread(backend.started.wait)
+    queued_read = asyncio.create_task(worker.read_device_mode())
+    queued_write = asyncio.create_task(worker.set_device_mode("software"))
+    await asyncio.sleep(0)
+    worker.mark_topology_stale()
+    with pytest.raises(HardwareTopologyStaleError):
+        await worker.set_device_mode("software")
+    backend.release.set()
+
+    await first
+    with pytest.raises(StaleHardwareOperationError):
+        await queued_read
+    with pytest.raises(StaleHardwareOperationError):
+        await queued_write
+    await worker.rescan(())
+    assert await worker.read_device_mode() == "firmware"
+    assert await worker.set_device_mode("software") == "software"
+    await worker.stop()
+
+    assert backend.calls == ["dpi:1", "rescan", "mode:read", "mode:set:software", "close"]
+    assert len(set(backend.thread_ids)) == 1
+    assert backend.thread_ids[0] != get_ident()

@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable
 from importlib import import_module
 from typing import Protocol, cast
 
+from naga_control.adapters.openrazer import mode as device_mode
 from naga_control.adapters.openrazer.capabilities import (
     SCROLL_MODES,
     InvalidCapabilityResponseError,
@@ -14,6 +15,8 @@ from naga_control.adapters.openrazer.capabilities import (
 )
 from naga_control.adapters.openrazer.settings import apply_steps
 from naga_control.domain.hardware import (
+    DeviceMode,
+    DeviceModeError,
     HardwareIssue,
     HardwareIssueCode,
     HardwareScrollMode,
@@ -167,6 +170,28 @@ class OpenRazerBackend:
         if client is None:
             return self._state
         return self._refresh_after_operation(client)
+
+    def read_device_mode(self) -> DeviceMode:
+        client = self._client_for_operation()
+        if client is None:
+            raise DeviceModeError("unavailable", "The Naga device is not available.")
+        try:
+            return device_mode.read_device_mode(client)
+        except DeviceModeError:
+            self.invalidate()
+            raise
+
+    def set_device_mode(self, mode: DeviceMode) -> DeviceMode:
+        if mode not in {"software", "firmware"}:
+            raise ValueError("mode must be software or firmware")
+        client = self._client_for_operation()
+        if client is None:
+            raise DeviceModeError("unavailable", "The Naga device is not available.")
+        try:
+            return device_mode.set_device_mode(client, mode)
+        except DeviceModeError:
+            self.invalidate()
+            raise
 
     def move_dpi_stage(self, direction: int) -> HardwareState:
         if direction not in {-1, 1}:

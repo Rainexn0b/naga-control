@@ -4,8 +4,11 @@ from dataclasses import dataclass
 from naga_control.adapters.evdev.discovery import EventNode
 from naga_control.adapters.evdev.frames import EV_KEY, EV_MSC, EV_SYN, MSC_SCAN, SYN_REPORT
 from naga_control.application.remapping import create_source_reader
+from naga_control.config import dump_toml, parse_toml
+from naga_control.domain.actions import KeyAction
 from naga_control.domain.defaults import default_configuration
 from naga_control.domain.intents import DeviceActionIntent, KeyOutputIntent, MouseButtonOutputIntent
+from naga_control.gui.editors import set_bindings
 from naga_control.ports.forwarding import ForwardingProxySpec
 
 
@@ -174,3 +177,26 @@ async def test_composition_runs_verified_dpi_and_held_alt_paths_through_safe_pro
     assert mouse.intents == []
     assert mouse.released
     assert actions.intents == [DeviceActionIntent("dpi_stage_up")]
+
+
+async def test_ring_finger_f12_binding_reaches_virtual_keyboard_on_press_and_release() -> None:
+    document = set_bindings(
+        dump_toml(default_configuration()), "default", {"ring_finger": KeyAction("f12")}
+    )
+    profile = parse_toml(document).profile("default")
+    calls: list[str] = []
+    keyboard = Keyboard()
+    reader = create_source_reader(
+        Source(calls),
+        profile,
+        keyboard,
+        Mouse(),
+        DeviceActions(),
+        ProxyFactory(calls),
+        ReadinessWaiter(calls),
+    )
+
+    result = await reader.run()
+
+    assert result.error is None
+    assert keyboard.intents == [KeyOutputIntent("f12", 1), KeyOutputIntent("f12", 0)]

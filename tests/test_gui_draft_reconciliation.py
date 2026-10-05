@@ -80,6 +80,7 @@ def qapp() -> Iterator[QApplication]:
 def window(qapp: QApplication) -> Iterator[tuple[MainWindow, FakeClient]]:
     presenter, model, client = make_presenter(_document())
     widget = MainWindow(presenter, model, sync_run)
+    widget._poll_timer.stop()  # pyright: ignore[reportPrivateUsage]
     sync_run(presenter.refresh)
     widget.show()
     qapp.processEvents()
@@ -264,6 +265,7 @@ async def test_gated_profile_switch_freezes_synchronously_until_queued_completio
     presenter = GuiPresenter(model, open_client=lambda: opened(client))
     jobs: list[CoroFactory] = []
     widget = MainWindow(presenter, model, jobs.append)
+    widget._poll_timer.stop()  # pyright: ignore[reportPrivateUsage]
     task: asyncio.Task[object] | None = None
     try:
         await presenter.refresh()

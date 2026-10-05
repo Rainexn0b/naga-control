@@ -62,7 +62,13 @@ def test_overlay_is_deterministic(qapp: QApplication) -> None:
 
 def _tray(qapp: QApplication, model: ServiceModel) -> TrayIcon:
     toggles: list[bool] = []
-    tray = TrayIcon(model, toggle_window=lambda: toggles.append(True), quit_app=lambda: None)
+    tray = TrayIcon(
+        model,
+        toggle_window=lambda: toggles.append(True),
+        select_profile=lambda _profile_id: None,
+        change_scroll=lambda _mode, _acceleration, _smart_reel: None,
+        quit_app=lambda: None,
+    )
     return tray
 
 

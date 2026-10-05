@@ -44,21 +44,46 @@ class Reader:
     def __init__(self, node: EventNode, events: list[str]) -> None:
         self._node = node
         self._events = events
+        self._started = False
 
     def start(self) -> None:
-        return None
+        self._started = True
 
     async def run(self) -> object:
         self._events.append(f"run:{self._node.interface_number}")
         try:
             await asyncio.Event().wait()
         finally:
+            self.stop()
+
+    def stop(self) -> None:
+        if self._started:
+            self._started = False
             self._events.append(f"stop:{self._node.interface_number}")
-        return None
 
 
 def test_session_opens_only_fixture_backed_interfaces_and_releases_on_stop() -> None:
     asyncio.run(_exercise_session())
+
+
+async def test_session_stop_closes_readers_cancelled_before_first_run() -> None:
+    events: list[str] = []
+    session = FirstSliceSession(
+        _connection(),
+        default_configuration().profile("default"),
+        Output(),
+        Output(),
+        Actions(),
+        _source,
+        _ProxyFactory(),
+        _Waiter(),
+        reader_factory=lambda source, profile, keyboard, mouse, device_actions, proxy_factory, readiness_waiter: (
+            Reader(source.node, events)
+        ),
+    )
+    await session.start()
+    await session.stop()
+    assert events == ["stop:00", "stop:01", "stop:02"]
 
 
 async def _exercise_session() -> None:
@@ -129,6 +154,9 @@ class _FailingReader:
 
     async def run(self) -> object:
         raise AssertionError("failed readers must not run")
+
+    def stop(self) -> None:
+        return None
 
 
 def _connection() -> NagaConnection:

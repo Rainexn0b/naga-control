@@ -82,8 +82,8 @@ class SourceForwarder:
             self._cleanup()
 
     def _require_no_held_keys(self, phase: str) -> None:
-        if self._source.active_keys():
-            raise SourceActivationError(f"physical keys are held {phase}")
+        if held := tuple(self._source.active_keys()):
+            raise SourceActivationError(f"physical keys are held {phase}: {held}")
 
     def _cleanup(self) -> None:
         self._active = False

@@ -41,6 +41,8 @@ class RunningSourceReader(Protocol):
 
     async def run(self) -> object: ...
 
+    def stop(self) -> None: ...
+
 
 class SessionDeviceActions(DeviceActionSubmitter, Protocol):
     async def start(self) -> None: ...
@@ -111,6 +113,7 @@ class FirstSliceSession:
         self._readiness_waiter = readiness_waiter
         self._reader_factory = reader_factory
         self._tasks: list[asyncio.Task[object]] = []
+        self._readers: list[RunningSourceReader] = []
         self._errors: list[BaseException] = []
         self._started = False
         self._stopped = False
@@ -143,6 +146,7 @@ class FirstSliceSession:
                     self._readiness_waiter,
                 )
                 reader.start()
+                self._readers.append(reader)
                 self._tasks.append(asyncio.create_task(reader.run()))
             for task in self._tasks:
                 task.add_done_callback(self._record_error)
@@ -160,12 +164,17 @@ class FirstSliceSession:
             await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks.clear()
         try:
-            self._keyboard.release_all()
-            self._mouse.release_all()
+            for reader in self._readers:
+                reader.stop()
         finally:
-            self._keyboard.close()
-            self._mouse.close()
-            await self._device_actions.stop()
+            self._readers.clear()
+            try:
+                self._keyboard.release_all()
+                self._mouse.release_all()
+            finally:
+                self._keyboard.close()
+                self._mouse.close()
+                await self._device_actions.stop()
 
     def release_all(self) -> None:
         """Release generated output without tearing down physical forwarding."""

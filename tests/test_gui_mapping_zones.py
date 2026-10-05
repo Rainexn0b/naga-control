@@ -113,6 +113,24 @@ def test_sideplate_numbering_matches_the_physical_plate() -> None:
     assert one.rect[1] > three.rect[1]
 
 
+def test_display_numbers_follow_logical_buttons_not_mask_region_ids() -> None:
+    expectations = {
+        "side12.r3c1": 11,
+        "side12.r2c1": 12,
+        "side12.r1c1": 13,
+        "side12.r1c4": 22,
+        "side6.r1c1": 23,
+        "side6.r1c3": 25,
+        "side6.r2c3": 26,
+        "side6.r2c1": 28,
+        "side2.r1c1": 29,
+        "side2.r1c2": 30,
+    }
+    for region_key, number in expectations.items():
+        zone = zone_for_key(region_key)
+        assert zone is not None and zone.number == number, region_key
+
+
 def _center(zone: "MappingZone") -> tuple[float, float]:
     x, y, w, h = zone.rect
     return (x + w / 2, y + h / 2)

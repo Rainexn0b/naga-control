@@ -3,11 +3,21 @@
 from dataclasses import dataclass
 from functools import partial
 
-from PySide6.QtWidgets import QComboBox, QFormLayout, QLineEdit, QSpinBox
+from PySide6.QtGui import QColor, QIcon, QPixmap
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+)
 
 from naga_control.config import parse_toml
 from naga_control.domain.errors import ConfigValidationError
 from naga_control.domain.profiles import LightingEffect, LightingSettings, LightingZone, Profile
+from naga_control.gui.color_wheel import ColorWheelDialog
 from naga_control.gui.editors import set_lighting
 from naga_control.gui.models import ServiceModel
 from naga_control.gui.presenter import GuiPresenter
@@ -34,6 +44,8 @@ class ZoneRow:
     brightness_spin: QSpinBox
     kind_box: QComboBox
     color_edit: QLineEdit
+    color_button: QPushButton
+    last_color: QColor
     speed_box: QComboBox
     direction_box: QComboBox
 
@@ -62,6 +74,14 @@ class LightingPage(ProfileSettingsPage):
         kind_box.setMaximumWidth(240)
         color_edit = QLineEdit()
         color_edit.setMaximumWidth(120)
+        color_edit.setPlaceholderText("R,G,B")
+        color_button = QPushButton("Color wheel...")
+        color_button.setMaximumWidth(130)
+        color_controls = QHBoxLayout()
+        color_controls.setContentsMargins(0, 0, 0, 0)
+        color_controls.addWidget(color_edit)
+        color_controls.addWidget(color_button)
+        color_controls.addStretch()
         speed_box = QComboBox()
         speed_box.addItems([str(speed) for speed in LIGHTING_SPEEDS])
         speed_box.setMaximumWidth(140)
@@ -74,20 +94,23 @@ class LightingPage(ProfileSettingsPage):
             brightness_spin=brightness_spin,
             kind_box=kind_box,
             color_edit=color_edit,
+            color_button=color_button,
+            last_color=QColor(255, 255, 255),
             speed_box=speed_box,
             direction_box=direction_box,
         )
         group = QFormLayout()
         group.addRow("Brightness", brightness_spin)
         group.addRow("Effect", kind_box)
-        group.addRow("Color (R,G,B)", color_edit)
+        group.addRow("Color (R,G,B)", color_controls)
         group.addRow("Speed", speed_box)
         group.addRow("Direction", direction_box)
         self.form.addRow(ZONE_LABELS[zone], group)
 
         brightness_spin.valueChanged.connect(self._value_changed)
         kind_box.currentTextChanged.connect(partial(self._kind_row_changed, row))
-        color_edit.textChanged.connect(self._text_changed)
+        color_edit.textChanged.connect(partial(self._color_changed, row))
+        color_button.clicked.connect(partial(self._open_color_wheel, row))
         speed_box.currentTextChanged.connect(self._text_changed)
         direction_box.currentTextChanged.connect(self._text_changed)
         self._sync_payload_enabled(row)
@@ -107,6 +130,7 @@ class LightingPage(ProfileSettingsPage):
             row.color_edit.blockSignals(True)
             row.color_edit.setText(format_color(effect.color))
             row.color_edit.blockSignals(False)
+            self._update_swatch(row)
             row.speed_box.blockSignals(True)
             row.speed_box.setCurrentText(str(effect.speed) if effect.speed else "1")
             row.speed_box.blockSignals(False)
@@ -123,6 +147,7 @@ class LightingPage(ProfileSettingsPage):
     def _sync_payload_enabled(self, row: ZoneRow) -> None:
         wants_color, wants_speed, wants_direction = effect_payloads(row.kind_box.currentText())
         row.color_edit.setEnabled(wants_color)
+        row.color_button.setEnabled(wants_color)
         row.speed_box.setEnabled(wants_speed)
         row.direction_box.setEnabled(wants_direction)
 
@@ -131,6 +156,28 @@ class LightingPage(ProfileSettingsPage):
 
     def _text_changed(self, _text: str) -> None:
         self._check_dirty()
+
+    def _color_changed(self, row: ZoneRow, _text: str) -> None:
+        self._update_swatch(row)
+        self._check_dirty()
+
+    def _update_swatch(self, row: ZoneRow) -> None:
+        try:
+            red, green, blue = parse_color(row.color_edit.text())
+        except ConfigValidationError:
+            row.color_button.setToolTip("Invalid RGB entry; choosing a color will replace it")
+            return
+        row.last_color = QColor(red, green, blue)
+        swatch = QPixmap(18, 18)
+        swatch.fill(row.last_color)
+        row.color_button.setIcon(QIcon(swatch))
+        row.color_button.setToolTip(f"Choose a color (current: {row.last_color.name()})")
+
+    def _open_color_wheel(self, row: ZoneRow) -> None:
+        dialog = ColorWheelDialog(row.last_color, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            color = dialog.color()
+            row.color_edit.setText(f"{color.red()},{color.green()},{color.blue()}")
 
     def _check_dirty(self) -> None:
         try:

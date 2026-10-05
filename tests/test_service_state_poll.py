@@ -2,7 +2,7 @@ import asyncio
 from typing import cast
 
 from naga_control.adapters.evdev.discovery import NagaConnection
-from naga_control.domain.hardware import HardwareDpiStage, HardwareState
+from naga_control.domain.hardware import DeviceMode, HardwareDpiStage, HardwareState
 from naga_control.service.runtime import NagaService
 
 
@@ -49,6 +49,12 @@ class Worker:
             scroll_smart_reel=False,
             battery_percent=90.0,
         )
+
+    async def read_device_mode(self) -> DeviceMode:
+        return "software"
+
+    async def set_device_mode(self, mode: DeviceMode) -> DeviceMode:
+        return mode
 
     async def apply_profile_settings(self, profile: object) -> tuple[HardwareState, tuple[()]]:
         return HardwareState(

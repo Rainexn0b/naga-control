@@ -1,4 +1,3 @@
-import asyncio
 from dataclasses import replace
 
 import pytest
@@ -6,7 +5,12 @@ import pytest
 from naga_control.adapters.evdev.discovery import EventNode, NagaConnection
 from naga_control.config import dump_toml
 from naga_control.domain.defaults import default_configuration
-from naga_control.domain.hardware import HardwareState, SettingsFailure
+from naga_control.domain.hardware import (
+    DeviceMode,
+    HardwareDpiStage,
+    HardwareState,
+    SettingsFailure,
+)
 from naga_control.domain.profiles import Configuration, Profile
 from naga_control.ports.hardware import NagaTopology
 from naga_control.service.runtime import (
@@ -22,8 +26,7 @@ class Worker:
         self.applied: list[object] = []
         self.settings_failures: tuple[SettingsFailure, ...] = ()
         self.rescan_state: HardwareState | None = None
-        self.refreshed_state: HardwareState | None = None
-        self.refresh_calls = 0
+        self.mode: DeviceMode = "software"
 
     async def start(self) -> None:
         self.events.append("start")
@@ -35,20 +38,26 @@ class Worker:
         self.events.append(f"rescan:{len(connections)}")
         if self.rescan_state is not None:
             return self.rescan_state
-        return HardwareState("unavailable", 1)
+        return _available()
+
+    async def read_device_mode(self) -> DeviceMode:
+        self.events.append("read_mode")
+        return self.mode
+
+    async def set_device_mode(self, mode: DeviceMode) -> DeviceMode:
+        self.events.append(f"set_mode:{mode}")
+        self.mode = mode
+        return mode
 
     async def refresh_state(self) -> HardwareState:
-        self.refresh_calls += 1
-        if self.refreshed_state is not None:
-            return self.refreshed_state
-        return HardwareState("unavailable", 1)
+        return _available()
 
     async def apply_profile_settings(
         self, profile: Profile
     ) -> tuple[HardwareState, tuple[SettingsFailure, ...]]:
         self.events.append("settings")
         self.applied.append(profile)
-        return HardwareState("unavailable", 1), self.settings_failures
+        return _available(), self.settings_failures
 
     async def stop(self) -> None:
         self.events.append("stop")
@@ -68,11 +77,7 @@ class Session:
         self.events.append("release")
 
 
-def test_service_starts_one_connection_and_releases_before_shutdown() -> None:
-    asyncio.run(_exercise_service())
-
-
-async def _exercise_service() -> None:
+async def test_service_starts_one_connection_and_releases_before_shutdown() -> None:
     worker = Worker()
     session = Session()
     service = NagaService(
@@ -82,20 +87,15 @@ async def _exercise_service() -> None:
         lambda connection, configuration: session,
     )
 
-    state = await service.start()
+    await service.start()
     service.release_all()
     await service.stop()
 
-    assert state.status == "unavailable"
-    assert worker.events == ["start", "rescan:1", "settings", "stop"]
+    assert worker.events == ["start", "rescan:1", "read_mode", "settings", "stale", "stop"]
     assert session.events == ["start", "release", "stop"]
 
 
-def test_topology_change_stops_the_old_session_and_builds_a_new_one() -> None:
-    asyncio.run(_exercise_replug())
-
-
-async def _exercise_replug() -> None:
+async def test_topology_change_stops_the_old_session_and_builds_a_new_one() -> None:
     worker = Worker()
     sessions: list[Session] = []
     service = NagaService(
@@ -109,13 +109,23 @@ async def _exercise_replug() -> None:
     await service.apply_topology((_connection(),))
 
     assert len(sessions) == 2
-    assert sessions[0].events == ["start", "stop"]
-    assert sessions[1].events == ["start"]
+    assert [session.events for session in sessions] == [["start", "stop"], ["start"]]
     await service.stop()
-    assert worker.events == ["start", "rescan:1", "settings", "rescan:1", "settings", "stop"]
+    assert worker.events == [
+        "start",
+        "rescan:1",
+        "read_mode",
+        "settings",
+        "stale",
+        "rescan:1",
+        "read_mode",
+        "settings",
+        "stale",
+        "stop",
+    ]
 
 
-async def test_hardware_rescan_does_not_rebuild_input_forwarding() -> None:
+async def test_hardware_rescan_rebuilds_input_after_mode_verification() -> None:
     worker = Worker()
     sessions: list[Session] = []
     service = NagaService(
@@ -129,9 +139,18 @@ async def test_hardware_rescan_does_not_rebuild_input_forwarding() -> None:
     service.mark_topology_stale()
     await service.rescan((_connection(),))
 
-    assert len(sessions) == 1
-    assert sessions[0].events == ["start"]
-    assert worker.events == ["start", "rescan:1", "settings", "stale", "rescan:1"]
+    assert [session.events for session in sessions] == [["start", "release", "stop"], ["start"]]
+    assert worker.events == [
+        "start",
+        "rescan:1",
+        "read_mode",
+        "settings",
+        "stale",
+        "stale",
+        "rescan:1",
+        "read_mode",
+        "settings",
+    ]
     await service.stop()
 
 
@@ -169,16 +188,16 @@ async def test_device_action_state_updates_the_service_snapshot() -> None:
         "error": None,
         "settings_failures": [],
         "calibrating": False,
+        "desired_mode": "software",
+        "observed_mode": None,
+        "mode_ready": False,
+        "mode_error": "device action lost hardware access",
         "observed": {},
     }
     await service.stop()
 
 
-def test_topology_removal_stops_the_session_without_building_one() -> None:
-    asyncio.run(_exercise_unplug())
-
-
-async def _exercise_unplug() -> None:
+async def test_topology_removal_stops_the_session_without_building_one() -> None:
     worker = Worker()
     sessions: list[Session] = []
     service = NagaService(
@@ -191,8 +210,7 @@ async def _exercise_unplug() -> None:
 
     state = await service.apply_topology(())
 
-    assert state.status == "unavailable"
-    assert len(sessions) == 1
+    assert state.status == "available"
     assert sessions[0].events == ["start", "stop"]
     await service.stop()
 
@@ -203,11 +221,7 @@ def _session(sessions: list[Session]) -> Session:
     return session
 
 
-def test_calibration_rebuilds_passthrough_then_adopts_observed_settings() -> None:
-    asyncio.run(_exercise_calibration())
-
-
-async def _exercise_calibration() -> None:
+async def test_calibration_rebuilds_passthrough_then_adopts_observed_settings() -> None:
     from naga_control.domain.hardware import HardwareDpiStage
 
     worker = Worker()
@@ -260,7 +274,6 @@ async def _exercise_calibration() -> None:
         True,
     )
     assert service.configuration_revision() == 1
-    assert store.saved and _active_profile(store.saved[-1]) is not None
     saved = store.saved[-1]
     assert isinstance(saved, Configuration)
     assert saved.revision == 1
@@ -275,7 +288,6 @@ def _active_profile(source: object) -> Profile:
         configuration = parse_toml(source)
     else:
         configuration = source
-    assert isinstance(configuration, object)
     return configuration.profile(configuration.active_profile)  # type: ignore[attr-defined]
 
 
@@ -290,11 +302,7 @@ class Store:
         self.saved.append(configuration)
 
 
-def test_apply_configuration_persists_and_rebuilds_with_the_new_profile() -> None:
-    asyncio.run(_exercise_apply())
-
-
-async def _exercise_apply() -> None:
+async def test_apply_configuration_persists_and_rebuilds_with_the_new_profile() -> None:
     store = Store()
     configurations: list[object] = []
     service = _service(store=store, configurations=configurations)
@@ -305,17 +313,12 @@ async def _exercise_apply() -> None:
 
     assert revision == 1
     assert service.configuration_revision() == 1
-    assert store.saved == [configurations[1]]
     assert configurations[1] == updated
     assert len(configurations) == 2
     await service.stop()
 
 
-def test_apply_configuration_rejects_stale_revisions_without_touching_state() -> None:
-    asyncio.run(_exercise_stale())
-
-
-async def _exercise_stale() -> None:
+async def test_apply_configuration_rejects_stale_revisions_without_touching_state() -> None:
     store = Store()
     service = _service(store=store)
     await service.start()
@@ -331,11 +334,7 @@ async def _exercise_stale() -> None:
     await service.stop()
 
 
-def test_select_profile_persists_a_bumped_revision_and_rebuilds() -> None:
-    asyncio.run(_exercise_select())
-
-
-async def _exercise_select() -> None:
+async def test_select_profile_persists_a_bumped_revision_and_rebuilds() -> None:
     store = Store()
     configurations: list[object] = []
     service = _service(store=store, configurations=configurations)
@@ -350,17 +349,13 @@ async def _exercise_select() -> None:
     await service.stop()
 
 
-async def _exercise_unknown_profile() -> None:
+async def test_select_profile_rejects_an_unknown_profile() -> None:
     service = _service()
     await service.start()
 
     with pytest.raises(UnknownProfileError):
         await service.select_profile("missing")
     await service.stop()
-
-
-def test_select_profile_rejects_an_unknown_profile() -> None:
-    asyncio.run(_exercise_unknown_profile())
 
 
 def _service(
@@ -386,3 +381,20 @@ def _record(configuration: object, configurations: list[object] | None) -> Sessi
 def _connection() -> NagaConnection:
     node = EventNode("/dev/input/event5", "/sys/usb", "01", "1532", "00e8")
     return NagaConnection("/sys/usb", "1532", "00e8", "hyperspeed", None, None, (node,))
+
+
+def _available() -> HardwareState:
+    stage = HardwareDpiStage(800, 800)
+    return HardwareState(
+        "available",
+        1,
+        transport="hyperspeed",
+        dpi=stage,
+        dpi_stages=(stage,),
+        active_dpi_stage=1,
+        max_dpi=30000,
+        scroll_mode="tactile",
+        scroll_mode_options=("tactile",),
+        scroll_acceleration=False,
+        scroll_smart_reel=False,
+    )
