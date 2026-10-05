@@ -1,0 +1,197 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from ..core.model import Step
+from ..utils.paths import buildlog_dir, repo_root
+from ..utils.subproc import python_exe, run
+
+
+def _log(name: str) -> Path:
+    return buildlog_dir() / name
+
+
+def steps() -> list[Step]:
+    root = repo_root()
+
+    def compileall_runner():
+        return run(
+            [python_exe(), "-m", "compileall", "-q", "src", "buildpython", "scripts", "tests"],
+            cwd=str(root),
+        )
+
+    def pytest_runner():
+        return pytest_runner_with_optional_coverage()
+
+    def ruff_runner():
+        return run(
+            [
+                python_exe(),
+                "-m",
+                "ruff",
+                "check",
+                ".",
+            ],
+            cwd=str(root),
+        )
+
+    from .appimage.build import appimage_build_runner
+    from .appimage.smoke import appimage_smoke_runner
+    from .code_hygiene.step import code_hygiene_runner
+    from .coverage_step.step import coverage_runner, pytest_runner_with_optional_coverage
+    from .exception_transparency.step import exception_transparency_runner
+    from .file_size_analysis.step import file_size_runner
+    from .step_architecture_validation import architecture_validation_runner
+    from .step_dead_code import dead_code_runner
+    from .step_format import ruff_format_check_runner
+    from .step_import_scan import import_scan_runner
+    from .step_imports import import_validation_runner
+    from .step_loc_check import loc_check_runner
+    from .step_pip import pip_check_runner
+    from .step_quality import code_markers_runner
+    from .step_repo_validation import repo_validation_runner
+    from .step_shellcheck import shellcheck_runner
+    from .step_type_check import pyright_runner
+
+    return [
+        Step(
+            number=1,
+            name="Compile",
+            description="Compile application, tooling, and tests (syntax check)",
+            log_file=_log("step-01-compile.log"),
+            runner=compileall_runner,
+        ),
+        Step(
+            number=2,
+            name="Pytest",
+            description="Run tests with hardware tests excluded",
+            log_file=_log("step-02-pytest.log"),
+            runner=pytest_runner,
+        ),
+        Step(
+            number=3,
+            name="Ruff",
+            description="Lint with Ruff",
+            log_file=_log("step-03-ruff.log"),
+            runner=ruff_runner,
+        ),
+        Step(
+            number=4,
+            name="Import Validation",
+            description="Import core modules to catch missing deps / import errors",
+            log_file=_log("step-04-imports.log"),
+            runner=import_validation_runner,
+        ),
+        Step(
+            number=5,
+            name="Code Markers",
+            description="Scan for TODO/FIXME/HACK and refactoring markers",
+            log_file=_log("step-05-code-markers.log"),
+            runner=code_markers_runner,
+        ),
+        Step(
+            number=6,
+            name="File Size",
+            description="Analyze large Python files (line thresholds)",
+            log_file=_log("step-06-file-size.log"),
+            runner=file_size_runner,
+        ),
+        Step(
+            number=7,
+            name="Ruff Format",
+            description="Check formatting with Ruff",
+            log_file=_log("step-07-ruff-format.log"),
+            runner=ruff_format_check_runner,
+        ),
+        Step(
+            number=8,
+            name="Pip Check",
+            description="Validate installed dependencies (pip check)",
+            log_file=_log("step-08-pip-check.log"),
+            runner=pip_check_runner,
+        ),
+        Step(
+            number=9,
+            name="Import Scan",
+            description="Parse sources and probe external top-level imports",
+            log_file=_log("step-09-import-scan.log"),
+            runner=import_scan_runner,
+        ),
+        Step(
+            number=10,
+            name="Repo Validation",
+            description="Validate repo packaging/install/metadata consistency",
+            log_file=_log("step-10-repo-validation.log"),
+            runner=repo_validation_runner,
+        ),
+        Step(
+            number=12,
+            name="LOC Check",
+            description="Enforce the 400 physical-line limit for all Python files",
+            log_file=_log("step-12-loc-check.log"),
+            runner=loc_check_runner,
+        ),
+        Step(
+            number=13,
+            name="Type Check",
+            description="Type-check src and tests using the project Pyright configuration",
+            log_file=_log("step-13-type-check.log"),
+            runner=pyright_runner,
+        ),
+        Step(
+            number=14,
+            name="AppImage",
+            description="Build the versioned Naga Control AppImage",
+            log_file=_log("step-14-appimage.log"),
+            runner=appimage_build_runner,
+        ),
+        Step(
+            number=15,
+            name="AppImage Smoke",
+            description="Smoke-test packaged Qt and CLI paths in Docker without hardware",
+            log_file=_log("step-15-appimage-smoke.log"),
+            runner=appimage_smoke_runner,
+        ),
+        Step(
+            number=16,
+            name="Code Hygiene",
+            description="Check defensive patterns, type discipline, test naming",
+            log_file=_log("step-16-code-hygiene.log"),
+            runner=code_hygiene_runner,
+        ),
+        Step(
+            number=17,
+            name="Architecture Validation",
+            description="Validate Naga's headless-layer and GUI hardware boundaries",
+            log_file=_log("step-17-architecture.log"),
+            runner=architecture_validation_runner,
+        ),
+        Step(
+            number=18,
+            name="Coverage",
+            description="Build coverage debt summary and track coverage regressions",
+            log_file=_log("step-18-coverage.log"),
+            runner=coverage_runner,
+        ),
+        Step(
+            number=19,
+            name="Exception Transparency",
+            description="Track broad exception debt and silent-failure hotspots",
+            log_file=_log("step-19-exception-transparency.log"),
+            runner=exception_transparency_runner,
+        ),
+        Step(
+            number=20,
+            name="Dead Code",
+            description="Report unused symbol candidates with optional Vulture",
+            log_file=_log("step-20-dead-code.log"),
+            runner=dead_code_runner,
+        ),
+        Step(
+            number=21,
+            name="ShellCheck",
+            description="Lint installers and the AppRun dispatcher",
+            log_file=_log("step-21-shellcheck.log"),
+            runner=shellcheck_runner,
+        ),
+    ]

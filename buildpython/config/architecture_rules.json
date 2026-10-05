@@ -1,0 +1,58 @@
+{
+  "rules": [
+    {
+      "id": "headless-layers-no-qt",
+      "description": "Domain, ports, application, service and adapters remain independent of Qt and GUI code.",
+      "severity": "error",
+      "corpus": {
+        "include": [
+          "src/naga_control/domain/**/*.py",
+          "src/naga_control/ports/**/*.py",
+          "src/naga_control/application/**/*.py",
+          "src/naga_control/service/**/*.py",
+          "src/naga_control/adapters/**/*.py"
+        ]
+      },
+      "imports": [
+        {"module": "PySide6", "message": "Qt belongs outside headless layers."},
+        {"module": "PySide2", "message": "Qt belongs outside headless layers."},
+        {"module": "PyQt6", "message": "Qt belongs outside headless layers."},
+        {"module": "PyQt5", "message": "Qt belongs outside headless layers."},
+        {"module": "naga_control.gui", "message": "Headless layers must not depend on the GUI."},
+        {"module": "naga_control.ui", "message": "Headless layers must not depend on the UI."}
+      ]
+    },
+    {
+      "id": "domain-and-ports-stay-pure",
+      "description": "Domain and ports contain no concrete hardware, IPC, GUI or service dependencies.",
+      "severity": "error",
+      "corpus": {
+        "include": ["src/naga_control/domain/**/*.py", "src/naga_control/ports/**/*.py"]
+      },
+      "imports": [
+        {"module": "evdev", "message": "Linux input belongs behind ports."},
+        {"module": "pyudev", "message": "USB discovery belongs behind ports."},
+        {"module": "openrazer", "message": "OpenRazer belongs behind ports."},
+        {"module": "dbus_next", "message": "D-Bus belongs outside domain and ports."},
+        {"module": "dbus", "message": "D-Bus belongs outside domain and ports."},
+        {"module": "naga_control.adapters", "message": "Domain and ports must not depend on adapters."},
+        {"module": "naga_control.application", "message": "Dependencies must point inward to domain and ports."},
+        {"module": "naga_control.service", "message": "Domain and ports must not depend on service composition."},
+        {"module": "naga_control.ipc", "message": "Domain and ports must not depend on IPC."}
+      ]
+    },
+    {
+      "id": "gui-no-hardware-ownership",
+      "description": "GUI widgets communicate over IPC rather than owning hardware or the background service.",
+      "severity": "error",
+      "corpus": {"include": ["src/naga_control/gui/**/*.py"]},
+      "imports": [
+        {"module": "openrazer", "message": "GUI must not call OpenRazer directly."},
+        {"module": "evdev", "message": "GUI must not own evdev devices."},
+        {"module": "pyudev", "message": "GUI must not discover physical input devices."},
+        {"module": "naga_control.adapters", "message": "GUI must use IPC, not concrete hardware adapters."},
+        {"module": "naga_control.service", "message": "GUI must not own background service composition."}
+      ]
+    }
+  ]
+}

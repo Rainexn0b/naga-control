@@ -73,12 +73,14 @@ TMP_UDEV="$(mktemp -d)"
 rm -rf "$TMP_UDEV"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-UDEV_SRC="$SCRIPT_DIR/../packaging/udev/70-naga-control.rules"
+UDEV_SRC="$SCRIPT_DIR/../system/udev/70-naga-control.rules"
 UDEV_TMP=""
 if [ ! -f "$UDEV_SRC" ]; then
-  # Not running from a checkout: fetch the rule from the same release tag.
+  # Published older tags keep the old path; both attempts stay on the same tag.
   UDEV_TMP="$(mktemp)"
-  curl -fsSL -o "$UDEV_TMP" "https://raw.githubusercontent.com/$REPO/$VERSION/packaging/udev/70-naga-control.rules"     || curl -fsSL -o "$UDEV_TMP" "https://raw.githubusercontent.com/$REPO/main/packaging/udev/70-naga-control.rules"     || die "could not download the udev rule"
+  curl -fsSL -o "$UDEV_TMP" "https://raw.githubusercontent.com/$REPO/$VERSION/system/udev/70-naga-control.rules" \
+    || curl -fsSL -o "$UDEV_TMP" "https://raw.githubusercontent.com/$REPO/$VERSION/packaging/udev/70-naga-control.rules" \
+    || die "could not download the udev rule for $VERSION"
   UDEV_SRC="$UDEV_TMP"
 fi
 if command -v sudo >/dev/null; then

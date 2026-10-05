@@ -11,20 +11,27 @@ export PYTHONHOME="$APPDIR/usr"
 export LD_LIBRARY_PATH="$APPDIR/usr/lib${PYLIB:+:$PYLIB/site-packages/PySide6/Qt/lib}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export PATH="$APPDIR/usr/bin:$PATH"
 export QT_PLUGIN_PATH="${QT_PLUGIN_PATH:-}"
+export PYTHONNOUSERSITE=1
+export PYTHONSAFEPATH=1
+unset PYTHONPATH
 export APPDIR
 
-# Use the host's openrazer client package (pure Python, must match the host
-# daemon) together with the bundled dbus-python bindings.
-HOST_OPENRAZER="$(env -u PYTHONHOME -u PYTHONPATH -u LD_LIBRARY_PATH /usr/bin/python3 -c 'import openrazer, os; print(os.path.dirname(os.path.dirname(openrazer.__file__)))' 2>/dev/null || true)"
-if [ -n "$HOST_OPENRAZER" ]; then
-  # Expose only the openrazer package (not the whole host site-packages,
-  # which would shadow bundled builds of evdev and friends).
-  LINK_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/naga-control/host-openrazer"
-  mkdir -p "$LINK_DIR"
-  rm -f "$LINK_DIR/openrazer"
-  ln -s "$HOST_OPENRAZER" "$LINK_DIR/openrazer"
-  export PYTHONPATH="$LINK_DIR${PYTHONPATH:+:$PYTHONPATH}"
-fi
+# The host client imports daemon macro/keyboard helpers, but never starts a daemon
+# here. Expose just these packages, not host site-packages or native bindings.
+LINK_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/naga-control/host-openrazer"
+for PACKAGE in openrazer openrazer_daemon; do
+  HOST_PACKAGE="$(env -u PYTHONHOME -u PYTHONPATH -u LD_LIBRARY_PATH /usr/bin/python3 -c 'import importlib.util, sys; spec = importlib.util.find_spec(sys.argv[1]); print(next(iter(spec.submodule_search_locations))) if spec and spec.submodule_search_locations else None' "$PACKAGE" 2>/dev/null || true)"
+  if [ -n "$HOST_PACKAGE" ]; then
+    mkdir -p "$LINK_DIR" || exit 1
+    # Atomic replacement avoids following/racing another launcher's package link.
+    LINK_TMP="$(mktemp "$LINK_DIR/.$PACKAGE.XXXXXX")" || exit 1
+    if ! ln -sfnT "$HOST_PACKAGE" "$LINK_TMP" || ! mv -Tf "$LINK_TMP" "$LINK_DIR/$PACKAGE"; then
+      rm -f "$LINK_TMP"
+      exit 1
+    fi
+    export PYTHONPATH="$LINK_DIR"
+  fi
+done
 
 command="${1:-gui}"
 case "$command" in

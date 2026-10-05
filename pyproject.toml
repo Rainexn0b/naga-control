@@ -51,6 +51,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers -m 'not hardware'"
 testpaths = ["tests"]
+pythonpath = ["."]
 asyncio_mode = "auto"
 markers = [
   "hardware: requires an explicitly selected physical Naga V3 Pro",

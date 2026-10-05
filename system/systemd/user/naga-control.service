@@ -5,6 +5,8 @@ After=graphical-session.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/env naga-control-service
+# Keep the AppImage FUSE process alive until Python finishes graceful teardown.
+KillMode=mixed
 Restart=on-failure
 RestartSec=2
 

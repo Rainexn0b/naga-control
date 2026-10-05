@@ -1,3 +1,8 @@
-include AGENTS.md
+include AGENTS.md changelog.md install.sh uninstall.sh
 recursive-include docs *.md
-recursive-include packaging *
+recursive-include system *
+recursive-include assets *.png *.json *.svg
+recursive-include buildpython *.py *.json
+include buildpython/steps/appimage/AppRun
+recursive-include scripts *.py *.sh
+recursive-include tests *.py *.json

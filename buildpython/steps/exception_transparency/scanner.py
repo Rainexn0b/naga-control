@@ -1,0 +1,354 @@
+from __future__ import annotations
+
+import ast
+from collections import Counter
+from pathlib import Path
+
+from ..quality_exceptions import explanation_for_quality_exception_step
+from .baseline import iter_python_files
+from .models import ExceptionTransparencyAnnotationInventory, ExceptionTransparencyFinding
+
+MESSAGE_BY_CATEGORY = {
+    "naked_except": "Naked except catches KeyboardInterrupt/SystemExit; replace it with a specific exception type.",
+    "baseexception_catch": "BaseException catch is too broad for normal control flow.",
+    "broad_except_total": "Broad exception catch; prefer specific exception types where possible.",
+    "broad_except_traceback_logged": "Broad exception catch records a traceback; still a narrowing candidate.",
+    "broad_except_logged_no_traceback": "Broad exception catch signals failure without recording a traceback.",
+    "broad_except_unlogged": "Broad exception catch suppresses failure without a diagnostic footprint.",
+}
+
+TRACEBACK_SIGNAL_NAMES = {"log_exception", "_log_exception"}
+QUALITY_EXCEPTION_STEP_SLUG = "exception-transparency"
+SIGNAL_NAME_CALLS = {
+    "print",
+    "log_exception",
+    "_log_exception",
+}
+SIGNAL_ATTRS = {
+    "debug",
+    "info",
+    "warning",
+    "warn",
+    "error",
+    "exception",
+    "critical",
+    "log",
+    "log_exception",
+    "_log_exception",
+}
+_PARSE_SKIP_EXCEPTIONS = (SyntaxError, ValueError)
+_SOURCE_READ_SKIP_EXCEPTIONS = (OSError,)
+
+
+def handler_type_names(
+    node: ast.expr | None,
+    aliases: dict[str, ast.expr] | None = None,
+    seen: frozenset[str] = frozenset(),
+) -> set[str]:
+    if node is None:
+        return set()
+    if isinstance(node, ast.Name):
+        if aliases is not None and node.id in aliases and node.id not in seen:
+            return handler_type_names(aliases[node.id], aliases, seen | {node.id})
+        return {node.id}
+    if isinstance(node, ast.Attribute):
+        return {node.attr}
+    if isinstance(node, ast.Tuple):
+        names: set[str] = set()
+        for element in node.elts:
+            names.update(handler_type_names(element, aliases, seen))
+        return names
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return handler_type_names(node.left, aliases, seen) | handler_type_names(
+            node.right, aliases, seen
+        )
+    return set()
+
+
+def collect_exception_aliases(tree: ast.AST) -> dict[str, ast.expr]:
+    aliases: dict[str, ast.expr] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    aliases[target.id] = node.value
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.value is not None
+        ):
+            aliases[node.target.id] = node.value
+    return aliases
+
+
+def is_broad_handler(
+    handler: ast.ExceptHandler, aliases: dict[str, ast.expr] | None = None
+) -> bool:
+    if handler.type is None:
+        return True
+    names = handler_type_names(handler.type, aliases)
+    return bool(names & {"Exception", "BaseException"})
+
+
+def contains_reraise(body: list[ast.stmt]) -> bool:
+    for stmt in body:
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Raise):
+                return True
+    return False
+
+
+def has_exc_info_keyword(call: ast.Call) -> bool:
+    for keyword in call.keywords:
+        if keyword.arg != "exc_info":
+            continue
+        value = keyword.value
+        if isinstance(value, ast.Constant) and value.value is True:
+            return True
+        if isinstance(value, ast.NameConstant) and value.value is True:
+            return True
+    return False
+
+
+def is_traceback_logging_call(call: ast.Call) -> bool:
+    if isinstance(call.func, ast.Attribute):
+        attr_name = call.func.attr.lower()
+        if attr_name == "exception":
+            return True
+        if attr_name in {"error", "critical", "log"} and has_exc_info_keyword(call):
+            return True
+        return attr_name in TRACEBACK_SIGNAL_NAMES
+
+    if isinstance(call.func, ast.Name):
+        func_name = call.func.id.lower()
+        return func_name in TRACEBACK_SIGNAL_NAMES
+
+    return False
+
+
+def is_signal_call(call: ast.Call) -> bool:
+    if is_traceback_logging_call(call):
+        return True
+
+    if isinstance(call.func, ast.Attribute):
+        return call.func.attr.lower() in SIGNAL_ATTRS
+
+    if isinstance(call.func, ast.Name):
+        return call.func.id.lower() in SIGNAL_NAME_CALLS
+
+    return False
+
+
+def contains_traceback_logging(body: list[ast.stmt]) -> bool:
+    for stmt in body:
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Call) and is_traceback_logging_call(node):
+                return True
+    return False
+
+
+def contains_signal(body: list[ast.stmt]) -> bool:
+    for stmt in body:
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Call) and is_signal_call(node):
+                return True
+    return False
+
+
+def make_finding(
+    category: str, rel_path: str, handler: ast.ExceptHandler, lines: list[str]
+) -> ExceptionTransparencyFinding:
+    snippet = lines[handler.lineno - 1].strip() if 0 < handler.lineno <= len(lines) else ""
+    return ExceptionTransparencyFinding(
+        category=category,
+        path=rel_path,
+        line=handler.lineno,
+        message=MESSAGE_BY_CATEGORY[category],
+        snippet=snippet[:120],
+    )
+
+
+def comment_text(line: str) -> str | None:
+    comment_index = line.find("#")
+    if comment_index == -1:
+        return None
+    return line[comment_index + 1 :].strip()
+
+
+def line_indent(line: str) -> str:
+    return line[: len(line) - len(line.lstrip())]
+
+
+def inventory_subtree(rel_path: str) -> str:
+    normalized = str(rel_path or "").replace("\\", "/")
+    parts = [part for part in normalized.split("/") if part]
+    if not parts:
+        return normalized
+    if len(parts) >= 3 and parts[:2] == ["src", "naga_control"]:
+        return "/".join(parts[:3])
+    if len(parts) >= 2 and parts[0] == "buildpython":
+        return "/".join(parts[:2])
+    return parts[0]
+
+
+def _sorted_inventory_rows(counter: Counter[str]) -> tuple[tuple[str, int], ...]:
+    return tuple(sorted(counter.items(), key=lambda item: (-item[1], item[0])))
+
+
+def scan_annotation_inventory(
+    source: str, *, rel_path: str
+) -> ExceptionTransparencyAnnotationInventory:
+    subtree = inventory_subtree(rel_path) or str(rel_path)
+    total = 0
+    for line in source.splitlines():
+        explanation = explanation_for_quality_exception_step(
+            comment_text(line),
+            step_slug=QUALITY_EXCEPTION_STEP_SLUG,
+        )
+        if explanation:
+            total += 1
+
+    counter: Counter[str] = Counter()
+    if total:
+        counter[subtree] = total
+    return ExceptionTransparencyAnnotationInventory(
+        total=total, by_subtree=_sorted_inventory_rows(counter)
+    )
+
+
+def has_quality_exception_waiver(lines: list[str], handler: ast.ExceptHandler) -> bool:
+    if not (0 < handler.lineno <= len(lines)):
+        return False
+
+    handler_line = lines[handler.lineno - 1]
+    same_line_explanation = explanation_for_quality_exception_step(
+        comment_text(handler_line),
+        step_slug=QUALITY_EXCEPTION_STEP_SLUG,
+    )
+    if same_line_explanation is not None:
+        return bool(same_line_explanation)
+
+    # Scan back through any run of consecutive comment lines at the handler's
+    # indent level (up to 10 lines).  This allows multi-line quality-exception
+    # explanations: the tag may appear on the first line of a block comment
+    # whose last line sits immediately before the `except`.
+    handler_indent = line_indent(handler_line)
+    for look_back in range(1, 11):
+        preceding_index = handler.lineno - 1 - look_back
+        if preceding_index < 0:
+            break
+        preceding_line = lines[preceding_index]
+        if not preceding_line.lstrip().startswith("#"):
+            break
+        if line_indent(preceding_line) != handler_indent:
+            break
+        explanation = explanation_for_quality_exception_step(
+            comment_text(preceding_line),
+            step_slug=QUALITY_EXCEPTION_STEP_SLUG,
+        )
+        if explanation is not None:
+            return bool(explanation)
+    return False
+
+
+def scan_python_source(source: str, *, rel_path: str) -> list[ExceptionTransparencyFinding]:
+    try:
+        tree = ast.parse(source)
+    except _PARSE_SKIP_EXCEPTIONS:
+        return []
+
+    lines = source.splitlines()
+    aliases = collect_exception_aliases(tree)
+    findings: list[ExceptionTransparencyFinding] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Try, ast.TryStar)):
+            continue
+        handlers = getattr(node, "handlers", [])
+        for handler in handlers:
+            if not isinstance(handler, ast.ExceptHandler) or not is_broad_handler(handler, aliases):
+                continue
+
+            if handler.type is None:
+                findings.append(make_finding("naked_except", rel_path, handler, lines))
+            else:
+                type_names = handler_type_names(handler.type, aliases)
+                if "BaseException" in type_names:
+                    findings.append(make_finding("baseexception_catch", rel_path, handler, lines))
+
+            if has_quality_exception_waiver(lines, handler):
+                continue
+
+            findings.append(make_finding("broad_except_total", rel_path, handler, lines))
+
+            if contains_reraise(handler.body):
+                continue
+            if contains_traceback_logging(handler.body):
+                findings.append(
+                    make_finding("broad_except_traceback_logged", rel_path, handler, lines)
+                )
+            elif contains_signal(handler.body):
+                findings.append(
+                    make_finding("broad_except_logged_no_traceback", rel_path, handler, lines)
+                )
+            else:
+                findings.append(make_finding("broad_except_unlogged", rel_path, handler, lines))
+
+    return findings
+
+
+def collect_findings(root: Path) -> list[ExceptionTransparencyFinding]:
+    findings: list[ExceptionTransparencyFinding] = []
+    for path in iter_python_files(root):
+        try:
+            source = path.read_text(encoding="utf-8", errors="replace")
+        except _SOURCE_READ_SKIP_EXCEPTIONS:
+            continue
+        rel_path = str(path.relative_to(root))
+        findings.extend(scan_python_source(source, rel_path=rel_path))
+    return findings
+
+
+def collect_annotation_inventory(root: Path) -> ExceptionTransparencyAnnotationInventory:
+    total = 0
+    subtree_counts: Counter[str] = Counter()
+    for path in iter_python_files(root):
+        try:
+            source = path.read_text(encoding="utf-8", errors="replace")
+        except _SOURCE_READ_SKIP_EXCEPTIONS:
+            continue
+        rel_path = str(path.relative_to(root))
+        inventory = scan_annotation_inventory(source, rel_path=rel_path)
+        total += inventory.total
+        for subtree, count in inventory.by_subtree:
+            subtree_counts[subtree] += count
+    return ExceptionTransparencyAnnotationInventory(
+        total=total,
+        by_subtree=_sorted_inventory_rows(subtree_counts),
+    )
+
+
+def count_broad_waivers(root: Path) -> int:
+    """Count broad exception handlers with valid @quality-exception exception-transparency waivers."""
+    total = 0
+    for path in iter_python_files(root):
+        try:
+            source = path.read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(source)
+        except (*_PARSE_SKIP_EXCEPTIONS, *_SOURCE_READ_SKIP_EXCEPTIONS):
+            continue
+        lines = source.splitlines()
+        aliases = collect_exception_aliases(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Try, ast.TryStar)):
+                continue
+            for handler in getattr(node, "handlers", []):
+                if not isinstance(handler, ast.ExceptHandler) or not is_broad_handler(
+                    handler, aliases
+                ):
+                    continue
+                names = handler_type_names(handler.type, aliases)
+                if handler.type is None or "BaseException" in names:
+                    continue
+                if has_quality_exception_waiver(lines, handler):
+                    total += 1
+    return total

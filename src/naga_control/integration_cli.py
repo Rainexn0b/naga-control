@@ -42,7 +42,7 @@ INTEGRATION_FILES: tuple[IntegrationFile, ...] = (
     ),
     IntegrationFile(
         name="desktop entry",
-        relative_source=f"appimage/{DESKTOP_ENTRY}",
+        relative_source=f"desktop/{DESKTOP_ENTRY}",
         user_path=f".local/share/applications/{DESKTOP_ENTRY}",
         system_path="",
         rewrite_command="gui",
@@ -51,7 +51,7 @@ INTEGRATION_FILES: tuple[IntegrationFile, ...] = (
         IntegrationFile(
             name=f"application icon {size}x{size}",
             relative_source=(
-                f"appimage/icons/hicolor/{size}x{size}/apps/org.nagacontrol.NagaControl.png"
+                f"../assets/icons/hicolor/{size}x{size}/apps/org.nagacontrol.NagaControl.png"
             ),
             user_path=(
                 f".local/share/icons/hicolor/{size}x{size}/apps/org.nagacontrol.NagaControl.png"
@@ -82,7 +82,7 @@ def install(
     udev_dir: Path | None = None,
     exec_prefix: Path | None = None,
 ) -> list[str]:
-    """Copy every integration file, rewriting Exec lines when bundled."""
+    """Install from system/, with trusted icon sources in ../assets/icons/hicolor/."""
     installed: list[str] = []
     for item in INTEGRATION_FILES:
         source = source_dir / item.relative_source
@@ -171,20 +171,22 @@ def _require_writable_udev(udev_dir: Path) -> None:
 
 
 def default_source_dir() -> Path:
-    """Return the integration directory for AppImage or source checkouts."""
+    """Return the system/ template root for AppImage or source checkouts."""
     appdir = os.environ.get("APPDIR")
     if appdir:
-        return Path(appdir) / "usr/share/naga-control/packaging"
-    repo_packaging = Path(__file__).resolve().parents[2] / "packaging"
-    if repo_packaging.is_dir():
-        return repo_packaging
-    return Path(__file__).resolve().parent.parent / "integration"
+        return Path(appdir) / "usr/share/naga-control/system"
+    return Path(__file__).resolve().parents[2] / "system"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="naga-control-integration")
     parser.add_argument("command", choices=["install", "remove", "status"])
-    parser.add_argument("--source-dir", type=Path, default=None)
+    parser.add_argument(
+        "--source-dir",
+        type=Path,
+        default=None,
+        help="system/ template root; icons must be in ../assets/icons/hicolor/",
+    )
     parser.add_argument("--home", type=Path, default=Path.home())
     parser.add_argument("--udev-dir", type=Path, default=Path("/etc/udev/rules.d"))
     parser.add_argument(

@@ -1,0 +1,14 @@
+{
+  "code_hygiene": {"counts": {}, "gated_categories": [], "path_budgets": {}},
+  "coverage": {
+    "minimum_total_percent": null,
+    "tracked_prefixes": {},
+    "minimum_watch_file_percent": 0,
+    "per_file_minimums": {},
+    "watch_files": []
+  },
+  "exception_transparency": {"counts": {}, "gated_categories": []},
+  "file_size_analysis": {"counts": {}},
+  "flat_directories": {"allowed": []},
+  "code_markers": {"marker_counts": {}, "gated_markers": []}
+}

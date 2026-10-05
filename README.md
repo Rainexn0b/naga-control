@@ -177,6 +177,33 @@ Run the baseline checks with:
 .venv/bin/pytest
 ```
 
+The repository-local `buildpython` runner combines these checks, writes per-step
+logs and summaries under `buildlog/naga-control/`, and always excludes hardware
+tests:
+
+```bash
+.venv/bin/python -m buildpython                  # full validation, no packaging
+.venv/bin/python -m buildpython --profile quick  # compile, lint, formatting
+.venv/bin/python -m buildpython --profile ci     # standard checks and pytest
+.venv/bin/python -m buildpython --list-steps
+.venv/bin/python -m buildpython --run-steps "Ruff,Type Check" --verbose
+.venv/bin/python -m buildpython --profile release # validation, AppImage, Docker smoke
+```
+
+`--with-appimage` appends packaging and smoke checks to any selection.
+The AppImage step assembles the image in Python under `buildpython/steps/appimage/`.
+The smoke step requires Docker and network access, tests the exact versioned artifact in
+Ubuntu 24.04, imports bundled dependencies, creates an offscreen Qt application,
+checks CLI help, and installs integration assets only into temporary directories.
+It never starts the service or accesses physical device nodes.
+Set `NAGA_APPIMAGE_SMOKE_IMAGE` to use another compatible container image.
+Missing required validation tools or Docker fail the selected check.
+
+`--profile debt` runs generic static-analysis reports, not copied KeyRGB policies.
+Coverage and dead-code reports additionally need the optional `coverage` and
+`vulture` packages; ShellCheck is an optional system tool. Copied debt baselines
+have been cleared. The 400-line limit applies to all Python files, including tests.
+
 Hardware tests must be opt-in and must never run as part of the default test
 suite. Read [hardware validation](docs/hardware-validation.md) before capturing
 or grabbing real input devices.
@@ -197,19 +224,40 @@ the command as the desktop user, never with `sudo`.
 ## User Service
 
 The first-slice service entry point is `naga-control-service`. Packaging must
-install `packaging/systemd/user/naga-control.service` under the user systemd
-unit directory and `packaging/dbus-1/services/org.nagacontrol.Service1.service`
+install `system/systemd/user/naga-control.service` under the user systemd
+unit directory and `system/dbus-1/services/org.nagacontrol.Service1.service`
 under the session D-Bus service directory. Enable the user unit after installing
 the scoped udev rule; neither the service nor the GUI should run as root.
 
 ## AppImage
 
 Build the self-contained AppImage (bundled CPython, PySide6, and Python
-dependencies; OpenRazer stays on the host):
+dependencies, including dbus-python and NumPy for the host OpenRazer client;
+OpenRazer itself stays on the host):
 
 ```bash
-bash packaging/appimage/build-appimage.sh   # writes dist/Naga-Control-<version>-x86_64.AppImage
+.venv/bin/python -m buildpython --run-steps AppImage --verbose
 ```
+
+The builder writes `dist/Naga-Control-<version>-<arch>.AppImage` and stages its
+wheel, isolated runtime venv, and AppDir under `build/appimage/`. Build and
+release validation use `.venv/bin/python -m buildpython --profile release`,
+locally and in GitHub Actions. That profile also requires Docker for smoke tests.
+Native Linux `x86_64` and `aarch64` builders are recognized; this is not a
+cross-compiler. `PYTHON_BIN` optionally selects a native, GIL-enabled CPython 3.12+ runtime;
+otherwise the invoking interpreter's base CPython is bundled. Native library and
+glibc compatibility still depend on the build host and must be smoke-tested on
+the intended target distribution. appimagetool 1.9.1 is checksum-verified.
+Build-time Python commands are isolated from inherited Python paths; the runtime
+disables user-site and current-directory imports and exposes only the intentional
+host OpenRazer client/daemon-helper bridge alongside bundled dependencies.
+
+Host templates live in `system/`, integration artwork in `assets/icons/hicolor/`,
+and the AppRun dispatcher in `buildpython/steps/appimage/AppRun`. The bundled
+integration payload uses `usr/share/naga-control/system/` and sibling
+`assets/icons/hicolor/`; build tooling and diagnostic probes are not shipped.
+For source-only integration, `--source-dir` points at `system/` with icons in
+the sibling `assets/icons/hicolor/` tree.
 
 Usage:
 
@@ -236,7 +284,11 @@ the systemd user unit, D-Bus activation file, and desktop entry install under
 - `docs/architecture.md`: selected v0.1 architecture and invariants
 - `docs/implementation-plan.md`: milestones and acceptance criteria
 - `docs/hardware-validation.md`: completed evidence and outstanding hardware tests
-- `packaging/udev/70-naga-control.rules`: least-scope device access rules
+- `docs/build-layout-consolidation.md`: build ownership standard and migration checks
+- `buildpython/`: validation, AppImage construction, and release orchestration
+- `system/udev/70-naga-control.rules`: least-scope device access rules
+- `system/`: desktop, systemd user, D-Bus, and udev templates
+- `assets/icons/hicolor/`: authoritative integration icons
 - `src/naga_control/`: application package
 - `tests/`: non-hardware test suite
 
