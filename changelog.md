@@ -12,7 +12,10 @@ installing or upgrading.
 
 ## [Unreleased]
 
-No changes recorded yet.
+### Changed
+
+- The project license changes from MIT to GPL-2.0-only to match OpenRazer,
+  which the project uses for all hardware operations.
 
 ## [0.4.0] - 2026-10-05
 

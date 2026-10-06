@@ -294,6 +294,7 @@ the systemd user unit, D-Bus activation file, and desktop entry install under
 
 ## License
 
-Naga Control is licensed under the [MIT License](LICENSE) and is provided
-without warranty. Reference implementations may be studied for behavior, but
-no Polychromatic or Input Remapper source is copied into this project.
+Naga Control is licensed under the [GNU General Public License v2.0 (GPL-2.0-only)](LICENSE),
+matching OpenRazer which the project uses for all hardware operations, and is provided
+without warranty as described in the license. Reference implementations may be studied
+for behavior, but no Polychromatic or Input Remapper source is copied into this project.
