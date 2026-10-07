@@ -6,23 +6,16 @@ from typing import Any
 from ..utils.paths import repo_root
 from ..utils.subproc import RunResult
 from . import loc_check_constants as _loc_consts
-from .quality_exceptions import explanation_for_quality_exception_step
+from .quality_exceptions import explanation_for_quality_exception_step, python_comments
 from .reports import buildlog_dir, write_csv, write_json, write_md
 
 _QUALITY_EXCEPTION_STEP_SLUG = "loc-check"
 
 
-def _comment_text(line: str) -> str | None:
-    comment_index = line.find("#")
-    if comment_index == -1:
-        return None
-    return line[comment_index + 1 :].strip()
-
-
-def loc_check_quality_exception_reason(lines: list[str]) -> str | None:
-    for line in lines:
+def loc_check_quality_exception_reason(source: str) -> str | None:
+    for comment in python_comments(source).values():
         explanation = explanation_for_quality_exception_step(
-            _comment_text(line),
+            comment,
             step_slug=_QUALITY_EXCEPTION_STEP_SLUG,
         )
         if explanation:
@@ -203,16 +196,16 @@ def loc_check_runner() -> RunResult:
     waived_rows: list[dict[str, Any]] = []
     for p in files:
         try:
-            source_lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+            source = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
 
-        line_count = len(source_lines)
+        line_count = len(source.splitlines())
         rel_path = p.relative_to(root)
         bucket = _loc_consts.loc_bucket(line_count, rel_path=rel_path)
         if bucket is None:
             continue
-        waiver_reason = loc_check_quality_exception_reason(source_lines)
+        waiver_reason = loc_check_quality_exception_reason(source)
         if waiver_reason is not None and line_count <= 400:
             waived_rows.append(
                 {

@@ -4,155 +4,29 @@ import ast
 from collections import Counter
 from pathlib import Path
 
-from ..quality_exceptions import explanation_for_quality_exception_step
+from ..quality_exceptions import explanation_for_quality_exception_step, python_comments
 from .baseline import iter_python_files
+from .diagnostic_signals import contains_reraise, contains_signal, contains_traceback_logging
+from .handler_identity import (
+    _BASE_EXCEPTION_NAMES,
+    collect_exception_aliases,
+    handler_type_names,
+    is_broad_handler,
+)
 from .models import ExceptionTransparencyAnnotationInventory, ExceptionTransparencyFinding
 
 MESSAGE_BY_CATEGORY = {
     "naked_except": "Naked except catches KeyboardInterrupt/SystemExit; replace it with a specific exception type.",
-    "baseexception_catch": "BaseException catch is too broad for normal control flow.",
-    "broad_except_total": "Broad exception catch; prefer specific exception types where possible.",
+    "baseexception_catch": "BaseException catch includes cancellation and process interrupts; review cleanup/rethrow before narrowing.",
+    "broad_except_total": "Broad exception boundary; review its contract before narrowing.",
     "broad_except_traceback_logged": "Broad exception catch records a traceback; still a narrowing candidate.",
     "broad_except_logged_no_traceback": "Broad exception catch signals failure without recording a traceback.",
-    "broad_except_unlogged": "Broad exception catch suppresses failure without a diagnostic footprint.",
+    "broad_except_unlogged": "Broad exception catch has no recognized local diagnostic; review downstream propagation or intentional fallback.",
 }
 
-TRACEBACK_SIGNAL_NAMES = {"log_exception", "_log_exception"}
 QUALITY_EXCEPTION_STEP_SLUG = "exception-transparency"
-SIGNAL_NAME_CALLS = {
-    "print",
-    "log_exception",
-    "_log_exception",
-}
-SIGNAL_ATTRS = {
-    "debug",
-    "info",
-    "warning",
-    "warn",
-    "error",
-    "exception",
-    "critical",
-    "log",
-    "log_exception",
-    "_log_exception",
-}
 _PARSE_SKIP_EXCEPTIONS = (SyntaxError, ValueError)
 _SOURCE_READ_SKIP_EXCEPTIONS = (OSError,)
-
-
-def handler_type_names(
-    node: ast.expr | None,
-    aliases: dict[str, ast.expr] | None = None,
-    seen: frozenset[str] = frozenset(),
-) -> set[str]:
-    if node is None:
-        return set()
-    if isinstance(node, ast.Name):
-        if aliases is not None and node.id in aliases and node.id not in seen:
-            return handler_type_names(aliases[node.id], aliases, seen | {node.id})
-        return {node.id}
-    if isinstance(node, ast.Attribute):
-        return {node.attr}
-    if isinstance(node, ast.Tuple):
-        names: set[str] = set()
-        for element in node.elts:
-            names.update(handler_type_names(element, aliases, seen))
-        return names
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return handler_type_names(node.left, aliases, seen) | handler_type_names(
-            node.right, aliases, seen
-        )
-    return set()
-
-
-def collect_exception_aliases(tree: ast.AST) -> dict[str, ast.expr]:
-    aliases: dict[str, ast.expr] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    aliases[target.id] = node.value
-        elif (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.value is not None
-        ):
-            aliases[node.target.id] = node.value
-    return aliases
-
-
-def is_broad_handler(
-    handler: ast.ExceptHandler, aliases: dict[str, ast.expr] | None = None
-) -> bool:
-    if handler.type is None:
-        return True
-    names = handler_type_names(handler.type, aliases)
-    return bool(names & {"Exception", "BaseException"})
-
-
-def contains_reraise(body: list[ast.stmt]) -> bool:
-    for stmt in body:
-        for node in ast.walk(stmt):
-            if isinstance(node, ast.Raise):
-                return True
-    return False
-
-
-def has_exc_info_keyword(call: ast.Call) -> bool:
-    for keyword in call.keywords:
-        if keyword.arg != "exc_info":
-            continue
-        value = keyword.value
-        if isinstance(value, ast.Constant) and value.value is True:
-            return True
-        if isinstance(value, ast.NameConstant) and value.value is True:
-            return True
-    return False
-
-
-def is_traceback_logging_call(call: ast.Call) -> bool:
-    if isinstance(call.func, ast.Attribute):
-        attr_name = call.func.attr.lower()
-        if attr_name == "exception":
-            return True
-        if attr_name in {"error", "critical", "log"} and has_exc_info_keyword(call):
-            return True
-        return attr_name in TRACEBACK_SIGNAL_NAMES
-
-    if isinstance(call.func, ast.Name):
-        func_name = call.func.id.lower()
-        return func_name in TRACEBACK_SIGNAL_NAMES
-
-    return False
-
-
-def is_signal_call(call: ast.Call) -> bool:
-    if is_traceback_logging_call(call):
-        return True
-
-    if isinstance(call.func, ast.Attribute):
-        return call.func.attr.lower() in SIGNAL_ATTRS
-
-    if isinstance(call.func, ast.Name):
-        return call.func.id.lower() in SIGNAL_NAME_CALLS
-
-    return False
-
-
-def contains_traceback_logging(body: list[ast.stmt]) -> bool:
-    for stmt in body:
-        for node in ast.walk(stmt):
-            if isinstance(node, ast.Call) and is_traceback_logging_call(node):
-                return True
-    return False
-
-
-def contains_signal(body: list[ast.stmt]) -> bool:
-    for stmt in body:
-        for node in ast.walk(stmt):
-            if isinstance(node, ast.Call) and is_signal_call(node):
-                return True
-    return False
 
 
 def make_finding(
@@ -166,13 +40,6 @@ def make_finding(
         message=MESSAGE_BY_CATEGORY[category],
         snippet=snippet[:120],
     )
-
-
-def comment_text(line: str) -> str | None:
-    comment_index = line.find("#")
-    if comment_index == -1:
-        return None
-    return line[comment_index + 1 :].strip()
 
 
 def line_indent(line: str) -> str:
@@ -200,9 +67,9 @@ def scan_annotation_inventory(
 ) -> ExceptionTransparencyAnnotationInventory:
     subtree = inventory_subtree(rel_path) or str(rel_path)
     total = 0
-    for line in source.splitlines():
+    for comment in python_comments(source).values():
         explanation = explanation_for_quality_exception_step(
-            comment_text(line),
+            comment,
             step_slug=QUALITY_EXCEPTION_STEP_SLUG,
         )
         if explanation:
@@ -216,13 +83,17 @@ def scan_annotation_inventory(
     )
 
 
-def has_quality_exception_waiver(lines: list[str], handler: ast.ExceptHandler) -> bool:
+def has_quality_exception_waiver(
+    lines: list[str], handler: ast.ExceptHandler, *, comments: dict[int, str] | None = None
+) -> bool:
     if not (0 < handler.lineno <= len(lines)):
         return False
 
+    if comments is None:
+        comments = python_comments("\n".join(lines))
     handler_line = lines[handler.lineno - 1]
     same_line_explanation = explanation_for_quality_exception_step(
-        comment_text(handler_line),
+        comments.get(handler.lineno),
         step_slug=QUALITY_EXCEPTION_STEP_SLUG,
     )
     if same_line_explanation is not None:
@@ -243,7 +114,7 @@ def has_quality_exception_waiver(lines: list[str], handler: ast.ExceptHandler) -
         if line_indent(preceding_line) != handler_indent:
             break
         explanation = explanation_for_quality_exception_step(
-            comment_text(preceding_line),
+            comments.get(preceding_index + 1),
             step_slug=QUALITY_EXCEPTION_STEP_SLUG,
         )
         if explanation is not None:
@@ -257,7 +128,8 @@ def scan_python_source(source: str, *, rel_path: str) -> list[ExceptionTranspare
     except _PARSE_SKIP_EXCEPTIONS:
         return []
 
-    lines = source.splitlines()
+    lines = source.split("\n")
+    comments = python_comments(source)
     aliases = collect_exception_aliases(tree)
     findings: list[ExceptionTransparencyFinding] = []
     for node in ast.walk(tree):
@@ -272,10 +144,10 @@ def scan_python_source(source: str, *, rel_path: str) -> list[ExceptionTranspare
                 findings.append(make_finding("naked_except", rel_path, handler, lines))
             else:
                 type_names = handler_type_names(handler.type, aliases)
-                if "BaseException" in type_names:
+                if type_names & _BASE_EXCEPTION_NAMES:
                     findings.append(make_finding("baseexception_catch", rel_path, handler, lines))
 
-            if has_quality_exception_waiver(lines, handler):
+            if has_quality_exception_waiver(lines, handler, comments=comments):
                 continue
 
             findings.append(make_finding("broad_except_total", rel_path, handler, lines))
@@ -336,7 +208,8 @@ def count_broad_waivers(root: Path) -> int:
             tree = ast.parse(source)
         except (*_PARSE_SKIP_EXCEPTIONS, *_SOURCE_READ_SKIP_EXCEPTIONS):
             continue
-        lines = source.splitlines()
+        lines = source.split("\n")
+        comments = python_comments(source)
         aliases = collect_exception_aliases(tree)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.Try, ast.TryStar)):
@@ -347,8 +220,8 @@ def count_broad_waivers(root: Path) -> int:
                 ):
                     continue
                 names = handler_type_names(handler.type, aliases)
-                if handler.type is None or "BaseException" in names:
+                if handler.type is None or names & _BASE_EXCEPTION_NAMES:
                     continue
-                if has_quality_exception_waiver(lines, handler):
+                if has_quality_exception_waiver(lines, handler, comments=comments):
                     total += 1
     return total

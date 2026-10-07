@@ -30,6 +30,10 @@ def build_stdout(
     lines.append("=" * 40)
     lines.append("")
     lines.append(
+        "Handler-local AST heuristics only; review downstream propagation and cleanup contracts."
+    )
+    lines.append("")
+    lines.append(
         f"Counts (active; {waived_total} waived via @quality-exception exception-transparency):"
     )
     for category in COUNT_CATEGORIES:
@@ -123,6 +127,8 @@ def write_reports(
         "# Exception Transparency Report",
         "",
         f"Active broad exception counts ({waived_total} handlers waived via `@quality-exception exception-transparency`).",
+        "",
+        "Handler-local AST heuristics only; review downstream propagation and cleanup contracts.",
         "",
         "## Summary",
         "",

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..quality_exceptions import explanation_for_quality_exception_step
+from ..quality_exceptions import explanation_for_quality_exception_step, python_comments
 from . import _ast_scan_helpers as _scan_helpers
 from . import constants as _constants
 from . import usage_graph as _usage_graph
@@ -69,24 +69,17 @@ def iter_py_files(root: Path, *, roots: tuple[str, ...]) -> list[Path]:
     return sorted(files)
 
 
-def read_lines(path: Path) -> list[str] | None:
+def read_source(path: Path) -> str | None:
     try:
-        return path.read_text(encoding="utf-8", errors="replace").splitlines()
+        return path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
 
 
-def _comment_text(line: str) -> str | None:
-    comment_index = line.find("#")
-    if comment_index == -1:
-        return None
-    return line[comment_index + 1 :].strip()
-
-
-def file_size_quality_exception_reason(lines: list[str]) -> str | None:
-    for line in lines:
+def file_size_quality_exception_reason(source: str) -> str | None:
+    for comment in python_comments(source).values():
         explanation = explanation_for_quality_exception_step(
-            _comment_text(line),
+            comment,
             step_slug=_QUALITY_EXCEPTION_STEP_SLUG,
         )
         if explanation:
@@ -211,14 +204,14 @@ def collect_hotspots(
     usage_graph = build_usage_graph(root, roots=roots)
 
     for path in iter_py_files(root, roots=roots):
-        lines = read_lines(path)
-        if lines is None:
+        source = read_source(path)
+        if source is None:
             continue
 
-        line_count = len(lines)
+        line_count = len(source.splitlines())
         bucket = file_bucket(line_count)
         rel = str(path.relative_to(root))
-        waiver_reason = file_size_quality_exception_reason(lines)
+        waiver_reason = file_size_quality_exception_reason(source)
         if waiver_reason is not None and line_count <= 400:
             waived_paths.add(rel)
             waived_rows.append({"path": rel, "reason": waiver_reason})
@@ -317,8 +310,8 @@ def scan_unreferenced_file_candidates(
             or rel in waived
         ):
             continue
-        lines = read_lines(path)
-        if lines is None:
+        source = read_source(path)
+        if source is None:
             continue
         inbound_count = inbound_import_count(graph, path)
         reason = "Not reachable from configured entrypoints"
@@ -327,7 +320,7 @@ def scan_unreferenced_file_candidates(
         rows.append(
             {
                 "path": rel,
-                "lines": len(lines),
+                "lines": len(source.splitlines()),
                 "inbound_imports": inbound_count,
                 "reason": reason,
             }

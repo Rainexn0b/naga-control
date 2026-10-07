@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+import tokenize
 from dataclasses import dataclass
+from io import StringIO
 
 QUALITY_EXCEPTION_MARKER = "@quality-exception"
 _QUALITY_EXCEPTION_TAG_RE = re.compile(
@@ -16,6 +18,26 @@ _QUALITY_EXCEPTION_TAG_RE = re.compile(
 class QualityExceptionTag:
     step_slug: str
     explanation: str
+
+
+def python_comments(source: str) -> dict[int, str]:
+    """Return actual comments by 1-based line, without '#' or surrounding whitespace.
+
+    Discard the whole result on lexical errors, including error tokens. This is
+    tokenization, not syntax validation: lexically valid invalid Python can still
+    have unambiguous comments.
+    """
+    comments: dict[int, str] = {}
+    try:
+        for token in tokenize.generate_tokens(StringIO(source).readline):
+            if token.type == tokenize.ERRORTOKEN:
+                return {}
+            if token.type == tokenize.COMMENT:
+                comments[token.start[0]] = token.string[1:].strip()
+    except (tokenize.TokenError, SyntaxError):
+        # IndentationError is a SyntaxError; do not retain partial waivers.
+        return {}
+    return comments
 
 
 def normalize_quality_exception_step_slug(step_slug: object) -> str:
