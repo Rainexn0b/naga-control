@@ -123,7 +123,7 @@ def _optional_battery(client: object) -> float | None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value) if 0.0 <= float(value) <= 100.0 else None
+    return float(value) if 0.0 <= value <= 100.0 else None
 
 
 def _optional_firmware(client: object) -> str | None:

@@ -243,6 +243,8 @@ class OpenRazerBackend:
             return self._operation_failure(
                 "invalid_response", "OpenRazer returned invalid scroll mode data."
             )
+        except Exception:
+            return self._operation_failure("device_unavailable", "The Naga device is unavailable.")
         return self._change_scroll_mode(cast(HardwareScrollMode, target), options=options)
 
     def apply_profile_settings(
