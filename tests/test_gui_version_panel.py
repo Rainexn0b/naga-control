@@ -1,91 +1,28 @@
 import os
 import threading
-from collections.abc import Callable, Iterator
 from concurrent.futures import Future
 from pathlib import Path
-from typing import cast
 from unittest.mock import Mock
 
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from gui_support import sync_run
+from gui_version_panel_fakes import browser as browser
+from gui_version_panel_fakes import check_panel as _check
+from gui_version_panel_fakes import make_panel as _panel
+from gui_version_panel_fakes import make_releases as _releases
+from gui_version_panel_fakes import no_http as no_http
+from gui_version_panel_fakes import qapp as qapp
+from gui_version_panel_fakes import settings as settings
+from gui_version_panel_fakes import worker as worker
 from PySide6.QtCore import QSettings, QTimer, QUrl
-from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication
 
 from naga_control.gui import releases
-from naga_control.gui.releases import Release, UpdateCheckError, parse_releases
+from naga_control.gui.releases import Release, UpdateCheckError
 from naga_control.gui.version_panel import VersionPanel
 from naga_control.gui.worker import CoroFactory, LoopWorker
-
-
-@pytest.fixture(scope="module")
-def qapp() -> QApplication:
-    return cast(QApplication, QApplication.instance() or QApplication([]))
-
-
-@pytest.fixture(autouse=True)
-def no_http(monkeypatch: pytest.MonkeyPatch) -> Iterator[Mock]:
-    http = Mock(side_effect=AssertionError("Unexpected HTTP request"))
-    monkeypatch.setattr(releases.request, "urlopen", http)
-    yield http
-    http.assert_not_called()
-
-
-@pytest.fixture(autouse=True)
-def browser(monkeypatch: pytest.MonkeyPatch) -> Mock:
-    mock = Mock(return_value=True)
-    monkeypatch.setattr(QDesktopServices, "openUrl", mock)
-    return mock
-
-
-@pytest.fixture
-def settings(tmp_path: Path) -> QSettings:
-    prefs = QSettings(str(tmp_path / "updates.ini"), QSettings.Format.IniFormat)
-    prefs.setValue("unrelated", "preserve me")
-    prefs.sync()
-    return prefs
-
-
-@pytest.fixture
-def worker() -> Iterator[LoopWorker]:
-    instance = LoopWorker()
-    instance.start()
-    try:
-        yield instance
-    finally:
-        instance.stop()
-    assert not instance.running
-
-
-def _releases(*entries: tuple[str, bool]) -> tuple[Release, ...]:
-    base = {"draft": False, "html_url": "https://untrusted.example/download"}
-    return parse_releases(
-        [{**base, "tag_name": tag, "prerelease": prerelease} for tag, prerelease in entries]
-    )
-
-
-def _panel(
-    settings: QSettings,
-    fetcher: Callable[[], tuple[Release, ...]],
-    *,
-    current_version: str | None = "0.1.0",
-) -> VersionPanel:
-    return VersionPanel(
-        sync_run, settings=settings, current_version=current_version, fetcher=fetcher
-    )
-
-
-def _check(panel: VersionPanel, qapp: QApplication) -> None:
-    panel.check_button.click()
-    # Even a synchronous runner must wait for Qt's queued result delivery.
-    assert not panel.check_button.isEnabled()
-    assert not panel.release_button.isEnabled()
-    assert panel.status_label.text() == "Checking GitHub releases..."
-    qapp.processEvents()
-    assert panel.check_button.isEnabled()
 
 
 @pytest.mark.parametrize("missing", [False, True])
