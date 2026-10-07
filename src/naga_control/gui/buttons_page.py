@@ -1,12 +1,9 @@
 """Buttons page: edit control bindings of the active profile and apply them."""
 
-from dataclasses import dataclass
-from functools import partial
 from typing import cast
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -17,20 +14,17 @@ from PySide6.QtWidgets import (
 )
 
 from naga_control.config import parse_toml
-from naga_control.domain.actions import DEVICE_ACTIONS, MOUSE_BUTTONS, Action
+from naga_control.domain.actions import Action
 from naga_control.domain.errors import ConfigValidationError
 from naga_control.domain.profiles import Configuration, LogicalControlId
 from naga_control.gui.actions_view import (
-    ACTION_KINDS,
     action_for_control,
     action_kind,
-    control_display_name,
     format_action_detail,
     parse_action,
 )
-from naga_control.gui.click_wheel_combo import ClickWheelComboBox
+from naga_control.gui.buttons_rows import ButtonRow, build_button_row, sync_detail_options
 from naga_control.gui.editors import set_bindings
-from naga_control.gui.key_recorder import KeyRecorder
 from naga_control.gui.mapping_map import MappingMapView
 from naga_control.gui.mapping_zones import MappingZone, all_zones
 from naga_control.gui.models import ServiceModel
@@ -50,22 +44,6 @@ def _zone_order(zone: MappingZone) -> tuple[int, int]:
     if zone.plate in (12, 6) and zone.control_id is not None:
         return plate_rank, int(zone.control_id.rpartition("_")[2])
     return plate_rank, zone.number
-
-
-@dataclass
-class ButtonRow:
-    root: QWidget
-    control_id: str
-    kind_box: QComboBox
-    detail_edit: QComboBox
-    record_button: KeyRecorder
-    number_label: QLabel
-
-    def selected_kind(self) -> str:
-        return self.kind_box.currentText()
-
-    def selected_detail(self) -> str:
-        return self.detail_edit.currentText().strip()
 
 
 class ButtonsPage(QWidget):
@@ -216,7 +194,15 @@ class ButtonsPage(QWidget):
                 continue
             action = action_for_control(profile.bindings, control)
             self._loaded_actions[control] = action
-            row = self._build_row(control, action, zone.number, zone.label)
+            row = build_button_row(
+                control,
+                action,
+                zone.number,
+                zone.label,
+                on_kind_changed=self._kind_changed,
+                on_detail_changed=self._detail_changed,
+                on_recorded=self._recorded,
+            )
             self.rows.append(row)
             self.rows_layout.addWidget(row.root)
         self.mapping_map.set_actions(self._loaded_actions)
@@ -237,84 +223,17 @@ class ButtonsPage(QWidget):
         self.rows_scroll.ensureWidgetVisible(row.root)
         row.kind_box.setFocus()
 
-    def _build_row(self, control: str, action: Action | None, number: int, label: str) -> ButtonRow:
-        kind_box = ClickWheelComboBox()
-        kind_box.addItems(ACTION_KINDS)
-        kind_box.setCurrentText(action_kind(action) if action is not None else "passthrough")
-        detail_edit = ClickWheelComboBox()
-        detail_edit.setEditable(True)
-        detail_edit.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        record_button = KeyRecorder()
-        row = QHBoxLayout()
-        row.setContentsMargins(4, 2, 4, 2)
-        number_label = QLabel(str(number))
-        number_label.setFixedWidth(32)
-        name_label = QLabel(label)
-        name_label.setFixedWidth(100)
-        name_label.setToolTip(control_display_name(control))
-        row.addWidget(number_label)
-        row.addWidget(name_label)
-        kind_box.setMinimumWidth(0)
-        detail_edit.setMinimumWidth(0)
-        kind_box.setMinimumContentsLength(6)
-        detail_edit.setMinimumContentsLength(6)
-        kind_box.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
-        detail_edit.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
-        row.addWidget(kind_box, 1)
-        row.addWidget(detail_edit, 1)
-        row.addWidget(record_button)
-        root = QWidget()
-        root.setLayout(row)
-        button_row = ButtonRow(
-            root=root,
-            control_id=control,
-            kind_box=kind_box,
-            detail_edit=detail_edit,
-            record_button=record_button,
-            number_label=number_label,
-        )
-        kind_box.currentTextChanged.connect(partial(self._kind_changed, button_row))
-        detail_edit.currentTextChanged.connect(self._detail_changed)
-        record_button.recorded.connect(partial(self._recorded, button_row))
-        self._sync_detail_options(button_row, action)
-        return button_row
-
     def _recorded(self, row: ButtonRow, kind: str, detail: str) -> None:
         row.kind_box.setCurrentText(kind)
         row.detail_edit.setCurrentText(detail)
 
     def _kind_changed(self, row: ButtonRow, text: str) -> None:
         row.record_button.cancel()
-        self._sync_detail_options(row)
+        sync_detail_options(row)
         self._update_dirty()
 
     def _detail_changed(self, _text: str) -> None:
         self._update_dirty()
-
-    def _sync_detail_options(self, row: ButtonRow, action: Action | None = None) -> None:
-        kind = row.selected_kind()
-        if action is not None and action_kind(action) == kind:
-            items = [format_action_detail(action)]
-        elif kind == "mouse_button":
-            items = sorted(MOUSE_BUTTONS)
-        elif kind == "device":
-            items = sorted(DEVICE_ACTIONS)
-        else:
-            items = [format_action_detail(action)] if action is not None else [""]
-        row.detail_edit.blockSignals(True)
-        try:
-            row.detail_edit.clear()
-            row.detail_edit.addItems(items)
-            if action is not None:
-                row.detail_edit.setCurrentText(format_action_detail(action))
-        finally:
-            row.detail_edit.blockSignals(False)
-        row.detail_edit.setEnabled(kind not in ("disabled", "passthrough"))
-        row.record_button.setVisible(kind in ("key", "key_combo"))
 
     def _current_actions(self) -> dict[str, tuple[str, str]]:
         return {row.control_id: (row.selected_kind(), row.selected_detail()) for row in self.rows}

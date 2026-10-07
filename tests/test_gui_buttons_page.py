@@ -1,79 +1,23 @@
-import asyncio
 import os
-from collections.abc import Callable, Coroutine, Iterator
-from typing import Any, cast
+from collections.abc import Iterator
+from typing import cast
 
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from gui_buttons_fakes import FakeClient, opened, sync_run
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from naga_control.config import dump_toml, parse_toml
+from naga_control.config import parse_toml
 from naga_control.domain.actions import KeyAction, KeyComboAction, MouseButtonAction
 from naga_control.domain.defaults import default_configuration
 from naga_control.gui.buttons_page import ButtonsPage
 from naga_control.gui.models import ServiceModel
 from naga_control.gui.presenter import GuiPresenter
-from naga_control.ipc.client import NagaControlClient
-
-SNAPSHOT = '{"status":"available","generation":9,"transport":"hyperspeed","error":null}'
-
-
-class _NullCalls:
-    async def call_get_snapshot(self) -> str:
-        raise NotImplementedError
-
-    async def call_release_all(self) -> None:
-        raise NotImplementedError
-
-    async def call_get_configuration(self) -> str:
-        raise NotImplementedError
-
-    async def call_apply_configuration(self, expected_revision: int, document: str) -> int:
-        raise NotImplementedError
-
-    async def call_select_profile(self, profile_id: str) -> int:
-        raise NotImplementedError
-
-    async def call_begin_calibration(self) -> bool:
-        raise NotImplementedError
-
-    async def call_end_calibration(self) -> bool:
-        raise NotImplementedError
-
-        raise NotImplementedError
-
-
-class FakeClient(NagaControlClient):
-    def __init__(self) -> None:
-        super().__init__(_NullCalls())
-        self.document = dump_toml(default_configuration())
-        self.applied: list[str] = []
-
-    async def snapshot_document(self) -> str:
-        return SNAPSHOT
-
-    async def release_all(self) -> None:
-        return None
-
-    async def configuration_document(self) -> str:
-        return self.document
-
-    async def apply_configuration(self, expected_revision: int, document: str) -> int:
-        self.applied.append(document)
-        self.document = document
-        return parse_toml(document).revision
-
-    async def select_profile(self, profile_id: str) -> int:
-        return 1
-
-
-async def _opened(client: NagaControlClient) -> NagaControlClient:
-    return client
 
 
 @pytest.fixture(scope="module")
@@ -82,16 +26,12 @@ def qapp() -> Iterator[QApplication]:
     yield cast(QApplication, app)
 
 
-def _sync_run(factory: Callable[[], Coroutine[Any, Any, object]]) -> None:
-    asyncio.run(factory())
-
-
 def _page(qapp: QApplication) -> tuple[ButtonsPage, FakeClient]:
     client = FakeClient()
     model = ServiceModel()
-    presenter = GuiPresenter(model, open_client=lambda: _opened(client))
-    page = ButtonsPage(presenter, model, _sync_run)
-    _sync_run(presenter.refresh)
+    presenter = GuiPresenter(model, open_client=lambda: opened(client))
+    page = ButtonsPage(presenter, model, sync_run)
+    sync_run(presenter.refresh)
     qapp.processEvents()
     return page, client
 
