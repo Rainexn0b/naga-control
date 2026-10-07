@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Callable
+from contextlib import suppress
 from typing import Protocol
 
 from naga_control.adapters.evdev.discovery import EventNode, NagaConnection
@@ -117,6 +118,7 @@ class FirstSliceSession:
         self._errors: list[BaseException] = []
         self._started = False
         self._stopped = False
+        self._stop_task: asyncio.Task[None] | None = None
 
     @property
     def errors(self) -> tuple[BaseException, ...]:
@@ -129,57 +131,93 @@ class FirstSliceSession:
         return any(not task.done() for task in self._tasks)
 
     async def start(self) -> None:
+        if self._stopped:
+            raise RuntimeError("first-slice session is stopped")
         if self._started:
             raise RuntimeError("first-slice session is already active")
         self._started = True
         try:
             await self._device_actions.start()
+            if self._stopped:
+                raise RuntimeError("first-slice session is stopped")
             for node in _mapped_nodes(self._connection, self._profile):
                 source = self._source_opener(node)
-                reader = self._reader_factory(
-                    source,
-                    self._profile,
-                    self._keyboard,
-                    self._mouse,
-                    self._device_actions,
-                    self._proxy_factory,
-                    self._readiness_waiter,
-                )
-                reader.start()
+                try:
+                    reader = self._reader_factory(
+                        source,
+                        self._profile,
+                        self._keyboard,
+                        self._mouse,
+                        self._device_actions,
+                        self._proxy_factory,
+                        self._readiness_waiter,
+                    )
+                except BaseException:
+                    with suppress(Exception):
+                        source.close()
+                    raise
                 self._readers.append(reader)
+                reader.start()
                 self._tasks.append(asyncio.create_task(reader.run()))
             for task in self._tasks:
                 task.add_done_callback(self._record_error)
         except BaseException:
-            await self.stop()
+            with suppress(Exception):
+                await self.stop()
             raise
 
     async def stop(self) -> None:
-        if self._stopped:
-            return
-        self._stopped = True
-        for task in self._tasks:
-            task.cancel()
+        if self._stop_task is None:
+            self._stopped = True
+            # Cancel synchronously before yielding, including never-entered readers.
+            for task in self._tasks:
+                task.cancel()
+            self._stop_task = asyncio.create_task(self._stop())
+            self._stop_task.add_done_callback(
+                lambda done: None if done.cancelled() else done.exception()
+            )
+        await asyncio.shield(self._stop_task)
+
+    async def _stop(self) -> None:
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks.clear()
-        try:
-            for reader in self._readers:
-                reader.stop()
-        finally:
-            self._readers.clear()
+        first_error: Exception | None = None
+        cleanup = [reader.stop for reader in self._readers]
+        self._readers.clear()
+        cleanup.extend(
+            (
+                self._keyboard.release_all,
+                self._mouse.release_all,
+                self._keyboard.close,
+                self._mouse.close,
+            )
+        )
+        for operation in cleanup:
             try:
-                self._keyboard.release_all()
-                self._mouse.release_all()
-            finally:
-                self._keyboard.close()
-                self._mouse.close()
-                await self._device_actions.stop()
+                operation()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        try:
+            await self._device_actions.stop()
+        except Exception as exc:
+            if first_error is None:
+                first_error = exc
+        if first_error is not None:
+            raise first_error
 
     def release_all(self) -> None:
         """Release generated output without tearing down physical forwarding."""
-        self._keyboard.release_all()
-        self._mouse.release_all()
+        first_error: Exception | None = None
+        for release in (self._keyboard.release_all, self._mouse.release_all):
+            try:
+                release()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
 
     def _record_error(self, task: asyncio.Task[object]) -> None:
         if task.cancelled():
