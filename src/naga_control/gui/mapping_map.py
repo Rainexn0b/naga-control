@@ -1,14 +1,15 @@
 """Interactive mapping illustration with clickable control zones."""
 
 from pathlib import Path
-from typing import Any
 
 from PySide6.QtCore import QPointF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap, QPolygonF, QResizeEvent
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsPolygonItem,
     QGraphicsScene,
+    QGraphicsSceneHoverEvent,
+    QGraphicsSceneMouseEvent,
     QGraphicsSimpleTextItem,
     QGraphicsView,
 )
@@ -49,15 +50,15 @@ class _ZoneItem(QGraphicsPolygonItem):
         self._selected = selected
         self._refresh_style(hovered=False)
 
-    def hoverEnterEvent(self, event: Any) -> None:
+    def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
         self._refresh_style(hovered=True)
         super().hoverEnterEvent(event)
 
-    def hoverLeaveEvent(self, event: Any) -> None:
+    def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
         self._refresh_style(hovered=False)
         super().hoverLeaveEvent(event)
 
-    def mousePressEvent(self, event: Any) -> None:
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         if self._enabled:
             self._parent_map.zone_clicked(self.zone)
         super().mousePressEvent(event)
@@ -141,7 +142,7 @@ class MappingMapView(QGraphicsView):
         for item in self.zone_items:
             item.set_selected(item.zone.control_id == control_id)
 
-    def resizeEvent(self, event: Any) -> None:
+    def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         self.fitInView(self.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 

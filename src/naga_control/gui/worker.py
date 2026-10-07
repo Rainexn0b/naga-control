@@ -39,7 +39,7 @@ class LoopWorker:
         if thread is not None:
             thread.join(timeout)
 
-    def submit(self, coroutine_factory: Callable[[], Coroutine[Any, Any, Any]]) -> Future[Any]:
+    def submit(self, coroutine_factory: CoroFactory) -> Future[object]:
         if self._loop is None or not self._loop.is_running():
             raise RuntimeError("service worker loop is not running")
         return asyncio.run_coroutine_threadsafe(coroutine_factory(), self._loop)
