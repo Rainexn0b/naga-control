@@ -1,102 +1,25 @@
 """Read and serialize complete evdev frames without grabbing input devices."""
 
 import asyncio
-import os
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import import_module
-from typing import Protocol, cast
+from typing import cast
 
-from naga_control.adapters.evdev.discovery import EventNode, NagaConnection, resolve_event_node
+from naga_control.adapters.evdev.discovery import NagaConnection
+from naga_control.diagnostics.capture_sources import AbsInfoLike as AbsInfoLike
+from naga_control.diagnostics.capture_sources import DeviceInfoLike as DeviceInfoLike
+from naga_control.diagnostics.capture_sources import InputDeviceFactory as InputDeviceFactory
+from naga_control.diagnostics.capture_sources import InputDeviceLike as InputDeviceLike
+from naga_control.diagnostics.capture_sources import InputEventLike as InputEventLike
+from naga_control.diagnostics.capture_sources import OpenedSource as OpenedSource
+from naga_control.diagnostics.capture_sources import close_sources as close_sources
+from naga_control.diagnostics.capture_sources import open_sources as open_sources
 
 REDACTED = "<redacted>"
 
 
-class InputEventLike(Protocol):
-    @property
-    def sec(self) -> int: ...
-
-    @property
-    def usec(self) -> int: ...
-
-    @property
-    def type(self) -> int: ...
-
-    @property
-    def code(self) -> int: ...
-
-    @property
-    def value(self) -> int: ...
-
-
-class AbsInfoLike(Protocol):
-    @property
-    def value(self) -> int: ...
-
-    @property
-    def min(self) -> int: ...
-
-    @property
-    def max(self) -> int: ...
-
-    @property
-    def fuzz(self) -> int: ...
-
-    @property
-    def flat(self) -> int: ...
-
-    @property
-    def resolution(self) -> int: ...
-
-
-class DeviceInfoLike(Protocol):
-    @property
-    def bustype(self) -> int: ...
-
-    @property
-    def vendor(self) -> int: ...
-
-    @property
-    def product(self) -> int: ...
-
-    @property
-    def version(self) -> int: ...
-
-
-class InputDeviceLike(Protocol):
-    @property
-    def fd(self) -> int: ...
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def phys(self) -> str | None: ...
-
-    @property
-    def uniq(self) -> str | None: ...
-
-    @property
-    def info(self) -> DeviceInfoLike: ...
-
-    def close(self) -> None: ...
-
-    def input_props(self, verbose: bool = False) -> list[int]: ...
-
-    def capabilities(
-        self, verbose: bool = False, absinfo: bool = True
-    ) -> Mapping[int, Sequence[int | tuple[int, AbsInfoLike]]]: ...
-
-    def async_read_loop(self) -> AsyncIterator[InputEventLike]: ...
-
-
-class InputDeviceFactory(Protocol):
-    def __call__(self, path: str, readonly: bool = False) -> InputDeviceLike: ...
-
-
-_evdev = import_module("evdev")
 _ecodes = import_module("evdev.ecodes")
-_input_device_factory = cast(InputDeviceFactory, _evdev.InputDevice)
 CodeName = str | Sequence[str]
 _event_types = cast(Mapping[int, CodeName], _ecodes.EV)
 _input_properties = cast(Mapping[int, CodeName], _ecodes.INPUT_PROP)
@@ -105,13 +28,6 @@ EV_SYN = cast(int, _ecodes.EV_SYN)
 EV_MSC = cast(int, _ecodes.EV_MSC)
 SYN_REPORT = cast(int, _ecodes.SYN_REPORT)
 MSC_SCAN = cast(int, _ecodes.MSC_SCAN)
-
-
-@dataclass(frozen=True, slots=True)
-class OpenedSource:
-    source_id: str
-    node: EventNode
-    device: InputDeviceLike
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,45 +83,6 @@ class CaptureResult:
 class _ReaderFinished:
     source: str
     error: str | None
-
-
-def open_sources(
-    connection: NagaConnection,
-    *,
-    device_factory: InputDeviceFactory = _input_device_factory,
-    identity_resolver: Callable[[int], EventNode] = resolve_event_node,
-    device_number_resolver: Callable[[int], int] = lambda fd: os.fstat(fd).st_rdev,
-) -> tuple[OpenedSource, ...]:
-    """Open every sibling node read-only and assign stable capture identifiers."""
-    opened: list[OpenedSource] = []
-    interface_counts: dict[str, int] = {}
-    try:
-        for node in connection.nodes:
-            interface_counts[node.interface_number] = (
-                interface_counts.get(node.interface_number, 0) + 1
-            )
-            occurrence = interface_counts[node.interface_number]
-            source_id = f"interface-{node.interface_number}"
-            if occurrence > 1:
-                source_id = f"{source_id}-{occurrence}"
-            device = device_factory(node.event_path, readonly=True)
-            try:
-                current_node = identity_resolver(device_number_resolver(device.fd))
-                if not _same_physical_source(node, current_node):
-                    raise OSError(f"input identity changed before open: {node.event_path}")
-            except BaseException:
-                device.close()
-                raise
-            opened.append(OpenedSource(source_id, node, device))
-    except BaseException:
-        close_sources(opened)
-        raise
-    return tuple(opened)
-
-
-def close_sources(sources: tuple[OpenedSource, ...] | list[OpenedSource]) -> None:
-    for source in sources:
-        source.device.close()
 
 
 def connection_metadata(
@@ -381,12 +258,3 @@ def _mapping_name(
     if isinstance(name, str):
         return name
     return "/".join(name)
-
-
-def _same_physical_source(expected: EventNode, current: EventNode) -> bool:
-    return (
-        expected.usb_path == current.usb_path
-        and expected.interface_number == current.interface_number
-        and expected.vendor_id == current.vendor_id
-        and expected.product_id == current.product_id
-    )
