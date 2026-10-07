@@ -1,6 +1,7 @@
 """Read and serialize complete evdev frames without grabbing input devices."""
 
 import asyncio
+import errno
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import import_module
@@ -184,9 +185,23 @@ async def _read_source(
                 queue.put_nowait(FrameRecord(source.source_id, tuple(current_frame)))
                 current_frame.clear()
     except OSError as exc:
-        error = f"{source.source_id} read failed: {exc}"
+        error = f"{source.source_id} read failed: {format_capture_error(exc)}"
     finally:
         queue.put_nowait(_ReaderFinished(source.source_id, error))
+
+
+def format_capture_error(error: OSError) -> str:
+    """Describe an I/O failure without rendering payloads, filenames, or chains."""
+    name = type(error).__name__
+    number = error.errno
+    if not isinstance(number, int) or isinstance(number, bool):
+        return name
+    number = int.__int__(number)
+    if not -(2**31) <= number < 2**31:
+        return name
+    symbol = errno.errorcode.get(number)
+    detail = f"errno {number}" + (f" {symbol}" if symbol is not None else "")
+    return f"{name} ({detail})"
 
 
 def format_frame(frame: FrameRecord) -> str:

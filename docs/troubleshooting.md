@@ -202,16 +202,27 @@ Input Remapper and similar tools race for the same evdev nodes. Stop them:
 
 ## Debug bundle
 
-Collect a sanitized diagnostic capture with:
+Inspect the diagnostic capture options with:
 
 ```bash
 naga-control-capture --help   # from a pip install; or:
 ./dist/Naga-Control-*.AppImage capture --help
 ```
 
-Captures redact serial numbers and identifiers before writing; see the
-`REDACTED` handling in `src/naga_control/diagnostics/capture.py`. For
-service logs use `journalctl --user -u naga-control.service -b`.
+By default, captures redact explicit serial, physical-path, `phys`, and `uniq`
+metadata fields. `--include-identifiers` opts those fields back in. Normal input
+error diagnostics and application-generated read-error `end_reason` values show
+only source/operation, exception class, and validated errno information, not
+exception messages, filenames, or chains. Identifier opt-in does not enable raw
+error text. Output-write diagnostics retain the destination you requested.
+
+This is not whole-capture anonymization: frames can contain incidental keys,
+scans, motion, and timestamps; device names and environment strings are retained.
+Live event paths are printed to the terminal but not persisted in normal metadata.
+Review captures and terminal transcripts before sharing. Older captures are not
+rewritten, and library callers can still inspect original exceptions and causes.
+For service logs use `journalctl --user -u naga-control.service -b`; capture-local
+error formatting is not a sanitizer for those logs.
 
 ## Emergency release
 

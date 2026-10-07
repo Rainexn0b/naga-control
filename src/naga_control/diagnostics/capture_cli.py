@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import json
+import math
 import os
 import platform
 import sys
@@ -17,11 +18,21 @@ from naga_control.diagnostics.capture import (
     capture_frames,
     close_sources,
     connection_metadata,
+    format_capture_error,
     format_frame,
     open_sources,
 )
 
 CAPTURE_SCHEMA_VERSION = 1
+
+
+class CaptureOutputError(OSError):
+    """A capture file could not be written."""
+
+    def __init__(self, output: Path, error: OSError) -> None:
+        self.output = output
+        self.error_summary = format_capture_error(error)
+        super().__init__(f"{output}: {type(error).__name__}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -61,15 +72,23 @@ def main() -> int:
     except KeyboardInterrupt:
         print("Capture interrupted; no JSON file was written.", file=sys.stderr)
         return 130
+    except CaptureOutputError as exc:
+        detail = (
+            f"{exc.output}: {exc.error_summary}"
+            if type(exc) is CaptureOutputError
+            else format_capture_error(exc)
+        )
+        print(f"Capture output error: {detail}", file=sys.stderr)
+        return 2
     except PermissionError as exc:
-        print(f"Permission denied: {exc}", file=sys.stderr)
+        print(f"Permission denied: {format_capture_error(exc)}", file=sys.stderr)
         print(
             "Install the scoped udev rule and refresh the login session; do not run as root.",
             file=sys.stderr,
         )
         return 2
     except OSError as exc:
-        print(f"Input device error: {exc}", file=sys.stderr)
+        print(f"Input device error: {format_capture_error(exc)}", file=sys.stderr)
         return 2
 
 
@@ -91,6 +110,7 @@ async def run(args: argparse.Namespace) -> int:
         print("The Naga USB device has no initialized event nodes.", file=sys.stderr)
         return 1
     sources = open_sources(connection)
+    body_failed = False
     try:
         metadata = connection_metadata(
             connection,
@@ -114,8 +134,16 @@ async def run(args: argparse.Namespace) -> int:
             _write_capture(args.output, args, metadata, result)
             print(f"Wrote {args.output}")
         return 0
+    except BaseException:
+        body_failed = True
+        raise
     finally:
-        close_sources(sources)
+        try:
+            close_sources(sources)
+        except Exception:
+            # Secondary interruptions remain unsuppressed; ordinary errors do not mask the body.
+            if not body_failed:
+                raise
 
 
 def _print_metadata(
@@ -175,7 +203,10 @@ def _write_capture(
         "end_reason": result.end_reason,
         "frames": [frame.as_json() for frame in result.frames],
     }
-    output.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        output.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise CaptureOutputError(output, exc) from exc
 
 
 def _desktop_name() -> str:
@@ -188,8 +219,8 @@ def _desktop_name() -> str:
 
 def _positive_float(value: str) -> float:
     parsed = float(value)
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be greater than zero")
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("must be finite and greater than zero")
     return parsed
 
 
