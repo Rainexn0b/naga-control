@@ -4,7 +4,12 @@ set -u
 HERE="$(dirname "$(readlink -f "${APPIMAGE:-$0}")")"
 APPDIR="${APPDIR:-$HERE}"
 
-PYLIB="$(ls -d "$APPDIR"/usr/lib/python3.* 2>/dev/null | head -n 1)"
+PYLIB=""
+for candidate in "$APPDIR"/usr/lib/python3.*; do
+  [ -d "$candidate" ] || continue
+  PYLIB="$candidate"
+  break
+done
 PYTHON="$APPDIR/usr/bin/python3"
 
 export PYTHONHOME="$APPDIR/usr"
