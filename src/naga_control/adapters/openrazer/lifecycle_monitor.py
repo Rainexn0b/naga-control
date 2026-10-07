@@ -58,6 +58,7 @@ class _RawBus(Protocol):
 
 class _ConnectableBus(Protocol):
     async def connect(self) -> _RawBus: ...
+    def disconnect(self) -> None: ...
 
 
 class _BusType(Protocol):
@@ -102,7 +103,11 @@ class _DbusNextLifecycleBus:
 
 
 class OpenRazerLifecycleMonitor:
-    """Schedule topology refreshes without doing hardware work in D-Bus callbacks."""
+    """Debounce rescans using a dedicated, monitor-owned bus connection.
+
+    Failed startup after bus acquisition is terminal, like explicit stop. Callers
+    serialize starts; stop prevents late startup from resurrecting the monitor.
+    """
 
     def __init__(
         self,
@@ -127,34 +132,45 @@ class OpenRazerLifecycleMonitor:
         self._reported_rescan_failures: set[tuple[str, type[Exception]]] = set()
 
     async def start(self) -> None:
-        if self._bus is not None:
-            return
         if self._stopping:
             raise RuntimeError("OpenRazer lifecycle monitor is stopped")
+        if self._bus is not None:
+            return
         bus = await self._bus_factory()
+        if self._stopping:
+            with suppress(Exception):
+                bus.disconnect()
+            raise RuntimeError("OpenRazer lifecycle monitor is stopped")
         self._bus = bus
         try:
-            bus.add_message_handler(self._handle_message)
             self._handler_added = True
+            bus.add_message_handler(self._handle_message)
             for rule in _MATCH_RULES:
-                await bus.add_match(rule)
+                # Installation may complete remotely before its reply is interrupted.
                 self._subscribed_rules.append(rule)
-        except Exception:
-            await self._detach_bus()
+                await bus.add_match(rule)
+                if self._stopping:
+                    raise RuntimeError("OpenRazer lifecycle monitor is stopped")
+            self._request_rescan()
+        except BaseException:
+            with suppress(Exception):
+                await self.stop()
             raise
-        self._request_rescan()
 
     async def stop(self) -> None:
         if self._stopping:
             return
         self._stopping = True
-        runner = self._runner
-        if runner is not None:
-            runner.cancel()
-            with suppress(asyncio.CancelledError):
-                await runner
-        self._runner = None
-        await self._detach_bus()
+        try:
+            runner = self._runner
+            if runner is not None:
+                runner.cancel()
+                with suppress(asyncio.CancelledError):
+                    await runner
+        finally:
+            self._runner = None
+            self._rescan_requested = False
+            await self._detach_bus()
 
     def _handle_message(self, message: object) -> bool:
         if not self._stopping and (_is_device_signal(message) or _is_owner_change(message)):
@@ -194,16 +210,20 @@ class OpenRazerLifecycleMonitor:
         if bus is None:
             return
         self._bus = None
-        if self._handler_added:
-            self._handler_added = False
-            with suppress(Exception):
-                bus.remove_message_handler(self._handle_message)
-        for rule in reversed(self._subscribed_rules):
-            with suppress(Exception):
-                await bus.remove_match(rule)
+        rules = tuple(reversed(self._subscribed_rules))
         self._subscribed_rules.clear()
-        with suppress(Exception):
-            bus.disconnect()
+        handler_added = self._handler_added
+        self._handler_added = False
+        try:
+            if handler_added:
+                with suppress(Exception):
+                    bus.remove_message_handler(self._handle_message)
+            for rule in rules:
+                with suppress(Exception):
+                    await bus.remove_match(rule)
+        finally:
+            with suppress(Exception):
+                bus.disconnect()
 
 
 async def _default_bus_factory() -> LifecycleBus:
@@ -212,9 +232,14 @@ async def _default_bus_factory() -> LifecycleBus:
     bus_class = cast(Callable[..., _ConnectableBus], aio_module.MessageBus)
     bus_type = cast(_BusType, dbus_module.BusType)
     message_factory = cast(Callable[..., object], dbus_module.Message)
-    return _DbusNextLifecycleBus(
-        await bus_class(bus_type=bus_type.SESSION).connect(), message_factory
-    )
+    raw = bus_class(bus_type=bus_type.SESSION)
+    try:
+        connected = await raw.connect()
+        return _DbusNextLifecycleBus(connected, message_factory)
+    except BaseException:
+        with suppress(Exception):
+            raw.disconnect()
+        raise
 
 
 def _is_device_signal(message: object) -> bool:
