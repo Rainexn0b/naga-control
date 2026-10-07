@@ -5,11 +5,13 @@ from contextlib import suppress
 from importlib import import_module
 from typing import Protocol, cast
 
+from dbus_next.constants import NameFlag, RequestNameReply
+
 from naga_control.ipc.service import BUS_NAME, OBJECT_PATH, NagaControlInterface
 
 
 class SessionBus(Protocol):
-    async def request_name(self, name: str) -> object: ...
+    async def request_name(self, name: str, flags: NameFlag = NameFlag.NONE) -> object: ...
     def export(self, path: str, interface: NagaControlInterface) -> None: ...
     def disconnect(self) -> None: ...
 
@@ -45,5 +47,8 @@ async def connect_session_bus() -> SessionBus:
 
 
 async def publish_service(bus: SessionBus, interface: NagaControlInterface) -> None:
-    await bus.request_name(BUS_NAME)
+    """Export and reserve the public name; the interface separately gates readiness."""
     bus.export(OBJECT_PATH, interface)
+    reply = await bus.request_name(BUS_NAME, NameFlag.DO_NOT_QUEUE)
+    if reply not in {RequestNameReply.PRIMARY_OWNER, RequestNameReply.ALREADY_OWNER}:
+        raise RuntimeError("Naga Control session bus name is already owned")

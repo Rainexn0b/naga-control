@@ -1,5 +1,6 @@
 """Small session D-Bus surface for the first service slice."""
 
+import asyncio
 import json
 from collections.abc import Mapping
 from typing import Protocol
@@ -40,24 +41,46 @@ class ServiceConfigurationProvider(ServiceSnapshotProvider, Protocol):
 class NagaControlInterface(ServiceInterface):
     """Expose only safe service state and emergency generated-output release."""
 
-    def __init__(self, service: ServiceConfigurationProvider) -> None:
+    def __init__(self, service: ServiceConfigurationProvider, *, ready: bool = True) -> None:
         super().__init__(INTERFACE_NAME)
         self._service = service
+        self._ready = asyncio.Event()
+        self._unavailable = False
+        if ready:
+            self._ready.set()
+
+    def mark_ready(self) -> None:
+        if not self._unavailable:
+            self._ready.set()
+
+    def mark_unavailable(self) -> None:
+        self._unavailable = True
+        self._ready.set()
+
+    async def _wait_ready(self) -> None:
+        await self._ready.wait()
+        if self._unavailable:
+            raise DBusError(
+                f"{_ERROR_PREFIX}.Unavailable", "Naga Control service is unavailable."
+            ) from None
 
     @method()
-    def GetSnapshot(  # pyright: ignore[reportUnknownParameterType]
+    async def GetSnapshot(  # pyright: ignore[reportUnknownParameterType]
         self,
     ) -> "s":  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnknownParameterType]
+        await self._wait_ready()
         return self.snapshot_document()
 
     @method()
-    def ReleaseAll(self) -> None:
+    async def ReleaseAll(self) -> None:
+        await self._wait_ready()
         self.release_outputs()
 
     @method()
-    def GetConfiguration(  # pyright: ignore[reportUnknownParameterType]
+    async def GetConfiguration(  # pyright: ignore[reportUnknownParameterType]
         self,
     ) -> "s":  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnknownParameterType]
+        await self._wait_ready()
         return self.configuration_document()
 
     @method()
@@ -66,6 +89,7 @@ class NagaControlInterface(ServiceInterface):
         expected_revision: "q",  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnknownParameterType]
         document: "s",  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnknownParameterType]
     ) -> "q":  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnknownParameterType]
+        await self._wait_ready()
         return await self.apply_configuration(
             expected_revision,  # pyright: ignore[reportUnknownArgumentType]
             document,  # pyright: ignore[reportUnknownArgumentType]
@@ -76,6 +100,7 @@ class NagaControlInterface(ServiceInterface):
         self,
         profile_id: "s",  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnknownParameterType]
     ) -> "q":  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnknownParameterType]
+        await self._wait_ready()
         return await self.select_profile(
             profile_id,  # pyright: ignore[reportUnknownArgumentType]
         )
@@ -84,12 +109,14 @@ class NagaControlInterface(ServiceInterface):
     async def BeginCalibration(  # pyright: ignore[reportUnknownParameterType]
         self,
     ) -> "b":  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnknownParameterType]
+        await self._wait_ready()
         return await self.begin_calibration_state()
 
     @method()
     async def EndCalibration(  # pyright: ignore[reportUnknownParameterType]
         self,
     ) -> "b":  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnknownParameterType]
+        await self._wait_ready()
         return await self.end_calibration_state()
 
     def snapshot_document(self) -> str:

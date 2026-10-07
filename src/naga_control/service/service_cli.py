@@ -60,9 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
-    service = create_service()
-    openrazer_lifecycle = OpenRazerLifecycleMonitor(_PhysicalTopology(), service)
     try:
+        service = create_service()
+        openrazer_lifecycle = OpenRazerLifecycleMonitor(_PhysicalTopology(), service)
         asyncio.run(
             run(
                 service,
@@ -93,29 +93,84 @@ async def run(
     for handled_signal in (signal.SIGINT, signal.SIGTERM):
         install(handled_signal, stopped.set)
     bus: SessionBus | None = None
+    interface: NagaControlInterface | None = None
     watcher: asyncio.Task[None] | None = None
-    lifecycle_started = False
+    service_start_attempted = False
+    lifecycle_start_attempted = False
+    body_failed = False
     try:
-        state = await service.start()
-        if openrazer_lifecycle is not None:
-            await openrazer_lifecycle.start()
-            lifecycle_started = True
         bus = await bus_factory()
-        await publish_service(bus, NagaControlInterface(service))
+        interface = NagaControlInterface(service, ready=False)
+        await publish_service(bus, interface)
+        if stopped.is_set():
+            return
+        service_start_attempted = True
+        state = await service.start()
+        if stopped.is_set():
+            return
+        if openrazer_lifecycle is not None:
+            lifecycle_start_attempted = True
+            await openrazer_lifecycle.start()
+        if stopped.is_set():
+            return
         if topology_watcher is not None:
             watcher = asyncio.create_task(topology_watcher())
+        interface.mark_ready()
         logging.getLogger(__name__).info("Naga Control service state: %s", state.status)
         await stopped.wait()
+    except BaseException:
+        body_failed = True
+        raise
     finally:
+        if interface is not None:
+            interface.mark_unavailable()
         if watcher is not None:
             watcher.cancel()
-            with suppress(asyncio.CancelledError):
-                await watcher
-        if lifecycle_started and openrazer_lifecycle is not None:
-            await openrazer_lifecycle.stop()
-        await service.stop()
-        if bus is not None:
-            bus.disconnect()
+
+        async def cleanup() -> Exception | None:
+            cleanup_error: Exception | None = None
+            if watcher is not None:
+                try:
+                    with suppress(asyncio.CancelledError):
+                        await watcher
+                except Exception as exc:
+                    cleanup_error = exc
+            stoppers: list[Callable[[], Awaitable[None]]] = []
+            if service_start_attempted:
+                stoppers.append(service.stop)
+            if lifecycle_start_attempted and openrazer_lifecycle is not None:
+                stoppers.insert(0, openrazer_lifecycle.stop)
+            for stop in stoppers:
+                try:
+                    await stop()
+                except Exception as exc:
+                    if cleanup_error is None:
+                        cleanup_error = exc
+            if bus is not None:
+                try:
+                    bus.disconnect()
+                except Exception as exc:
+                    if cleanup_error is None:
+                        cleanup_error = exc
+            return cleanup_error
+
+        cleanup_task = asyncio.create_task(cleanup())
+        cancellation: asyncio.CancelledError | None = None
+        while True:
+            try:
+                cleanup_error = await asyncio.shield(cleanup_task)
+                break
+            except asyncio.CancelledError as exc:
+                if cleanup_task.cancelled():
+                    raise
+                # Keep the public name until every entered hardware owner finishes.
+                if cancellation is None:
+                    cancellation = exc
+        if not body_failed:
+            if cancellation is not None:
+                raise cancellation
+            if cleanup_error is not None:
+                raise cleanup_error
 
 
 if __name__ == "__main__":

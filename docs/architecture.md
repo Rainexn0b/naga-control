@@ -230,6 +230,27 @@ Signals cover snapshot changes, calibration events, and actionable errors.
 There is no arbitrary event-injection, command-execution, path-access, or raw
 OpenRazer method in the IPC surface.
 
+The CLI exports a startup-gated interface and reserves the public bus name with
+`DO_NOT_QUEUE` before hardware-owning service or auxiliary startup. It never
+replaces an incumbent or uses a separate private singleton name. All seven
+exported application methods wait until service and auxiliary initialization
+complete; initialization readiness is distinct from mouse availability.
+
+Startup failure and shutdown terminally close the gate with a fixed
+`org.nagacontrol.Service1.Error.Unavailable` error. Queued methods cannot enter
+an uninitialized provider. Existing non-exported Python helpers retain their
+direct-call contract; they are not a remote readiness boundary. CLI cleanup
+remains owned and joined despite caller cancellation, and disconnects the public
+connection after entered owners finish teardown. Failed resource-release attempts
+are not proof of kernel cleanup; transport loss can beat delivery of a queued
+unavailable reply. Connection-factory acquisition before ownership transfer and
+prompt interruption of blocked startup remain separate boundaries. After the
+constructor returns a dedicated raw bus, factories own it until connect and
+wrapper creation succeed; a pre-transfer failure attempts to disconnect that raw
+once and preserves the primary error. Constructor failure has no raw to
+disconnect; secondary non-ordinary interruption during disconnect is a separate
+limit.
+
 The service unit is enabled at login so mappings work without opening the GUI.
 D-Bus activation may additionally start it when the GUI opens.
 

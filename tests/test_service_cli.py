@@ -1,6 +1,9 @@
 import argparse
 import asyncio
 import signal
+from typing import Literal
+
+from dbus_next.constants import NameFlag, RequestNameReply
 
 from naga_control.domain.hardware import HardwareState
 from naga_control.service.service_cli import build_parser, run
@@ -46,9 +49,10 @@ class Bus:
     def __init__(self) -> None:
         self.events: list[str] = []
 
-    async def request_name(self, name: str) -> object:
+    async def request_name(self, name: str, flags: NameFlag = NameFlag.NONE) -> object:
+        assert flags == NameFlag.DO_NOT_QUEUE
         self.events.append(f"name:{name}")
-        return object()
+        return RequestNameReply.PRIMARY_OWNER
 
     def export(self, path: str, interface: object) -> None:
         self.events.append(f"export:{path}")
@@ -68,6 +72,16 @@ class Lifecycle:
         self.events.append("stop")
 
 
+class RunningStopEvent(asyncio.Event):
+    def __init__(self) -> None:
+        super().__init__()
+        self.wait_entered = asyncio.Event()
+
+    async def wait(self) -> Literal[True]:
+        self.wait_entered.set()
+        return await super().wait()
+
+
 def test_parser_accepts_debug() -> None:
     assert build_parser().parse_args(["--debug"]) == argparse.Namespace(debug=True)
 
@@ -78,7 +92,7 @@ def test_run_stops_the_service_after_a_signal() -> None:
 
 async def _exercise_run() -> None:
     service = Service()
-    stopped = asyncio.Event()
+    stopped = RunningStopEvent()
     signals: list[signal.Signals] = []
     bus = Bus()
     lifecycle = Lifecycle()
@@ -92,16 +106,21 @@ async def _exercise_run() -> None:
             openrazer_lifecycle=lifecycle,
         )
     )
-    await asyncio.sleep(0)
-    stopped.set()
-    await task
+    try:
+        await asyncio.wait_for(stopped.wait_entered.wait(), timeout=2)
+        stopped.set()
+        await asyncio.wait_for(task, timeout=2)
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), timeout=2)
 
     assert signals == [signal.SIGINT, signal.SIGTERM]
     assert service.events == ["start", "stop"]
     assert lifecycle.events == ["start", "stop"]
     assert bus.events == [
-        "name:org.nagacontrol.Service1",
         "export:/org/nagacontrol/Service1",
+        "name:org.nagacontrol.Service1",
         "disconnect",
     ]
 
