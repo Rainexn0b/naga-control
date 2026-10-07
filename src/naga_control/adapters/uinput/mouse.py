@@ -68,7 +68,7 @@ class VirtualMouse(MouseOutput):
         try:
             self._device.write(self._event_type, code, intent.value)
             self._device.syn()
-        except OSError:
+        except Exception:
             self._fail_closed()
             raise
         if intent.value == 0:
@@ -77,14 +77,22 @@ class VirtualMouse(MouseOutput):
     def release_all(self) -> None:
         if self._closed:
             return
-        try:
-            for code in tuple(self._held_codes):
+        first_error: Exception | None = None
+        for code in tuple(self._held_codes):
+            try:
                 self._device.write(self._event_type, code, 0)
-            if self._held_codes:
+            except Exception as error:
+                if first_error is None:
+                    first_error = error
+        if self._held_codes:
+            try:
                 self._device.syn()
-        except OSError:
+            except Exception as error:
+                if first_error is None:
+                    first_error = error
+        if first_error is not None:
             self._fail_closed()
-            raise
+            raise first_error
         self._held_codes.clear()
 
     def close(self) -> None:
@@ -93,20 +101,21 @@ class VirtualMouse(MouseOutput):
         try:
             self.release_all()
         finally:
-            self._closed = True
-            self._device.close()
+            if not self._closed:
+                self._closed = True
+                self._device.close()
 
     def _fail_closed(self) -> None:
         try:
             for code in tuple(self._held_codes):
-                with suppress(OSError):
+                with suppress(Exception):
                     self._device.write(self._event_type, code, 0)
-            with suppress(OSError):
+            with suppress(Exception):
                 self._device.syn()
         finally:
             self._held_codes.clear()
             self._closed = True
-            with suppress(OSError):
+            with suppress(Exception):
                 self._device.close()
 
 
