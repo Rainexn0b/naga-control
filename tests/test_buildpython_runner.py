@@ -149,9 +149,14 @@ def test_apprun_bridges_only_the_host_openrazer_package(tmp_path: Path, launches
     package = host_site / "openrazer"
     package.mkdir(parents=True)
     (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "client.py").write_text(
+        "from openrazer_daemon.helper import VALUE\n", encoding="utf-8"
+    )
     daemon = host_site / "openrazer_daemon"
     daemon.mkdir()
     (daemon / "__init__.py").write_text("", encoding="utf-8")
+    (daemon / "helper.py").write_text("VALUE = 'host-package'\n", encoding="utf-8")
+    (host_site / "unrelated_host_package.py").write_text("", encoding="utf-8")
     appdir = tmp_path / "AppDir"
     bin_dir = appdir / "usr/bin"
     bin_dir.mkdir(parents=True)
@@ -172,7 +177,10 @@ def test_apprun_bridges_only_the_host_openrazer_package(tmp_path: Path, launches
         "#!/usr/bin/env bash\nunset PYTHONHOME LD_LIBRARY_PATH\n"
         f"exec {shlex.quote(sys.executable)} -c "
         + shlex.quote(
-            "import os, sys; assert sys.flags.no_user_site; assert sys.flags.safe_path; "
+            "import importlib.util, os, sys, openrazer.client; "
+            "assert sys.flags.no_user_site; assert sys.flags.safe_path; "
+            "assert openrazer.client.VALUE == 'host-package'; "
+            "assert importlib.util.find_spec('unrelated_host_package') is None; "
             f"assert os.readlink(os.environ['PYTHONPATH'] + '/openrazer_daemon') == {str(daemon)!r}; "
             "print(os.readlink(os.environ['PYTHONPATH'] + '/openrazer'))"
         )

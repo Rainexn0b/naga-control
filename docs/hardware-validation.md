@@ -582,6 +582,19 @@ mode read cannot succeed until the service requests a rescan. A fake-worker
   regression covers that path. v0.4.0 includes the source fix, but physical
   recovery after a mode drift still needs confirmation.
 
+### AppImage Shutdown Follow-Up (2026-10-05)
+
+A hardware-free transient-unit probe reproduced a matching SIGBUS shutdown
+hazard: `KillMode=control-group` terminates the AppImage FUSE process while
+Python still needs image-backed library pages. `KillMode=mixed` kept the mount
+available through graceful exit; a forced-timeout probe also confirmed bounded
+cgroup cleanup. The packaged unit now uses `mixed`, and a local drop-in applies
+that setting without restarting the running service or replacing its image.
+Actual remapping-service stop/start validation remains a coordinated follow-up.
+See [AppImage Shutdown Investigation](appimage-shutdown-investigation.md) for
+core evidence, reproduction commands, and verification scope. This finding is
+separate from the unproven trigger for the mouse's device-mode regression.
+
 ## Exit Criteria For First Slice
 
 The first vertical slice is complete only when:

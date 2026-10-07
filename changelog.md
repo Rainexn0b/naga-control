@@ -26,6 +26,13 @@ installing or upgrading.
 - The project license changes from MIT to GPL-2.0-only to match OpenRazer,
   which the project uses for all hardware operations.
 
+### Fixed
+
+- The user service now signals the main process first during graceful shutdown,
+  keeping the AppImage's FUSE filesystem alive until Python exits. Previously,
+  stopping the whole control group could remove image-backed library pages
+  during native cleanup and cause SIGBUS.
+
 ## [0.4.0] - 2026-10-05
 
 This release adds direct key recording, cleaner button artwork, lighting color
