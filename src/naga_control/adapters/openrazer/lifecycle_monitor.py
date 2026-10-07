@@ -1,6 +1,7 @@
 """Debounced OpenRazer lifecycle monitoring over the session D-Bus."""
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from importlib import import_module
@@ -10,6 +11,8 @@ from naga_control.ports.hardware import (
     HardwareTopologyRescanController,
     PhysicalTopologyProvider,
 )
+
+logger = logging.getLogger(__name__)
 
 DEVICE_ADDED_RULE = (
     "type='signal',sender='org.razer',path='/org/razer',interface='razer.devices',"
@@ -121,6 +124,7 @@ class OpenRazerLifecycleMonitor:
         self._handler_added = False
         self._rescan_requested = False
         self._stopping = False
+        self._reported_rescan_failures: set[tuple[str, type[Exception]]] = set()
 
     async def start(self) -> None:
         if self._bus is not None:
@@ -167,11 +171,23 @@ class OpenRazerLifecycleMonitor:
         while self._rescan_requested and not self._stopping:
             await asyncio.sleep(self._debounce_seconds)
             self._rescan_requested = False
+            phase = "topology discovery"
             try:
                 topology = await asyncio.to_thread(self._topology_provider.get_topology)
+                phase = "controller rescan"
                 await self._rescan_controller.rescan(topology)
-            except Exception:
-                pass
+            except Exception as exc:
+                failure = (phase, type(exc))
+                if failure not in self._reported_rescan_failures:
+                    # Exception payloads and tracebacks can expose device identifiers.
+                    logger.warning(
+                        "OpenRazer lifecycle rescan failed during %s (%s)",
+                        phase,
+                        type(exc).__name__,
+                    )
+                    self._reported_rescan_failures.add(failure)
+            else:
+                self._reported_rescan_failures.clear()
 
     async def _detach_bus(self) -> None:
         bus = self._bus
