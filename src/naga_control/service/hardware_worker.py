@@ -59,10 +59,10 @@ class HardwareWorker:
         self._stopping = False
 
     async def start(self) -> None:
-        if self._task is not None:
-            return
         if self._stopping:
             raise HardwareWorkerClosedError("hardware worker is stopping")
+        if self._task is not None:
+            return
         self._task = asyncio.create_task(self._run())
 
     def mark_topology_stale(self) -> None:
@@ -103,18 +103,31 @@ class HardwareWorker:
         return await self._submit_current(lambda: self._backend.apply_profile_settings(profile))
 
     async def stop(self) -> None:
-        if self._task is None:
+        """Join cleanup; close errors reach active waiters, but later stops are no-ops."""
+        if self._stopping:
+            if self._task is None or self._task.done():
+                return
+        else:
             self._stopping = True
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(self._executor, self._backend.close)
+            if self._task is None:
+                self._task = asyncio.create_task(self._close())
+            else:
+                self._cancel_pending()
+                self._queue.put_nowait(None)
+            self._task.add_done_callback(self._shutdown_done)
+        await asyncio.shield(self._task)
+
+    @staticmethod
+    def _shutdown_done(task: asyncio.Task[None]) -> None:
+        # Cleanup remains owned even if every stop waiter was cancelled.
+        if not task.cancelled():
+            task.exception()
+
+    async def _close(self) -> None:
+        try:
+            await asyncio.get_running_loop().run_in_executor(self._executor, self._backend.close)
+        finally:
             self._executor.shutdown(wait=False)
-            return
-        if not self._stopping:
-            self._stopping = True
-            self._cancel_pending()
-            self._queue.put_nowait(None)
-        await self._task
-        self._task = None
 
     async def _submit_current(self, operation: Callable[[], _T]) -> _T:
         with self._generation_lock:
@@ -156,10 +169,9 @@ class HardwareWorker:
             finally:
                 self._queue.task_done()
         try:
-            await loop.run_in_executor(self._executor, self._backend.close)
+            await self._close()
         finally:
             self._queue.task_done()
-            self._executor.shutdown(wait=False)
 
     def _cancel_pending(self) -> None:
         while not self._queue.empty():
