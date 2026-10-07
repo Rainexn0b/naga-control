@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,49 +14,62 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  appimage:
-    name: Build + Upload AppImage
+  metadata:
+    name: Validate release metadata (dispatch is validation only)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
-
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.prepare.outputs.version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: python -m pip install 'packaging>=24,<27'
+      - name: Validate pin, version and version-specific notes before either build
+        id: prepare
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            python scripts/prepare_release.py "$GITHUB_REF_NAME" --notes-output release-notes.md
+          else
+            python scripts/prepare_release.py --validation-only --notes-output release-notes.md
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-metadata
+          path: release-notes.md
+          if-no-files-found: error
 
+  appimage:
+    name: Build and validate AppImage (read only)
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Install system deps for headless Qt and AppImage packing
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 squashfs-tools file pkg-config libdbus-1-dev libglib2.0-dev
-
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 squashfs-tools file pkg-config libdbus-1-dev libglib2.0-dev libarchive-tools
       - name: Prepare buildpython environment
         run: |
           python -m venv .venv
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -e ".[dev]"
-
-      - name: Validate tag and prepare version-specific release notes
-        id: prepare
-        run: |
-          .venv/bin/python scripts/prepare_release.py "$GITHUB_REF_NAME" \
-            --notes-output "$RUNNER_TEMP/release-notes.md"
-
       - name: Validate, build, and smoke-test AppImage
         env:
           QT_QPA_PLATFORM: offscreen
-        run: |
-          .venv/bin/pyright scripts/prepare_release.py
-          .venv/bin/python -m buildpython --profile release
-
+        run: .venv/bin/python -m buildpython --profile release
       - name: Verify bundled package version
         env:
-          RELEASE_VERSION: ${{ steps.prepare.outputs.version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
         run: |
           PYTHONHOME="$PWD/build/appimage/AppDir/usr" \
           LD_LIBRARY_PATH="$PWD/build/appimage/AppDir/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
@@ -66,54 +80,110 @@ jobs:
           actual = Version(version("naga-control"))
           expected = Version(os.environ["RELEASE_VERSION"])
           if actual != expected:
-              raise SystemExit(f"Bundled package version {actual} != tag version {expected}")
+              raise SystemExit(f"Bundled package version {actual} != expected version {expected}")
           print(f"Bundled package version: {actual}")
           '
-
-      - name: Verify and normalize AppImage output
+      - name: Stage exactly one AppImage and checksum
         run: |
-          ls -la dist
-          test -f dist/Naga-Control-*-x86_64.AppImage
-          cp dist/Naga-Control-*-x86_64.AppImage dist/Naga-Control-x86_64.AppImage
-
-      - name: Generate SHA-256 sidecar
-        working-directory: dist
-        run: |
+          shopt -s nullglob
+          images=(dist/Naga-Control-*-x86_64.AppImage)
+          test "${#images[@]}" = 1
+          mkdir -p release-assets
+          cp "${images[0]}" release-assets/Naga-Control-x86_64.AppImage
+          cd release-assets
           sha256sum Naga-Control-x86_64.AppImage > Naga-Control-x86_64.AppImage.sha256
-          cat Naga-Control-x86_64.AppImage.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage-release-assets
+          path: release-assets/*
+          if-no-files-found: error
 
-      - name: Check published versions before promotion
-        id: promotion
+  openrazer:
+    name: Build and validate OpenRazer packages (read only)
+    needs: metadata
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base
+    timeout-minutes: 45
+    steps:
+      - name: Install full compiler, header and unittest prerequisites
+        run: |
+          pacman -Syu --noconfirm git base-devel python-setuptools clang llvm lld libarchive linux-headers linux-lts-headers python-daemonize python-pyudev python-setproctitle python-gobject dbus-python xautomation python-numpy
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate canonical pin (makepkg receives validated fields from the same file)
+        run: python buildpython/openrazer_packages/pin.py
+      - name: Build packages unprivileged, with no sudo delegation
+        working-directory: buildpython/openrazer_packages
+        run: |
+          useradd -m builduser
+          chown -R builduser:builduser "$GITHUB_WORKSPACE"
+          runuser -u builduser -- makepkg --verifysource
+          runuser -u builduser -- makepkg --cleanbuild --log
+      - name: Compile gates against Arch mainline and LTS headers (no module loading)
+        working-directory: buildpython/openrazer_packages
+        run: |
+          runuser -u builduser -- bash -eu -c '
+            headers=(/usr/lib/modules/*/build)
+            test "${#headers[@]}" -ge 2
+            cd src/openrazer
+            for header in "${headers[@]}"; do
+              test -r "$header/.config"
+              make KERNELDIR="$header" clean
+              if grep -q "^CONFIG_CC_IS_CLANG=y" "$header/.config"; then
+                make KERNELDIR="$header" LLVM=1 driver
+              else
+                make KERNELDIR="$header" driver
+              fi
+            done
+          '
+      - name: Verify metadata, source stamps, Python bounds, clean imports and hashes
+        run: |
+          runuser -u builduser -- python scripts/validate_release_assets.py buildpython/openrazer_packages \
+            --packages-only --create-checksums --check-imports
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openrazer-release-assets
+          path: |
+            buildpython/openrazer_packages/*.pkg.tar.zst
+            buildpython/openrazer_packages/openrazer-arch-packages.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish only the complete validated release set
+    needs: [metadata, appimage, openrazer]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install only publication validation prerequisites (no builds or tests)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools
+          python -m pip install 'packaging>=24,<27'
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-metadata
+          path: release-metadata
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-release-assets'
+          merge-multiple: true
+          path: release-assets
+      - name: Validate complete set before obtaining publication token
+        run: python scripts/validate_release_assets.py release-assets
+      - name: Reconcile draft, verify uploaded bytes, then publish (public reruns immutable)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
-            --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
-            > "$RUNNER_TEMP/published-tags.txt"
-          .venv/bin/python scripts/prepare_release.py "$GITHUB_REF_NAME" \
-            --published-tags "$RUNNER_TEMP/published-tags.txt" \
-            --notes-output "$RUNNER_TEMP/release-notes.md"
-
-      - name: Upload AppImage to GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PRERELEASE: ${{ steps.promotion.outputs.prerelease }}
-          LATEST: ${{ steps.promotion.outputs.latest }}
-        run: |
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null; then
-            gh release create "$GITHUB_REF_NAME" \
-              --draft --verify-tag --title "$GITHUB_REF_NAME" \
-              --notes-file "$RUNNER_TEMP/release-notes.md"
-          fi
-          gh release upload "$GITHUB_REF_NAME" \
-            dist/Naga-Control-x86_64.AppImage \
-            dist/Naga-Control-x86_64.AppImage.sha256 \
-            --clobber
-          if [ "$PRERELEASE" = true ]; then
-            flags=(--prerelease --latest=false)
-          else
-            flags=(--prerelease=false "--latest=$LATEST")
-          fi
-          gh release edit "$GITHUB_REF_NAME" \
-            --draft=false --title "$GITHUB_REF_NAME" \
-            --notes-file "$RUNNER_TEMP/release-notes.md" "${flags[@]}"
+          python scripts/publish_release_assets.py "$GITHUB_REF_NAME" release-assets \
+            --notes release-metadata/release-notes.md

@@ -1,0 +1,80 @@
+# Downstream Arch guards around the fixed fork source; pin.conf is data, not code.
+# shellcheck shell=bash
+# makepkg supplies *dir, consumes recipe globals, and makes pkgname scalar per package.
+# shellcheck disable=SC2034,SC2154,SC2128
+pkgbase=openrazer-local
+pkgname=('openrazer-driver-dkms-local' 'openrazer-daemon-local' 'python-openrazer-local')
+_pin=$(python "$startdir/pin.py" --pin "$startdir/pin.conf" --shell) || return 1
+eval "$_pin"
+pkgver=$OPENRAZER_PKGVER
+pkgrel=$OPENRAZER_PKGREL
+pkgdesc='OpenRazer canonical PR 2904 derivative with Naga recovery and lifetime fixes'
+arch=('any')
+url="https://github.com/$OPENRAZER_FORK_REPO"
+license=('GPL-2.0-or-later')
+makedepends=('git' 'python-setuptools')
+checkdepends=('clang' 'llvm' 'lld' 'python-daemonize' 'python-pyudev'
+              'python-setproctitle' 'python-gobject' 'dbus-python' 'xautomation' 'python-numpy')
+
+_commit=$OPENRAZER_COMMIT
+_python_minor=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+_python_next=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor + 1}")')
+source=("openrazer::git+https://github.com/$OPENRAZER_FORK_REPO.git#commit=$_commit"
+        'dkms-make' 'openrazer.conf')
+sha256sums=('SKIP' 'd1f17964d91e832af2aaaf5c742ae99388b5848d5b076f0d024e7c3d8c30d553'
+            '18499b8197d0d6d704311f7c15379db6a78ea6472331a5a821632d94ce232206')
+
+prepare() {
+    cd "$srcdir/openrazer" || return 1
+    test "$(git rev-parse HEAD)" = "$_commit" || return 1
+    sed -i 's/plugdev/openrazer/g' daemon/openrazer_daemon/daemon.py \
+        install_files/udev/99-razer.rules install_files/udev/razer_mount
+}
+
+check() {
+    cd "$srcdir/openrazer" || return 1
+    PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$PWD:$PWD/daemon:$PWD/pylib" \
+        python "$startdir/check_tests.py"
+}
+
+_record_source() {
+    install -d "$pkgdir/usr/share/doc/$pkgname"
+    printf '%s\n' "$_commit" > "$pkgdir/usr/share/doc/$pkgname/source-commit"
+}
+
+package_openrazer-driver-dkms-local() {
+    depends=('dkms')
+    provides=("openrazer-driver-dkms=$pkgver")
+    conflicts=('openrazer-driver-dkms')
+
+    cd "$srcdir/openrazer" || return 1
+    make DESTDIR="$pkgdir" PREFIX=/usr DKMS_VER="$pkgver" setup_dkms udev_install appstream_install
+    local dkmsdir="$pkgdir/usr/src/openrazer-driver-$pkgver"
+    sed -i "s/^PACKAGE_VERSION=.*/PACKAGE_VERSION=\"$pkgver\"/" "$dkmsdir/dkms.conf"
+    # DKMS expands kernelver later, not while building the package.
+    # shellcheck disable=SC2016
+    sed -i 's|^MAKE=.*|MAKE="./dkms-make ${kernelver}"|' "$dkmsdir/dkms.conf"
+    install -m755 "$srcdir/dkms-make" "$dkmsdir/dkms-make"
+    install -Dm644 "$srcdir/openrazer.conf" "$pkgdir/usr/lib/sysusers.d/openrazer.conf"
+    _record_source
+}
+
+package_openrazer-daemon-local() {
+    depends=("python>=$_python_minor" "python<$_python_next" 'dbus-python' "openrazer-driver-dkms-local=$pkgver-$pkgrel"
+             'python-daemonize' 'python-gobject' 'python-pyudev' 'python-setproctitle' 'xautomation')
+    optdepends=('libnotify: battery notifications')
+    provides=("openrazer-daemon=$pkgver")
+    conflicts=('openrazer-daemon')
+
+    make -C "$srcdir/openrazer/daemon" DESTDIR="$pkgdir" PREFIX=/usr install
+    _record_source
+}
+
+package_python-openrazer-local() {
+    depends=("python>=$_python_minor" "python<$_python_next" "openrazer-daemon-local=$pkgver-$pkgrel" 'python-numpy')
+    provides=("python-openrazer=$pkgver")
+    conflicts=('python-openrazer')
+
+    make -C "$srcdir/openrazer/pylib" DESTDIR="$pkgdir" PREFIX=/usr install
+    _record_source
+}

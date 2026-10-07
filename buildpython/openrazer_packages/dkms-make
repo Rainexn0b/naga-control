@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 1 ] || [ -z "$1" ]; then
+    printf 'Usage: dkms-make KERNEL_VERSION\n' >&2
+    exit 1
+fi
+kerneldir="/lib/modules/$1/build"
+if [ ! -r "$kerneldir/.config" ]; then
+    printf 'Missing kernel headers/config: %s\n' "$kerneldir" >&2
+    exit 1
+fi
+
+if grep -q '^CONFIG_CC_IS_CLANG=y' "$kerneldir/.config"; then
+    for tool in clang ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            printf 'Clang kernel requires %s (install clang, llvm and lld).\n' "$tool" >&2
+            exit 1
+        fi
+    done
+    exec make KERNELDIR="$kerneldir" LLVM=1 driver
+fi
+
+exec make KERNELDIR="$kerneldir" driver

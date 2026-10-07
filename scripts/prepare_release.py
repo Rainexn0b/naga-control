@@ -6,6 +6,7 @@ import argparse
 import os
 import posixpath
 import re
+import sys
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
@@ -13,14 +14,12 @@ from urllib.parse import quote, urlsplit, urlunsplit
 
 from packaging.version import InvalidVersion, Version
 
-HARDWARE_PREREQUISITES = (
-    (
-        ("2416bfebf0175db6aae519a450f55fe9eba255e9",),
-        "Requires the custom OpenRazer `add-razer-naga-v3-pro-support` baseline at "
-        "`2416bfebf0175db6aae519a450f55fe9eba255e9`; no released upstream minimum "
-        "replaces it. Use compatible kernel module, daemon, Python client, udev rules, "
-        "and metadata.",
-    ),
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from buildpython.openrazer_packages.pin import package_version, read_pin
+
+SAFETY_PREREQUISITES = (
     (
         ("1532:00e7", "1532:00e8", "one transport at a time"),
         "Only Razer Naga V3 Pro wired `1532:00E7` and HyperSpeed `1532:00E8` are "
@@ -31,6 +30,48 @@ HARDWARE_PREREQUISITES = (
         "Do not run the GUI or service as root.",
     ),
 )
+
+
+def hardware_prerequisites(project_root: Path) -> tuple[tuple[tuple[str, ...], str], ...]:
+    pin = read_pin(project_root / "buildpython/openrazer_packages/pin.conf")
+    commit = pin["OPENRAZER_COMMIT"]
+    # Suppress only a complete current requirement, not an incidental SHA mention.
+    # Historical/stale package guidance stays untouched and is intentionally augmented.
+    markers = (
+        f"`{commit}`",
+        f"`{pin['OPENRAZER_FORK_REPO']}`".casefold(),
+        f"`{pin['OPENRAZER_BRANCH']}`".casefold(),
+        f"`{package_version(pin)}`".casefold(),
+        "explicitly opt-in",
+    )
+    baseline = (
+        markers,
+        f"Requires the custom OpenRazer baseline at `{commit}` "
+        f"(fork `{pin['OPENRAZER_FORK_REPO']}`, branch `{pin['OPENRAZER_BRANCH']}`, "
+        f"Arch packages `{package_version(pin)}` attached to this release); no released "
+        "upstream minimum replaces it. Use compatible kernel module, daemon, Python "
+        "client, udev rules, and metadata. The temporary Arch prerequisite bridge is "
+        "explicitly opt-in; source pinning is not an indefinite security freeze.",
+    )
+    return (baseline, *SAFETY_PREREQUISITES)
+
+
+def project_version(project_root: Path) -> Version:
+    with (project_root / "pyproject.toml").open("rb") as source:
+        return Version(tomllib.load(source)["project"]["version"])
+
+
+def promotion(version: Version, published_tags: Sequence[str]) -> tuple[bool, bool]:
+    prerelease = version.is_prerelease or version.is_devrelease
+    latest = not prerelease
+    for tag in published_tags:
+        try:
+            published = Version(tag.strip())
+        except InvalidVersion:
+            continue
+        if not (published.is_prerelease or published.is_devrelease) and published > version:
+            latest = False
+    return prerelease, latest
 
 
 def pin_repository_links(notes: str, tag: str) -> str:
@@ -68,10 +109,9 @@ def prepare_release(tag: str, project_root: Path) -> tuple[Version, str]:
     except InvalidVersion as error:
         raise ValueError(f"Invalid release tag: {tag!r}") from error
 
-    with (project_root / "pyproject.toml").open("rb") as source:
-        package_version = Version(tomllib.load(source)["project"]["version"])
-    if version != package_version:
-        raise ValueError(f"Tag version {version} does not match package version {package_version}")
+    expected_version = project_version(project_root)
+    if version != expected_version:
+        raise ValueError(f"Tag version {version} does not match package version {expected_version}")
 
     changelog = (project_root / "changelog.md").read_text(encoding="utf-8")
     sections = list(re.finditer(r"^## .*$", changelog, re.MULTILINE))
@@ -98,7 +138,7 @@ def prepare_release(tag: str, project_root: Path) -> tuple[Version, str]:
     normalized_notes = " ".join(notes.casefold().split())
     missing = [
         text
-        for markers, text in HARDWARE_PREREQUISITES
+        for markers, text in hardware_prerequisites(project_root)
         if not all(marker in normalized_notes for marker in markers)
     ]
     if missing:
@@ -108,7 +148,10 @@ def prepare_release(tag: str, project_root: Path) -> tuple[Version, str]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tag", help="Release tag, for example v0.3.0 or v0.4.0-rc.1")
+    parser.add_argument("tag", nargs="?", help="Release tag, e.g. v0.3.0 or v0.4.0-rc.1")
+    parser.add_argument(
+        "--validation-only", action="store_true", help="Use project version, not ref"
+    )
     parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--notes-output", type=Path, required=True)
     parser.add_argument("--github-output", type=Path, default=os.environ.get("GITHUB_OUTPUT"))
@@ -117,18 +160,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        version, notes = prepare_release(args.tag, args.project_root)
+        tag = f"v{project_version(args.project_root)}" if args.validation_only else args.tag
+        if tag is None:
+            raise ValueError("A release tag is required unless --validation-only is used")
+        version, notes = prepare_release(tag, args.project_root)
         prerelease = version.is_prerelease or version.is_devrelease
         latest = False
         if args.published_tags is not None:
-            latest = not prerelease
-            for tag in args.published_tags.read_text(encoding="utf-8").splitlines():
-                try:
-                    published = Version(tag.strip())
-                except InvalidVersion:
-                    continue
-                if not (published.is_prerelease or published.is_devrelease) and published > version:
-                    latest = False
+            prerelease, latest = promotion(
+                version, args.published_tags.read_text(encoding="utf-8").splitlines()
+            )
         args.notes_output.write_text(notes, encoding="utf-8")
         outputs = (
             f"version={version}\n"

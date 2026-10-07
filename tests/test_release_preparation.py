@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
 from pathlib import Path
 
 import pytest
+
+from buildpython.openrazer_packages.pin import package_version, read_pin
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "prepare_release.py"
 SPEC = importlib.util.spec_from_file_location("prepare_release", SCRIPT)
@@ -13,6 +16,11 @@ SPEC.loader.exec_module(release)
 
 
 def write_project(tmp_path: Path, version: str, changelog: str) -> None:
+    pin_directory = tmp_path / "buildpython/openrazer_packages"
+    pin_directory.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(
+        SCRIPT.parents[1] / "buildpython/openrazer_packages/pin.conf", pin_directory / "pin.conf"
+    )
     (tmp_path / "pyproject.toml").write_text(
         f'[project]\nname = "naga-control"\nversion = "{version}"\n', encoding="utf-8"
     )
@@ -77,26 +85,99 @@ def test_extracts_only_matching_body_preserving_subheadings(tmp_path: Path) -> N
     assert "# Changelog" not in notes
 
 
-def test_prerequisites_are_added_without_duplicating_existing_content(tmp_path: Path) -> None:
-    baseline = "2416bfebf0175db6aae519a450f55fe9eba255e9"
+@pytest.mark.parametrize("complete", [True, False])
+def test_prerequisites_are_added_without_duplicating_existing_content(
+    tmp_path: Path, complete: bool
+) -> None:
+    write_project(tmp_path, "0.3.0", "")
+    pin = read_pin(tmp_path / "buildpython/openrazer_packages/pin.conf")
+    baseline = pin["OPENRAZER_COMMIT"]
+    requirement = release.hardware_prerequisites(tmp_path)[0][1]
+    existing = requirement if complete else f"Custom OpenRazer baseline `{baseline}`."
     body = (
-        f"- Custom OpenRazer baseline `{baseline}`.\n"
+        f"- {existing}\n"
         "- Wired `1532:00E7` and HyperSpeed `1532:00E8`, one transport\n  at a time.\n"
     )
-    write_project(tmp_path, "0.3.0", f"## [0.3.0] - 2026-10-03\n\n{body}")
+    changelog = f"## [0.3.0] - 2026-10-03\n\n{body}"
+    (tmp_path / "changelog.md").write_text(changelog)
     release.main(arguments(tmp_path, "v0.3.0"))
     notes = (tmp_path / "notes.md").read_text()
-    assert notes.count(baseline) == 1
+    assert notes.startswith(body.strip())
+    assert notes.count(baseline) == (1 if complete else 2)
+    assert notes.count(requirement) == 1
     assert notes.count("1532:00E7") == 1
     assert notes.count("1532:00E8") == 1
     assert "Do not run the GUI or service as root." in notes
+    assert (tmp_path / "changelog.md").read_text() == changelog
 
 
 def test_complete_prerequisites_leave_entry_unchanged(tmp_path: Path) -> None:
-    body = "\n".join(f"- {text}" for _, text in release.HARDWARE_PREREQUISITES) + "\n"
+    write_project(tmp_path, "0.3.0", "")
+    body = "\n".join(f"- {text}" for _, text in release.hardware_prerequisites(tmp_path)) + "\n"
     write_project(tmp_path, "0.3.0", f"## [0.3.0] - 2026-10-03\n\n{body}")
     release.main(arguments(tmp_path, "v0.3.0"))
     assert (tmp_path / "notes.md").read_text() == body
+
+
+@pytest.mark.parametrize("omitted", ["commit", "fork", "branch", "version", "opt-in"])
+def test_incomplete_requirement_receives_current_canonical_augmentation(
+    tmp_path: Path, omitted: str
+) -> None:
+    write_project(tmp_path, "0.3.0", "")
+    pin = read_pin(tmp_path / "buildpython/openrazer_packages/pin.conf")
+    canonical = release.hardware_prerequisites(tmp_path)[0][1]
+    fields = {
+        "commit": pin["OPENRAZER_COMMIT"],
+        "fork": pin["OPENRAZER_FORK_REPO"],
+        "branch": pin["OPENRAZER_BRANCH"],
+        "version": package_version(pin),
+        "opt-in": "explicitly opt-in",
+    }
+    incomplete = canonical.replace(fields[omitted], "omitted")
+    (tmp_path / "changelog.md").write_text(f"## [0.3.0] - 2026-10-03\n\n{incomplete}\n")
+    _, notes = release.prepare_release("v0.3.0", tmp_path)
+    assert notes.startswith(incomplete)
+    assert canonical in notes
+
+
+@pytest.mark.parametrize(
+    ("version", "pkgrel"),
+    [("3.12.1.pr2904.fix2", "2"), ("3.12.1.fixture", "1"), ("3.12.1.fixture", "2")],
+)
+def test_same_sha_with_stale_package_guidance_uses_current_fixture_pin(
+    tmp_path: Path, version: str, pkgrel: str
+) -> None:
+    write_project(tmp_path, "0.3.0", "")
+    pin_path = tmp_path / "buildpython/openrazer_packages/pin.conf"
+    original_pin = read_pin(pin_path)
+    stale = release.hardware_prerequisites(tmp_path)[0][1]
+    changelog = f"## [0.3.0] - 2026-10-03\n\n{stale}\n"
+    (tmp_path / "changelog.md").write_text(changelog)
+    pin_path.write_text(
+        pin_path.read_text()
+        .replace(original_pin["OPENRAZER_PKGVER"], version)
+        .replace('OPENRAZER_PKGREL="1"', f'OPENRAZER_PKGREL="{pkgrel}"')
+    )
+    current = release.hardware_prerequisites(tmp_path)[0][1]
+    release.main(arguments(tmp_path, "v0.3.0"))
+    notes = (tmp_path / "notes.md").read_text()
+    assert notes.startswith(stale)
+    assert current in notes
+    assert f"Arch packages `{version}-{pkgrel}`" in notes
+    assert notes.count("explicitly opt-in") == 2
+    assert notes.count(original_pin["OPENRAZER_COMMIT"]) == 2
+    assert (tmp_path / "changelog.md").read_text() == changelog
+
+
+def test_pkgrel_prefix_is_not_a_complete_current_package_version(tmp_path: Path) -> None:
+    write_project(tmp_path, "0.3.0", "")
+    pin = read_pin(tmp_path / "buildpython/openrazer_packages/pin.conf")
+    canonical = release.hardware_prerequisites(tmp_path)[0][1]
+    stale = canonical.replace(f"`{package_version(pin)}`", f"`{package_version(pin)}0`")
+    (tmp_path / "changelog.md").write_text(f"## [0.3.0] - 2026-10-03\n\n{stale}\n")
+    _, notes = release.prepare_release("v0.3.0", tmp_path)
+    assert notes.startswith(stale)
+    assert canonical in notes
 
 
 @pytest.mark.parametrize(
@@ -245,3 +326,29 @@ def test_non_repository_links_are_unchanged(tmp_path: Path) -> None:
     write_project(tmp_path, "0.3.0", f"## [0.3.0] - 2026-10-03\n{body}")
     release.main(arguments(tmp_path, "v0.3.0"))
     assert (tmp_path / "notes.md").read_text().startswith(body)
+
+
+def test_dispatch_uses_project_version_not_main_or_tag_ref(tmp_path: Path) -> None:
+    write_project(tmp_path, "0.3.0", "## [0.3.0] - 2026-10-03\nChanges.\n")
+    for ref in ("main", "v9.9.9"):
+        assert release.main([*arguments(tmp_path, ref), "--validation-only"]) == 0
+        assert "version=0.3.0" in (tmp_path / "outputs").read_text()
+
+
+def test_prerequisites_follow_validated_fixture_pin(tmp_path: Path) -> None:
+    write_project(tmp_path, "0.3.0", "## [0.3.0] - 2026-10-03\nChanges.\n")
+    pin = tmp_path / "buildpython/openrazer_packages/pin.conf"
+    pin.write_text(pin.read_text().replace("3.12.1.pr2904.fix2", "3.12.1.fixture"))
+    release.main(arguments(tmp_path, "v0.3.0"))
+    notes = (tmp_path / "notes.md").read_text()
+    assert "3.12.1.fixture-1" in notes
+    assert "3.12.1.pr2904.fix2" not in notes
+
+
+def test_missing_pin_is_not_replaced_with_hardcoded_prerequisites(tmp_path: Path) -> None:
+    write_project(tmp_path, "0.3.0", "## [0.3.0] - 2026-10-03\nChanges.\n")
+    (tmp_path / "buildpython/openrazer_packages/pin.conf").unlink()
+    with pytest.raises(SystemExit) as caught:
+        release.main(arguments(tmp_path, "v0.3.0"))
+    assert caught.value.code == 2
+    assert not (tmp_path / "notes.md").exists()
