@@ -1,6 +1,7 @@
 """Publish the narrow Naga Control contract on the session bus."""
 
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from importlib import import_module
 from typing import Protocol, cast
 
@@ -15,6 +16,7 @@ class SessionBus(Protocol):
 
 class _ConnectableBus(Protocol):
     async def connect(self) -> SessionBus: ...
+    def disconnect(self) -> None: ...
 
 
 class _MessageBusFactory(Protocol):
@@ -33,7 +35,13 @@ async def connect_session_bus() -> SessionBus:
     constants = import_module("dbus_next.constants")
     factory = cast(_MessageBusFactory, aio.MessageBus)
     bus_type = cast(_BusType, constants.BusType)
-    return await factory(bus_type=bus_type.SESSION).connect()
+    raw = factory(bus_type=bus_type.SESSION)
+    try:
+        return await raw.connect()
+    except BaseException:
+        with suppress(Exception):
+            raw.disconnect()
+        raise
 
 
 async def publish_service(bus: SessionBus, interface: NagaControlInterface) -> None:
