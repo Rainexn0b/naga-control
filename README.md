@@ -362,6 +362,7 @@ the systemd user unit, D-Bus activation file, and desktop entry install under
 - `docs/implementation-plan.md`: milestones and acceptance criteria
 - `docs/hardware-validation.md`: completed evidence and outstanding hardware tests
 - `docs/build-layout-consolidation.md`: build ownership standard and migration checks
+- `docs/debt-paydown-campaign.md`: prioritized debt work, acceptance checks, and progress
 - `buildpython/`: validation, AppImage construction, and release orchestration
 - `system/udev/70-naga-control.rules`: least-scope device access rules
 - `system/`: desktop, systemd user, D-Bus, and udev templates
