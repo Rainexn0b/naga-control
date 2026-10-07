@@ -15,6 +15,7 @@ REQUIRED_FILES = (
     "install.sh",
     "uninstall.sh",
     "scripts/install_user.sh",
+    "scripts/install_openrazer.sh",
     "scripts/uninstall.sh",
     "buildpython/steps/appimage/build.py",
     "buildpython/steps/appimage/AppRun",
@@ -23,6 +24,11 @@ REQUIRED_FILES = (
     "system/systemd/user/naga-control.service",
     "system/dbus-1/services/org.nagacontrol.Service1.service",
     "assets/org.nagacontrol.NagaControl.svg",
+    "buildpython/openrazer_packages/PKGBUILD",
+    "buildpython/openrazer_packages/pin.conf",
+    "buildpython/openrazer_packages/dkms-make",
+    "buildpython/openrazer_packages/openrazer.conf",
+    "buildpython/openrazer_packages/README.md",
     *(f"assets/icons/hicolor/{size}x{size}/apps/{APP_ID}.png" for size in ICON_SIZES),
 )
 

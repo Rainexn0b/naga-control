@@ -16,7 +16,14 @@ It is currently proposed by open, unmerged
 
 The inspected host runs a local `3.12.1.pr2904.fix1` build derived from that
 commit. Its fixes add retry/readiness and shutdown behavior not represented by
-the daemon's reported version, which remains `3.12.1`. Earlier complete
+the daemon's reported version, which remains `3.12.1`.
+
+The current host baseline is `3.12.1.pr2904.fix2-1` at fork commit
+`26b0eeb5ed70d638fa3528851adcd5e58369a7f5` (branch
+`test-pr-2904-edualb`), which adds probe/mouse-activity lifetime fixes over
+the PR head `7a6d39784cfc22c07205a8e43f5f64cf03399710`. This is the revision
+pinned in `buildpython/openrazer_packages/pin.conf` for optional CI-built Arch
+release assets; older release tags may lack them. Earlier complete
 hardware validation used the custom `add-razer-naga-v3-pro-support` branch at
 known-good commit `2416bfebf0175db6aae519a450f55fe9eba255e9`, packaged as
 `3.12.4.nagav3.1-9`.
@@ -34,6 +41,10 @@ The unmerged status does not block development or personal use on the current
 test system. Release documentation must pin the exact custom revision or a
 future released version that provides the same capabilities and recovery
 behavior.
+
+Focused daemon/pylib tests pass on the fix2 baseline (55 tests run during the
+Arch package build), but long-term idle/wake hardware acceptance for fix2 is
+not yet recorded.
 
 The optional prerequisite installer now recognizes only a consistently stamped
 exact pinned package cohort as known inventory. Older fix1/mixed/unstamped or
