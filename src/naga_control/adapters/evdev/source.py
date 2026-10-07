@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import AsyncIterator, Callable, Collection, Iterator, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from importlib import import_module
 from typing import Protocol, cast
@@ -162,8 +163,9 @@ def open_evdev_source(
             identity_resolver=identity_resolver,
             device_number_resolver=device_number_resolver,
         )
-    except Exception:
-        device.close()
+    except BaseException:
+        with suppress(Exception):
+            device.close()
         raise
 
 

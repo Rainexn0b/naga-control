@@ -56,6 +56,16 @@ class SourceFrameConsumer:
         self._forwarder.stop()
 
     def _release_outputs(self) -> None:
-        self._planner.release_all()
-        self._keyboard.release_all()
-        self._mouse.release_all()
+        first_error: Exception | None = None
+        for release in (
+            self._planner.release_all,
+            self._keyboard.release_all,
+            self._mouse.release_all,
+        ):
+            try:
+                release()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error

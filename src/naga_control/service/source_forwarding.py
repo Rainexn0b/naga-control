@@ -55,9 +55,9 @@ class SourceForwarder:
             self._grabbed = True
             self._require_no_held_keys("after grab")
             self._active = True
-        except Exception as exc:
+        except BaseException as exc:
             self._cleanup()
-            if isinstance(exc, SourceActivationError):
+            if isinstance(exc, SourceActivationError) or not isinstance(exc, Exception):
                 raise
             raise SourceActivationError("could not safely activate source forwarding") from exc
 

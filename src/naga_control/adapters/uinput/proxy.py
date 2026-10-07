@@ -1,5 +1,6 @@
 """Explicit uinput forwarding-proxy construction from a prepared source spec."""
 
+from contextlib import suppress
 from importlib import import_module
 from typing import Protocol, cast
 
@@ -63,7 +64,8 @@ def prepare_ready_proxy(
     created = factory.create(spec)
     try:
         waiter.wait_ready(spec)
-    except Exception:
-        created.close()
+    except BaseException:
+        with suppress(Exception):
+            created.close()
         raise
     return created
