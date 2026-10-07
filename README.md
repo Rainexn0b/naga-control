@@ -7,7 +7,7 @@ HyperSpeed `1532:00E8` variants.
 **This is a personal off-project.** It exists to support one specific mouse
 on the maintainer's desktop, built as a best effort alongside other work.
 There is no support commitment, no roadmap, and no guarantee of timely
-fixes — issues and PRs are welcome but may sit. It works well for the
+fixes - issues and PRs are welcome but may sit. It works well for the
 hardware and distro it was validated on (see
 [hardware validation](docs/hardware-validation.md)); anywhere else you are
 your own QA.
@@ -18,29 +18,94 @@ frontend and it does not reimplement OpenRazer's HID protocol.
 
 ## Install
 
-Requires a Linux desktop, OpenRazer with the Naga V3 Pro baseline (see
-[release notes](docs/release-notes.md)), and `curl`. Standard install:
+Requires an unprivileged Linux x86_64 desktop session, user systemd/session
+D-Bus, FUSE2 library/runtime support, `curl`, `sudo`, and the standard tools
+listed under [installer prerequisites](docs/troubleshooting.md#installer-prerequisites).
+OpenRazer must already provide the [Naga baseline](docs/release-notes.md).
+No missing OS prerequisites are automatically installed.
+Managed service/desktop integration always requires FUSE; leave
+`APPIMAGE_EXTRACT_AND_RUN` unset (or `0`). Extraction is manual launch-only,
+not a supported FUSEless managed installation.
+
+One command that preserves terminal stdin and pins **script, bootstrap ref and
+artifact version** to the existing published v0.4.0 tag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh -o install.sh && bash install.sh
+(umask 077; d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT && trap 'exit 130' INT && trap 'exit 143' HUP TERM && curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/v0.4.0/install.sh -o "$d/install.sh" && bash "$d/install.sh" --ref v0.4.0 --version v0.4.0)
 ```
 
-Pinned release:
+The new safety behavior below belongs to **this checkout's installer**, not
+retroactively to scripts published at v0.4.0 or other older tags. Review a
+published tagged installer before using it. No future release is implied here.
+To use the reviewed new installer from a checkout:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh -o install.sh && bash install.sh --version v0.4.0
+./install.sh --version v0.4.0
 ```
+
+The ordinary install is **app-only**: it never offers, downloads, installs, or
+replaces OpenRazer, and never changes its group or daemon. On experimental
+Arch/pacman hosts, explicitly append `--install-openrazer` to the **same bash
+command** in the one-liner (or use `./install.sh --version v0.4.0 --install-openrazer`
+from a checkout). `NAGA_CONTROL_INSTALL_OPENRAZER=1` also opts in. This deliberately reinstalls
+the whole pinned cohort, even at the same source/version (recipe metadata,
+wrapper, or builder Python may have changed), with pacman's own prompts; read the
+[prerequisite and rollback guidance](docs/release-notes.md#required-openrazer)
+first. `NAGA_CONTROL_INSTALL_OPENRAZER=0` is a hard skip even with the flag;
+other values (including an empty value) are errors.
+
+Opt-in still needs a terminal for confirmation and pacman's own conflict
+prompts. It validates the release manifest, hashes, source stamps, metadata,
+and the system Python minor via isolated `/usr/bin/python3`, not a PATH/virtualenv
+alias, before sudo, including active-kernel headers/build metadata and toolchain
+checks.
+The helper's read-only `--preflight` checks Python minimum, active-kernel headers,
+tools and session connectivity **before Naga stop consent**. Helpers lacking this
+mode fail closed for opt-in; ordinary app-only installs still need no helper.
+Release archive/Python-minor validation happens separately before sudo; the
+actual install repeats environment gates and keeps pacman's own prompts.
+Activation is deferred: the user units are
+enabled **without starting them**; reboot/re-login and verify OpenRazer before
+starting Naga. The new app installer requires consent to gracefully stop a
+running **Naga-only** service first; no OpenRazer/GUI processes are killed.
+Other distributions
+need a manual matching-source native build, not Arch packages; this is not a
+promise of support for all Arch derivatives or for Debian/Fedora.
 
 Uninstall:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/uninstall.sh -o uninstall.sh && bash uninstall.sh --yes --purge-config
+./scripts/uninstall.sh --yes
 ```
 
-This installs the AppImage to `~/.local/bin`, the systemd user unit,
-D-Bus activation, the desktop entry, and (with sudo) the udev rule, then
-enables the service at login. Removal: `scripts/uninstall.sh --yes
---purge-config`.
+The new installer verifies the exact release's canonical `.sha256` sidecar and
+AppImage bytes **before execution, replacement, service stop or sudo**. Reused
+local images are hashed too. Missing older-release checksums fail closed, with
+no legacy fallback. HTTPS hashes detect corruption, not independent publisher
+authenticity or signatures. Installation uses private temporary staging,
+same-filesystem atomic replacement, and a stable per-user nonblocking lock.
+
+For a running service, quit the GUI and release held controls before consenting
+to the temporary remapping outage. No TTY/default refusal cancels safely;
+`--restart-service` explicitly consents. Verified previous image/tag rollback
+pairs are retained in `~/.local/share/naga-control/rollback.*`, including forced
+same-version downloads; unchanged reinstalls preserve existing backups. Profiles
+are untouched. See [upgrades and recovery](docs/troubleshooting.md#installer-upgrades-and-rollback).
+Uninstall removes installer backups/stamps but retains the lock inode and
+OpenRazer. Add `--purge-config` only if profile removal is intended.
+
+App-only success enables/starts the user service; that is **not hardware
+readiness**. OpenRazer opt-in or a failed udev reload leaves activation staged.
+There is no broad udev trigger; replug the target mouse after rules reload.
+After prerequisites are activated, inspect this read-only application snapshot
+(the command can D-Bus-activate the service; the installer only prints it):
+
+```bash
+busctl --user call org.nagacontrol.Service1 /org/nagacontrol/Service1 org.nagacontrol.Service1 GetSnapshot
+```
+
+Require `status` = `available` and perform physical F13/F14 DPI-stage and F17
+held-ALT down/up checks. These are not automatically established by installation.
 
 ## Status
 
@@ -50,8 +115,8 @@ ordered frame parsing, proxy-before-grab activation, forwarding clones,
 replacement outputs, session D-Bus, and the native Qt configuration UI. The
 12-button first slice has passed on both wired and HyperSpeed hardware for
 F13/F14 DPI stage changes and held F17-to-LEFTALT output. All 19 12-button
-controls are captured and remapped on both transports — including verified
-top buttons (`KPSLASH`/`F18`), scan-less wheel tilt, and the full thumb grid —
+controls are captured and remapped on both transports - including verified
+top buttons (`KPSLASH`/`F18`), scan-less wheel tilt, and the full thumb grid -
 plus the 6- and 2-button plates on HyperSpeed. Motion, clicks, and
 high-resolution wheel are validated through the forwarding proxies, and the
 2-button plate validates virtual-mouse back/forward output. HyperSpeed daemon
@@ -69,10 +134,18 @@ alternate-plate capture remain.
 Naga V3 Pro support is intentionally developed against a compatible custom
 OpenRazer build while
 [PR #2904](https://github.com/openrazer/openrazer/pull/2904) remains unmerged.
-This is a project prerequisite, not a development blocker. See
+This is a project prerequisite, not a development blocker. The pinned baseline
+is fork commit `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` on branch
+`test-pr-2904-edualb`, packaged as `3.12.1.pr2904.fix2-1`. Release packaging
+provides these optional prebuilt pinned Arch assets; older tags may lack them.
+Installation is strictly
+opt-in and restricted to experimental compatible Arch/pacman/Python hosts;
+other distributions require a native matching-source build. Exact-pin natural
+idle/wake acceptance remains open; older baseline passes do not establish fix2
+hardware acceptance. See
 [integration findings](docs/integration-findings.md) for the tested baselines,
 required capabilities, and known wireless behavior. Release notes pin the
-exact tested OpenRazer revision in [release notes](docs/release-notes.md);
+exact prerequisite OpenRazer revision in [release notes](docs/release-notes.md);
 see also [troubleshooting](docs/troubleshooting.md).
 
 ## Control Panel
@@ -167,6 +240,10 @@ create the virtual environment with access to system packages:
 python -m venv --system-site-packages .venv
 .venv/bin/python -m pip install -e '.[dev]'
 ```
+
+The fake archive tests also require `bsdtar`: install `libarchive` on Arch or
+`libarchive-tools` on Debian/Ubuntu. These tests read fixture archives only;
+they do not install packages or access hardware.
 
 Run the baseline checks with:
 

@@ -35,6 +35,24 @@ test system. Release documentation must pin the exact custom revision or a
 future released version that provides the same capabilities and recovery
 behavior.
 
+The optional prerequisite installer now recognizes only a consistently stamped
+exact pinned package cohort as known inventory. Older fix1/mixed/unstamped or
+other builds are **UNVERIFIED**, not unsupported by a source PID grep or daemon
+version. It checks host import discoverability without contacting OpenRazer or
+devices; runtime capabilities/recovery remain the application's authority.
+Ordinary app installs never fetch the optional helper or modify OpenRazer.
+Explicit opt-in validates the complete three-package manifest, tagged source
+pin, hashes, archive metadata/source stamps, dependency links, and builder Python
+minor bounds and matching Python package paths before sudo, using isolated
+`/usr/bin/python3` rather than a virtualenv/PATH alias. It rejects unsafe or
+duplicate normalized archive paths and requires `.BUILDINFO` alongside package
+metadata. Explicit opt-in reinstalls all three archives even at the same version
+in one interactive pacman transaction and enables
+only user units without live activation. Reboot/re-login and exact-pin natural
+idle/wake verification remain pending, not implied by installer/fake-test success.
+See [release prerequisites](release-notes.md#required-openrazer) for the narrow
+experimental Arch support, provenance limits, native-build route, and rollback.
+
 ## OpenRazer Device Classes
 
 The proposed daemon hierarchy is:

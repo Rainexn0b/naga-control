@@ -38,6 +38,20 @@ else
   python3 -m naga_control.integration_cli remove >/dev/null 2>&1 || true
 fi
 rm -f "$APPIMAGE_DST" "$WRAPPER_DST"
+# Only installer-owned rollback pairs/stamp are removed; retain the stable
+# install.lock inode and never remove dependencies or user profiles here.
+STATE_DIR="$HOME/.local/share/naga-control"
+if [ -d "$STATE_DIR" ] && [ ! -L "$STATE_DIR" ]; then
+  rm -f "$STATE_DIR/installed-tag"
+  for backup in "$STATE_DIR"/rollback.*; do
+    [ -d "$backup" ] && [ ! -L "$backup" ] || continue
+    [[ "${backup##*/}" =~ ^rollback\.[a-zA-Z0-9]{6}$ ]] || continue
+    [ -f "$backup/installer-backup" ] && [ ! -L "$backup/installer-backup" ] || continue
+    [ "$(cat "$backup/installer-backup")" = naga-control-installer-backup-v1 ] || continue
+    rm -f "$backup/naga-control.AppImage" "$backup/installed-tag" "$backup/image.sha256" "$backup/installer-backup"
+    rmdir "$backup" 2>/dev/null || true
+  done
+fi
 log "removed AppImage, wrapper, and integration files"
 
 UDEV_DST="/etc/udev/rules.d/70-naga-control.rules"
@@ -54,4 +68,5 @@ if [ "$PURGE_CONFIG" -eq 1 ]; then
   log "removed ~/.config/naga-control"
 fi
 
+log "OpenRazer packages, group membership, and user daemon are retained; no dependency removal is performed"
 log "uninstall complete"

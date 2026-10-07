@@ -10,6 +10,7 @@ _SHELL_SCRIPTS = (
     "install.sh",
     "uninstall.sh",
     "scripts/install_user.sh",
+    "scripts/install_openrazer.sh",
     "scripts/uninstall.sh",
     "buildpython/steps/appimage/AppRun",
 )

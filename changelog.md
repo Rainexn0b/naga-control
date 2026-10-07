@@ -12,6 +12,15 @@ installing or upgrading.
 
 ## [Unreleased]
 
+### Added
+
+- Releases now include CI-built pinned OpenRazer Arch packages
+  (driver-dkms/daemon/Python client from fork commit `26b0eeb5...`) plus a
+  sha256 sidecar, installable as one pacman transaction.
+- OpenRazer replacement is explicitly opt-in: the installer validates the
+  release's pinned Arch packages before one interactive sudo pacman transaction;
+  other distributions keep the manual matching-source procedure.
+
 ### Changed
 
 - The project license changes from MIT to GPL-2.0-only to match OpenRazer,
