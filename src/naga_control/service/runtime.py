@@ -4,28 +4,23 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Callable
-from dataclasses import replace
 
 from naga_control.adapters.evdev.discovery import NagaConnection
-from naga_control.config import dump_toml, parse_toml
-from naga_control.domain.defaults import default_configuration
 from naga_control.domain.hardware import DeviceMode, HardwareState, SettingsFailure
 from naga_control.domain.profiles import Configuration
 from naga_control.ports.config_store import ConfigurationStore
 from naga_control.ports.hardware import NagaTopology
 from naga_control.service.calibration import adopt_observed_settings, passthrough_configuration
+from naga_control.service.configuration_authority import ConfigurationAuthority
+from naga_control.service.configuration_authority import (
+    StaleConfigurationRevisionError as StaleConfigurationRevisionError,
+)
+from naga_control.service.configuration_authority import UnknownProfileError as UnknownProfileError
 from naga_control.service.contracts import RemappingSession, ServiceHardwareWorker
+from naga_control.service.session_lifecycle import SessionLifecycle
 from naga_control.service.snapshot import snapshot_document
 
 logger = logging.getLogger(__name__)
-
-
-class StaleConfigurationRevisionError(RuntimeError):
-    """The requested revision is no longer current."""
-
-
-class UnknownProfileError(ValueError):
-    """The requested profile does not exist."""
 
 
 class NagaService:
@@ -39,13 +34,10 @@ class NagaService:
         state_poll_interval: float = 30.0,
     ) -> None:
         self._discover = discover
-        self._load_configuration = load_configuration
+        self._config = ConfigurationAuthority(load_configuration, store)
         self._worker = worker
         self._session_factory = session_factory
-        self._store = store
-        self._session: RemappingSession | None = None
         self._state: HardwareState | None = None
-        self._configuration: Configuration | None = None
         self._settings_failures: tuple[SettingsFailure, ...] = ()
         self._started = False
         self._calibrating = False
@@ -57,24 +49,33 @@ class NagaService:
         self._mode_write_failed = False
         self._needs_rescan = False
         self._topology_epoch = 0
+        self._sessions = SessionLifecycle(self._fence_session)
+        self._stop_task: asyncio.Task[Exception | None] | None = None
         self._cleanup_tasks: set[asyncio.Task[None]] = set()
 
     async def start(self) -> HardwareState:
         starting = False
         try:
             async with self._lock:
+                if self._stop_task is not None:
+                    raise RuntimeError("Naga service has been stopped")
                 if self._started:
                     raise RuntimeError("Naga service is already active")
                 starting = True
                 self._started = True
-                self._configuration = self._load_configuration() or default_configuration()
+                self._config.load()
                 await self._worker.start()
                 state = await self._apply_topology(self._discover())
+                if self._stop_task is not None:
+                    raise RuntimeError("Naga service is stopping")
                 self._state_poll_task = asyncio.create_task(self._poll_observed_state())
                 return state
         except BaseException:
             if starting:
-                await self.stop()
+                try:
+                    await self.stop()
+                except Exception as exc:
+                    logger.error("service startup rollback cleanup failed: %s", type(exc).__name__)
             raise
 
     async def _poll_observed_state(self) -> None:
@@ -96,11 +97,11 @@ class NagaService:
                 try:
                     mode = await self._worker.read_device_mode()
                     self._observed_mode = mode
-                    if mode != self._require_configuration().mode:
+                    if mode != self._config.require_current().mode:
                         self._mode_error = f"device mode drifted to {mode}"
-                        await self._stop_session()
+                        await self._sessions.stop()
                         if (
-                            self._require_configuration().mode == "firmware"
+                            self._config.require_current().mode == "firmware"
                             and not self._mode_write_failed
                         ):
                             try:
@@ -118,9 +119,11 @@ class NagaService:
                     self._mode_error = None
                     self._state = await self._worker.refresh_state()
                     if self._state.status != "available":
-                        await self._stop_session()
+                        await self._sessions.stop()
                     elif (
-                        self._session is None and mode == "software" and not self._mode_write_failed
+                        self._sessions.current is None
+                        and mode == "software"
+                        and not self._mode_write_failed
                     ):
                         connections = self._discover()
                         if len(connections) == 1 and connections[0].nodes:
@@ -128,102 +131,93 @@ class NagaService:
                 except Exception as exc:
                     self._observed_mode = None
                     self._mode_error = str(exc)
-                    await self._stop_session()
+                    await self._sessions.stop()
                     logger.debug("periodic state refresh failed", exc_info=True)
 
     async def apply_topology(self, connections: tuple[NagaConnection, ...]) -> HardwareState:
         async with self._lock:
             return await self._apply_topology(connections)
 
-    async def _stop_session(self) -> None:
-        session, self._session = self._session, None
-        if session is not None:
-            self._worker.mark_topology_stale()
-            self._needs_rescan = True
-            await session.stop()
+    def _fence_session(self) -> None:
+        self._worker.mark_topology_stale()
+        self._needs_rescan = True
+
+    async def _require_mutable(self) -> None:
+        if self._stop_task is not None or not self._started:
+            raise RuntimeError("Naga service is not active")
+        await self._sessions.wait()
+        if self._stop_task is not None:
+            raise RuntimeError("Naga service is stopping")
 
     async def _apply_topology(self, connections: tuple[NagaConnection, ...]) -> HardwareState:
-        if not self._started or self._configuration is None:
-            raise RuntimeError("Naga service is not active")
-        await self._stop_session()
+        await self._require_mutable()
+        await self._sessions.stop()
         state = await self._rescan(connections)
-        if self._mode_ready() and self._configuration.mode == "software":
+        if self._mode_ready() and self._config.require_current().mode == "software":
             await self._apply_profile_settings()
             if self._mode_ready() and len(connections) == 1 and connections[0].nodes:
                 await self._start_session(connections[0])
         return state
 
     async def _start_session(self, connection: NagaConnection) -> None:
-        configuration = self._require_configuration()
+        await self._sessions.wait()
+        configuration = self._config.require_current()
         if self._calibrating:
             configuration = passthrough_configuration(configuration)
         session = self._session_factory(connection, configuration)
-        self._session = session
         try:
-            await session.start()
+            await self._sessions.start(session)
         except BaseException as exc:
-            self._session = None
             self._mode_error = f"input forwarding: {exc}"
-            await session.stop()
             raise
 
     def _mode_ready(self) -> bool:
         return (
-            self._state is not None
+            not self._sessions.unsafe
+            and self._state is not None
             and self._state.status == "available"
-            and self._observed_mode == self._require_configuration().mode
+            and self._observed_mode == self._config.require_current().mode
         )
 
     async def _apply_profile_settings(self) -> None:
-        assert self._configuration is not None
+        await self._sessions.wait()
+        configuration = self._config.current
+        assert configuration is not None
         if self._calibrating:
             return
-        profile = self._configuration.profile(self._configuration.active_profile)
+        profile = configuration.profile(configuration.active_profile)
         state, failures = await self._worker.apply_profile_settings(profile)
         self._settings_failures = failures
         self._state = state
         if state.status != "available":
             self._observed_mode = None
             self._mode_error = "device mode unknown: profile settings lost hardware access"
-            await self._stop_session()
+            await self._sessions.stop()
         for failure in failures:
             logger.warning("profile setting %s failed: %s", failure.setting, failure.message)
 
     def mark_topology_stale(self) -> None:
         if self._started:
-            self._worker.mark_topology_stale()
+            self._fence_session()
             self._topology_epoch += 1
-            self._needs_rescan = True
             self._observed_mode = None
             self._mode_error = "OpenRazer topology changed"
-            if session := self._session:
-                try:
-                    session.release_all()
-                except Exception:
-                    logger.exception("could not release generated outputs after topology change")
-                self._schedule_stop(session)
+            self._schedule_stop()
 
-    def _schedule_stop(self, session: RemappingSession) -> None:
-        task = asyncio.create_task(self._stop_unsafe_session(session))
-        self._cleanup_tasks.add(task)
-        task.add_done_callback(self._cleanup_tasks.discard)
-
-    async def _stop_unsafe_session(self, session: RemappingSession) -> None:
-        try:
-            async with self._lock:
-                if self._session is session:
-                    await self._stop_session()
-        except Exception:
-            logger.exception("could not stop unsafe remapping session")
+    def _schedule_stop(self) -> None:
+        if task := self._sessions.invalidate(self._lock):
+            self._cleanup_tasks.add(task)
+            task.add_done_callback(self._cleanup_tasks.discard)
 
     async def rescan(self, connections: tuple[NagaTopology, ...]) -> HardwareState:
         async with self._lock:
-            await self._stop_session()
+            await self._require_mutable()
+            await self._sessions.stop()
             state = await self._rescan(connections)
             if (
                 self._mode_ready()
-                and self._require_configuration().mode == "software"
-                and self._session is None
+                and self._config.require_current().mode == "software"
+                and self._sessions.current is None
             ):
                 physical = self._discover()
                 if len(physical) == 1 and physical[0].nodes:
@@ -235,13 +229,14 @@ class NagaService:
     async def _rescan(self, connections: tuple[NagaTopology, ...]) -> HardwareState:
         if not self._started:
             raise RuntimeError("Naga service is not active")
+        await self._sessions.wait()
         epoch = self._topology_epoch
         try:
             state = await self._worker.rescan(connections)
         except Exception as exc:
             self._observed_mode = None
             self._mode_error = f"device rescan: {exc}"
-            await self._stop_session()
+            await self._sessions.stop()
             raise
         self._state = state
         self._observed_mode = None
@@ -251,17 +246,18 @@ class NagaService:
             self._needs_rescan = False
         if state.status != "available":
             self._mode_error = "device mode unavailable: hardware is not available"
-            await self._stop_session()
+            await self._sessions.stop()
             return state
-        desired = self._require_configuration().mode
+        desired = self._config.require_current().mode
+        await self._sessions.wait()
         if desired == "firmware":
-            await self._stop_session()
+            await self._sessions.stop()
             self._settings_failures = ()
         try:
             observed = await self._worker.read_device_mode()
             self._observed_mode = observed
             if observed != desired:
-                await self._stop_session()
+                await self._sessions.stop()
                 try:
                     self._observed_mode = await self._worker.set_device_mode(desired)
                 except Exception:
@@ -272,18 +268,16 @@ class NagaService:
         except Exception as exc:
             self._observed_mode = None
             self._mode_error = f"device mode: {exc}"
-            await self._stop_session()
+            await self._sessions.stop()
         return state
 
     def release_all(self) -> None:
-        if self._session is not None:
-            self._session.release_all()
+        self._sessions.release_all()
 
     async def begin_calibration(self) -> bool:
         async with self._lock:
-            if not self._started:
-                raise RuntimeError("Naga service is not active")
-            if self._require_configuration().mode == "firmware":
+            await self._require_mutable()
+            if self._config.require_current().mode == "firmware":
                 raise RuntimeError("calibration requires software mode")
             self._calibrating = True
             await self._apply_topology(self._discover())
@@ -291,13 +285,14 @@ class NagaService:
 
     async def end_calibration(self) -> bool:
         async with self._lock:
-            if self._require_configuration().mode == "firmware":
+            await self._require_mutable()
+            if self._config.require_current().mode == "firmware":
                 raise RuntimeError("calibration requires software mode")
             self._calibrating = False
             connections = self._discover()
             await self._rescan(connections)
-            if adopted := adopt_observed_settings(self._require_configuration(), self._state):
-                self._store_configuration(adopted)
+            if adopted := adopt_observed_settings(self._config.require_current(), self._state):
+                self._config.save(adopted)
             await self._apply_topology(connections)
             return False
 
@@ -305,86 +300,78 @@ class NagaService:
         if (
             self._started
             and self._mode_ready()
-            and self._require_configuration().mode == "software"
+            and self._config.require_current().mode == "software"
             and (self._state is None or state.generation >= self._state.generation)
         ):
             self._state = state
             if state.status != "available":
-                self._worker.mark_topology_stale()
-                self._needs_rescan = True
+                self._fence_session()
                 self._observed_mode = None
                 self._mode_error = "device action lost hardware access"
-                if session := self._session:
-                    try:
-                        session.release_all()
-                    except Exception:
-                        logger.exception(
-                            "could not release generated outputs after hardware failure"
-                        )
-                    self._schedule_stop(session)
+                self._schedule_stop()
 
     def configuration_document(self) -> str:
-        return dump_toml(self._require_configuration())
+        return self._config.document()
 
     def configuration_revision(self) -> int:
-        return self._require_configuration().revision
+        return self._config.revision()
 
     async def apply_configuration(self, expected_revision: int, document: str) -> int:
-        configuration = parse_toml(document)
+        configuration = self._config.parse(document)
         async with self._lock:
-            current = self._require_configuration()
-            if (
-                expected_revision != current.revision
-                or configuration.revision != current.revision + 1
-            ):
-                raise StaleConfigurationRevisionError(
-                    f"expected base revision {current.revision}, got {expected_revision}"
-                )
-            self._store_configuration(configuration)
+            self._config.validate_revision(expected_revision, configuration)
+            await self._require_mutable()
+            revision = self._config.apply(expected_revision, configuration)
             await self._apply_topology(self._discover())
-            return configuration.revision
+            return revision
 
     async def select_profile(self, profile_id: str) -> int:
         async with self._lock:
-            current = self._require_configuration()
-            if profile_id not in {identifier for identifier, _ in current.profiles}:
-                raise UnknownProfileError(f"unknown profile {profile_id!r}")
-            updated = replace(current, active_profile=profile_id, revision=current.revision + 1)
-            self._store_configuration(updated)
+            await self._require_mutable()
+            revision = self._config.select_profile(profile_id)
             await self._apply_topology(self._discover())
-            return updated.revision
+            return revision
 
     def snapshot(self) -> dict[str, object]:
         return snapshot_document(
             self._state,
-            self._configuration,
+            self._config.current,
             self._settings_failures,
             self._calibrating,
             self._observed_mode,
             self._mode_error,
-            self._session is not None,
+            self._sessions.current is not None,
         )
 
     async def stop(self) -> None:
+        if self._stop_task is None:
+            self._stop_task = asyncio.create_task(self._shutdown())
+        elif self._stop_task.done():
+            return
+        if error := await asyncio.shield(self._stop_task):
+            raise error
+
+    async def _shutdown(self) -> Exception | None:
+        error: Exception | None = None
         poll_task, self._state_poll_task = self._state_poll_task, None
         if poll_task is not None:
             poll_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await poll_task
+            try:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await poll_task
+            except Exception as exc:
+                error = exc
         async with self._lock:
-            await self._stop_session()
-            if self._started:
-                self._started = False
+            try:
+                await self._sessions.stop()
+            except Exception as exc:
+                error = error or exc
+            self._started = False
+            try:
                 await self._worker.stop()
+            except Exception as exc:
+                error = error or exc
         if self._cleanup_tasks:
-            await asyncio.gather(*tuple(self._cleanup_tasks))
-
-    def _require_configuration(self) -> Configuration:
-        if self._configuration is None:
-            raise RuntimeError("Naga service has no loaded configuration")
-        return self._configuration
-
-    def _store_configuration(self, configuration: Configuration) -> None:
-        if self._store is not None:
-            self._store.save(configuration)
-        self._configuration = configuration
+            results = await asyncio.gather(*tuple(self._cleanup_tasks), return_exceptions=True)
+            error = error or next((item for item in results if isinstance(item, Exception)), None)
+        return error

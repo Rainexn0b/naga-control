@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from pathlib import Path
 
 from naga_control.adapters.config.storage import TomlConfigStore, default_config_path
@@ -58,15 +59,26 @@ def create_session_factory(
     on_state: Callable[[HardwareState], None] | None = None,
 ) -> Callable[[NagaConnection, Configuration], FirstSliceSession]:
     def create(connection: NagaConnection, configuration: Configuration) -> FirstSliceSession:
-        return FirstSliceSession(
-            connection,
-            configuration.profile(configuration.active_profile),
-            create_virtual_keyboard(),
-            create_virtual_mouse(),
-            DeviceActionExecutor(worker, on_state=on_state),
-            open_evdev_source,
-            UInputForwardingProxyFactory(),
-            create_proxy_readiness_waiter(),
-        )
+        profile = configuration.profile(configuration.active_profile)
+        keyboard = create_virtual_keyboard()
+        mouse = None
+        try:
+            mouse = create_virtual_mouse()
+            return FirstSliceSession(
+                connection,
+                profile,
+                keyboard,
+                mouse,
+                DeviceActionExecutor(worker, on_state=on_state),
+                open_evdev_source,
+                UInputForwardingProxyFactory(),
+                create_proxy_readiness_waiter(),
+            )
+        except BaseException:
+            for output in (keyboard, mouse):
+                if output is not None:
+                    with suppress(Exception):
+                        output.close()
+            raise
 
     return create
