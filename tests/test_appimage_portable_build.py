@@ -46,6 +46,12 @@ def test_dockerfile_apt_is_jammy_without_t64() -> None:
         assert required in tokens
 
 
+def test_dockerfile_container_provides_file_utility_for_appimagetool() -> None:
+    text = read_text(DOCKERFILE)
+    tokens = apt_tokens(text)
+    assert "file" in tokens
+
+
 def test_dockerfile_toolchain_only_static_policy() -> None:
     text = read_text(DOCKERFILE)
     lowered = text.lower()

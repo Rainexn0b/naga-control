@@ -30,6 +30,7 @@ ALLOWED_APT = frozenset(
         "build-essential",
         "ca-certificates",
         "curl",
+        "file",
         "pkg-config",
         "libssl-dev",
         "libffi-dev",

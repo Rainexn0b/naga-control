@@ -1,40 +1,31 @@
 # Distro Portability Execution Tracker
 
-Status (2026-10-08, HEAD `3b5d6c8` + 5 dirty paths): **source CI green, validation FAILED at AppImage assembly (cause UNKNOWN), step-14 diagnostic wrapper done and tested, ready to commit/push main and rerun quality + validation Release; v0.5.0 untagged/unpublished**.
+Status (2026-10-08, HEAD `991f331` + `file` cause fix prepared): **source CI green,
+validation FAILED at AppImage assembly (known missing `file` cause), stable archive
+acceptance passed; v0.5.0 untagged/unpublished**.
 The user approved [Distro Portability Plan (Revised)](distro-portability-plan-revised.md)
 with "then follow the revised plan. please continue". That read-only plan controls
 the sequence and scope; it supersedes this file's former execution waves.
 This is its compact evidence/register tracker, not another plan or support promise.
-`b6d6c71` holds the reviewed full tree with portable builder and finished
-static gate plus release 0.5.0 metadata; `31ccc23` adds a diagnostic wrapper that
-exposes the pytest log while retaining exit status; `3b5d6c8` adds Python
-3.12-safe test annotations and deterministic Qt teardown (test-only, no product
-change). All tree was included in the release approval, pushed direct to main,
-and the review branch was deleted. Source CI `37834706341` is SUCCESS on this
-SHA and remains valid. Validation-only Release `37834701338` is FAILURE:
-metadata SUCCESS; pinned OpenRazer build/compiler/metadata/import/hash gates
-SUCCESS; source full profile SUCCESS; pinned CPython 3.12.15 Ubuntu 22.04 image
-build plus stdlib probe plus Qt 6.12 dependency install SUCCESS; then
-buildpython AppImage assembly FAILED (21.8s, exit 1, 19:59:21 UTC).
-`/workspace/buildlog/naga-control/step-14-appimage.log` was not printed and the
-runner is gone, so the actual assembly error/log is UNKNOWN. Static
-finished-artifact gate, 22.04 smoke, 24.04 smoke, staging, and upload were
-never reached; no real ABI, smoke, or distro pass is claimed. Parent failed
-log: `/tmp/opencode/naga-portability/ci-fix-release.failed.log` (~8334 lines).
-v0.5.0 is untagged/unpublished; latest published remains v0.4.0 (see GitHub
-releases for current publication status). Guidance, portable builder, artifact
-gate, and workflow wiring below are historical FAKE-ACCEPTED local receipts; the
-implemented portable-build/static gate is distinct from the still-pending real
-portable artifact and representative distro install/launch evidence. Diagnostic
-work is DONE: `portable-inner.sh` wrapper prints `step-14-appimage.log` on
-failure while preserving the original status, with no fallthrough to gate or
-smoke (Bash/ShellCheck PASS). Tested: focused 166 portable/release contracts
-PASS in both venvs (3.20s, 3.62s); global Ruff PASS, format 419, Pyright 0;
-full parent venv pytest 3439 passed, 2 skipped, 224.40s EXIT 0 with pre/post
-hashes identical (cmp PASS). Current 5 dirty paths ready to commit/push main,
-then rerun quality + validation Release: `buildpython/steps/appimage/portable-inner.sh`,
-`changelog.md`, `docs/release-notes.md`, `docs/distro-portability-plan.md`,
-`tests/test_appimage_portable_failure_logs.py` (5 tests). Tag only when green.
+
+- Source: `6ac962c` (notes plus step-14 diagnostics) has source CI `37837268775`
+  SUCCESS; `991f331` is README-only, pushed with no release/tag/dispatch.
+- Release: validation-only `37837269798` FAILED at appimagetool assembly with `file
+  command is missing but required, please install it` (diagnostic lines 8818-8820).
+  Prior `37834701338` stays UNKNOWN (unprinted log); its cause is not inferred.
+- Build: pinned 22.04/CPython 3.12.15 toolchain, stdlib probe, 0.5.0 wheel,
+  dbus-python 1.5.0 build, numpy/PySide6 install, and ldd libpython check passed;
+  only assembly failed. Static gate, 22.04/24.04 smoke, staging, and upload never
+  reached; no ABI, smoke, hardware, or distro pass is claimed.
+- Fix (3 paths, +8 lines): `Dockerfile.portable` adds `file`, fakes allow it, and
+  the portable build test adds a container-APT regression. No runtime
+  dependency-range, pin, gate, or asset-policy change.
+- Acceptance: 45 portable fake tests plus script checks passed; stable archive (of
+  `991f331` plus only the 3 fix paths, excluding concurrent GUI edits) passed Ruff,
+  format 419, Pyright 0, offscreen pytest 3440 passed / 2 skipped / 5 deselected
+  in 233.48s exit 0, pre/post hashes match. Shared-tree acceptance not claimed.
+- Next: commit/push 4 paths (this tracker plus the 3 fix paths), then rerun quality
+  plus validation-only Release; tag/publish v0.5.0 only when green.
 
 ## Verified baseline and limits
 
@@ -271,9 +262,12 @@ cover userspace only, not FUSE desktop, permissions, DKMS, session services, or 
    driver/static-gate wiring. That wiring was dispatched; real CI build/ABI/smoke
    did not complete because both runs segfaulted before the AppImage stage
    (now historical evidence; fix verified locally above).
-3. Historical: the 8 reviewed paths were pushed direct to main as `3b5d6c8`
+3. Historical: the Qt root-cause paths were pushed direct to main as `3b5d6c8`
    under the existing user authorization, then quality plus validation-only
-   Release were rerun (source green, assembly red). Concrete
+   Release were rerun (source green, assembly red with the then-UNKNOWN log).
+   `6ac962c` then committed the release notes plus step-14 diagnostic wrapper;
+   source CI `37837268775` SUCCESS and validation-only Release `37837269798`
+   FAILURE with the now-known missing-`file` assembly cause. Concrete
    pipeline results take precedence over manual package lookups.
 4. Then representative ordinary install -> CLI/launch -> upgrade -> remove paths
    with safe fakes and available authorized environments; fix proven gaps only.
@@ -281,13 +275,14 @@ cover userspace only, not FUSE desktop, permissions, DKMS, session services, or 
    checks to an attentive operator. Known hardware gates (exact-pin wake,
    held-output handoff, wired alternate plates) remain open; no new device campaign
    and no hardware evidence newly accepted here.
-6. Git/CI/release (historical branch step superseded): the review-branch push/dispatch
-   already happened and the branch was deleted remote/local. Current requirement is
-   direct-to-main commit/push of the current 5 paths (wrapper + 3 docs + new
-   failure test), with quality and validation-only
-   Release reruns. Only when green: record final evidence notes, tag/publish v0.5.0 with
-   6 assets, verify checksums, run a safe isolated installer test or name the blocker.
-   Latest published stays v0.4.0 until then.
+6. Git/CI/release: `991f331` (README-only) is already committed and pushed;
+   no release/tag/dispatch was triggered. Stable archive acceptance has passed.
+   Next is commit/push of 4 paths (this tracker plus the 3-path `file` fix),
+   then rerun quality plus validation-only Release. Only when green:
+   record final evidence notes, tag/publish v0.5.0 with 6 assets, verify
+   checksums, run a safe isolated installer test or name the blocker.
+   Latest published stays v0.4.0 until then. Other concurrent GUI paths are
+   owned separately and are not listed or staged here.
    Release body comes from the root changelog extractor, not older skill body text;
    [release notes](release-notes.md) and [changelog](../changelog.md) match 0.5.0 metadata.
 

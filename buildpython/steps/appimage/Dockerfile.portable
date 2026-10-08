@@ -18,6 +18,7 @@ RUN apt-get update \
   build-essential \
   ca-certificates \
   curl \
+  file \
   libarchive-tools \
   libbz2-dev \
   libdbus-1-3 \
