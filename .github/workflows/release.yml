@@ -66,7 +66,18 @@ jobs:
       - name: Validate source with full profile on host
         env:
           QT_QPA_PLATFORM: offscreen
-        run: .venv/bin/python -m buildpython --profile full
+        run: |
+          set +e
+          .venv/bin/python -m buildpython --profile full
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            if [ -f buildlog/naga-control/step-02-pytest.log ]; then
+              cat buildlog/naga-control/step-02-pytest.log
+            else
+              echo "pytest failure log missing: buildlog/naga-control/step-02-pytest.log" >&2
+            fi
+          fi
+          exit "$status"
       - name: Controlled Ubuntu 22.04 build, static gate, and baseline check
         env:
           RELEASE_VERSION: ${{ needs.metadata.outputs.version }}

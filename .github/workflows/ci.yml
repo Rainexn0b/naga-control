@@ -38,4 +38,15 @@ jobs:
       - name: Standard validation (hardware tests remain excluded)
         env:
           QT_QPA_PLATFORM: offscreen
-        run: .venv/bin/python -m buildpython --profile ci
+        run: |
+          set +e
+          .venv/bin/python -m buildpython --profile ci
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            if [ -f buildlog/naga-control/step-02-pytest.log ]; then
+              cat buildlog/naga-control/step-02-pytest.log
+            else
+              echo "pytest failure log missing: buildlog/naga-control/step-02-pytest.log" >&2
+            fi
+          fi
+          exit "$status"
