@@ -27,16 +27,66 @@ Managed service/desktop integration always requires FUSE; leave
 `APPIMAGE_EXTRACT_AND_RUN` unset (or `0`). Extraction is manual launch-only,
 not a supported FUSEless managed installation.
 
+### Standalone AppImage install and update (recommended, no checkout)
+
+Download the installer to a private temp dir, then run it with the terminal
+still attached (no pipe into bash, no process substitution):
+
+```bash
+(
+  umask 077
+  d=$(mktemp -d) || exit 1
+  trap 'rm -rf "$d"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' HUP TERM
+  curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh \
+    -o "$d/install.sh" && bash "$d/install.sh" --ref main
+)
+```
+
+This uses the current `main` installer bootstrap (the default; `--ref main`
+is shown explicitly). `main` is mutable, so this is not a reproducibly pinned
+install. It does not install unreleased source: with no `--version`, the
+installer resolves the latest **published** release via `/releases/latest`
+and installs only the fixed `Naga-Control-x86_64.AppImage` plus its `.sha256`
+sidecar. Tags are recommended for reproducibility; see the pinned command
+below. The installer creates `~/.local/bin/naga-control.AppImage` and
+`~/.local/bin/naga-control`, plus the user unit, D-Bus activation entry,
+desktop entry, and icons. Ordinary app-only use asks `sudo` only for the udev
+rule. Rerun the same command to update. The app installer accepts
+`--version <tag>`, `--install-openrazer`, and `--restart-service`, while the
+dispatcher accepts `--ref <git-ref>`.
+
+Quit the GUI and release held controls before consenting to the temporary
+remapping outage. App-only success enables and starts the user service, which
+is not hardware readiness. `--restart-service` only consents to a graceful
+Naga-only stop and resume; it does not make the install fully noninteractive
+or sudo-free.
+
+### Run
+
+After a successful install, start the panel from your app menu or from a
+terminal:
+
+```bash
+~/.local/bin/naga-control
+```
+
+`naga-control` alone works when `~/.local/bin` is in `PATH`.
+
+### Pinned reproducible alternative (v0.4.0, older installer)
+
 One command that preserves terminal stdin and pins **script, bootstrap ref and
-artifact version** to the existing published v0.4.0 tag:
+artifact version** to the published v0.4.0 tag (older installer):
 
 ```bash
 (umask 077; d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT && trap 'exit 130' INT && trap 'exit 143' HUP TERM && curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/v0.4.0/install.sh -o "$d/install.sh" && bash "$d/install.sh" --ref v0.4.0 --version v0.4.0)
 ```
 
-The new safety behavior below belongs to **this checkout's installer**, not
-retroactively to scripts published at v0.4.0 or other older tags. Review a
-published tagged installer before using it. No future release is implied here.
+The safety behavior described for current `main` belongs to the current `main`
+and this checkout's installer, not retroactively to scripts published at
+v0.4.0 or other older tags. The v0.4.0 script predates that behavior; review
+a published tagged installer before using it. No future release is implied here.
 To use the reviewed new installer from a checkout:
 
 ```bash
@@ -77,8 +127,11 @@ support claim for it.
 The ordinary install is **app-only**: it never offers, downloads, installs, or
 replaces OpenRazer, and never changes its group or daemon. On experimental
 Arch/pacman hosts, explicitly append `--install-openrazer` to the **same bash
-command** in the one-liner (or use `./install.sh --version v0.4.0 --install-openrazer`
-from a checkout). `NAGA_CONTROL_INSTALL_OPENRAZER=1` also opts in. This deliberately reinstalls
+command** in the standalone snippet (for example
+`bash "$d/install.sh" --ref main --install-openrazer`) or use
+`./install.sh --version v0.4.0 --install-openrazer` from a checkout. Do not
+fetch and execute the Arch helper by default.
+`NAGA_CONTROL_INSTALL_OPENRAZER=1` also opts in. This deliberately reinstalls
 the whole pinned cohort, even at the same source/version (recipe metadata,
 wrapper, or builder Python may have changed), with pacman's own prompts; read the
 [prerequisite and rollback guidance](docs/release-notes.md#required-openrazer)
@@ -91,8 +144,10 @@ and the system Python minor via isolated `/usr/bin/python3`, not a PATH/virtuale
 alias, before sudo, including active-kernel headers/build metadata and toolchain
 checks.
 The helper's read-only `--preflight` checks Python minimum, active-kernel headers,
-tools and session connectivity **before Naga stop consent**. Helpers lacking this
-mode fail closed for opt-in; ordinary app-only installs still need no helper.
+tools and session connectivity **before Naga stop consent**. Opt-in needs the
+selected release's helper with this mode. Older releases may lack this mode;
+opt-in fails closed with no legacy fallback. Ordinary app-only installs still
+need no helper.
 Release archive/Python-minor validation happens separately before sudo; the
 actual install repeats environment gates and keeps pacman's own prompts.
 Activation is deferred: the user units are
@@ -103,7 +158,27 @@ Other distributions
 need a manual matching-source native build, not Arch packages; this is not a
 promise of support for all Arch derivatives or for Debian/Fedora.
 
-Uninstall (checkout remover; needs no AppImage and no host Python):
+### Uninstall
+
+Checkout-free removal of a standalone install (needs no AppImage and no host
+Python). Quit the GUI and release held controls first. It removes
+installer-owned app and user integration files, and prompts separately before
+udev rule removal (requires sudo). Do not add `--yes` unless you want to skip
+that udev confirmation and consent to udev removal:
+
+```bash
+(
+  umask 077
+  d=$(mktemp -d) || exit 1
+  trap 'rm -rf "$d"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' HUP TERM
+  curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/scripts/uninstall.sh \
+    -o "$d/uninstall.sh" && bash "$d/uninstall.sh"
+)
+```
+
+From a checkout, the same remover is useful with explicit confirmation skip:
 
 ```bash
 ./scripts/uninstall.sh --yes
@@ -111,10 +186,13 @@ Uninstall (checkout remover; needs no AppImage and no host Python):
 
 It reuses the same stable per-user install lock, checks owners and symlinks,
 and removes only known installer-owned files; quit the GUI and release held
-controls first. Unsafe or unverifiable service state refuses with files
+controls first. `--yes` only skips that udev-removal prompt and consents to
+udev removal; sudo authentication is not bypassed and the service, file
+ownership, symlink, and lock checks remain. Unsafe or unverifiable service
+state refuses with files
 retained for manual recovery instead of blind deletion. Profiles stay unless
 `--purge-config` is passed; OpenRazer packages, group membership, and daemon
-stay; udev rule removal still asks for consent. See
+stay; udev rule removal still asks for consent unless `--yes` is given. See
 [upgrades and recovery](docs/troubleshooting.md#installer-upgrades-and-rollback).
 
 Optional checkout-only distro advice (read-only, offline; never an install
