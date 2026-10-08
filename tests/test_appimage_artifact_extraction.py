@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
+import stat
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from appimage_artifact_fakes import (
@@ -249,3 +251,150 @@ def test_incremental_no_buffering_and_limits() -> None:
 
     assert "post-hoc" in " ".join(LIMITATIONS).lower()
     assert SCOPE == "finished-appimage/static-runtime-abi"
+
+
+def _capture_mkdtemp(monkeypatch: pytest.MonkeyPatch, record: list[str]) -> None:
+    orig = artifact.tempfile.mkdtemp
+
+    def wrapped(*args: Any, **kwargs: Any) -> str:
+        path = cast(str, orig(*args, **kwargs))
+        record.append(path)
+        return path
+
+    monkeypatch.setattr(artifact.tempfile, "mkdtemp", wrapped)
+
+
+def test_staging_root_absent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mapping: dict[bytes, str] = {}
+    baseline = _base(tmp_path, mapping)
+    outer = _outer()
+    marker, text = _inner()
+    mapping[marker] = text
+    inspector = MappingInspector(outer, mapping)
+    made: list[str] = []
+    _capture_mkdtemp(monkeypatch, made)
+
+    def strict(fd: int, offset: int, staging: Path) -> RunResult:
+        assert not os.path.lexists(staging)
+        parent = staging.parent
+        assert stat.S_IMODE(os.stat(parent).st_mode) == 0o700
+        assert sorted(os.listdir(parent)) == []
+        staging.mkdir(parents=True, exist_ok=False)
+        target = staging / "usr/lib/a.so"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        from appimage_artifact_fakes import header_for
+
+        target.write_bytes(header_for(text) + marker + b"\x00" * 16)
+        return RunResult("unsquashfs", "", "", 0)
+
+    art = tmp_path / "absent.AppImage"
+    write_appimage_with_text(art, outer)
+    report = artifact.audit_artifact(art, baseline, inspector=inspector, extractor=strict)
+    assert report.status == "pass", report.errors
+    assert report.checked == 1 and report.providers_checked
+    assert made and not Path(made[0]).exists()
+
+
+def test_default_extractor_no_overwrite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from buildpython.steps.appimage import extraction as _extraction
+
+    mapping: dict[bytes, str] = {}
+    baseline = _base(tmp_path, mapping)
+    outer = _outer()
+    marker = b"default-seam-pay"
+    inner = dep_text(needed=("libc.so.6",), needs_map={"libc.so.6": ("GLIBC_2.35",)})
+    mapping[marker] = inner
+    inspector = MappingInspector(outer, mapping)
+    from appimage_artifact_fakes import header_for
+
+    template = tmp_path / "template.so"
+    template.write_bytes(header_for(inner) + marker + b"\x00" * 32)
+    fake_bin = tmp_path / "fake-unsquashfs"
+    log_path = tmp_path / "argv.json"
+    script = (
+        "#!/usr/bin/env python3\n"
+        "import json, os, stat, sys\n"
+        f"LOG = {str(log_path)!r}\n"
+        f"TEMPLATE = {str(template)!r}\n"
+        "argv = sys.argv\n"
+        "forbidden = ('-f', '--force', '-force', '--overwrite', '-overwrite', '--replace')\n"
+        "assert not any(a in forbidden for a in argv), argv\n"
+        "assert '-o' in argv and '-no-progress' in argv and '-no-xattrs' in argv, argv\n"
+        "assert argv[-1].startswith('/proc/self/fd/'), argv\n"
+        "dest = argv[argv.index('-d') + 1]\n"
+        "cwd = os.getcwd()\n"
+        "assert cwd == os.path.dirname(dest), (cwd, dest)\n"
+        "assert stat.S_IMODE(os.stat(cwd).st_mode) == 0o700, oct(os.stat(cwd).st_mode)\n"
+        "assert not os.path.lexists(dest), dest\n"
+        "os.makedirs(dest, exist_ok=False)\n"
+        "with open(TEMPLATE, 'rb') as src:\n"
+        "    data = src.read()\n"
+        "target_dir = os.path.join(dest, 'usr/lib')\n"
+        "os.makedirs(target_dir, exist_ok=True)\n"
+        "with open(os.path.join(target_dir, 'a.so'), 'wb') as out:\n"
+        "    out.write(data)\n"
+        "with open(LOG, 'w') as out:\n"
+        "    json.dump({'argv': argv, 'cwd': cwd}, out)\n"
+    )
+    fake_bin.write_text(script)
+    fake_bin.chmod(0o755)
+    monkeypatch.setattr(artifact, "UNSQUASHFS", str(fake_bin))
+    monkeypatch.setattr(_extraction, "UNSQUASHFS", str(fake_bin))
+    made: list[str] = []
+    _capture_mkdtemp(monkeypatch, made)
+    art = tmp_path / "default-seam.AppImage"
+    write_appimage_with_text(art, outer)
+    report = artifact.audit_artifact(art, baseline, inspector=inspector)
+    assert report.status == "pass", report.errors
+    logged = json.loads(log_path.read_text())
+    assert logged["argv"][0] == str(fake_bin)
+    assert "-d" in logged["argv"]
+    assert not any(a in ("-f", "--force") for a in logged["argv"])
+    assert logged["cwd"] == str(Path(made[0]))
+    assert made and not Path(made[0]).exists()
+
+
+def test_missing_root_success_claim_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mapping: dict[bytes, str] = {}
+    baseline = _base(tmp_path, mapping)
+    outer = _outer()
+    inspector = MappingInspector(outer, mapping)
+    made: list[str] = []
+    _capture_mkdtemp(monkeypatch, made)
+
+    def no_root(fd: int, offset: int, staging: Path) -> RunResult:
+        assert not os.path.lexists(staging)
+        return RunResult("unsquashfs", "", "", 0)
+
+    art = tmp_path / "no-root.AppImage"
+    write_appimage_with_text(art, outer)
+    report = artifact.audit_artifact(art, baseline, inspector=inspector, extractor=no_root)
+    assert report.status == "fail"
+    assert "no staging root" in " ".join(report.errors).lower()
+    assert "outside staging" not in " ".join(report.errors).lower()
+    assert made and not Path(made[0]).exists()
+
+
+def test_symlink_root_success_claim_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mapping: dict[bytes, str] = {}
+    baseline = _base(tmp_path, mapping)
+    outer = _outer()
+    inspector = MappingInspector(outer, mapping)
+    made: list[str] = []
+    _capture_mkdtemp(monkeypatch, made)
+
+    def link_root(fd: int, offset: int, staging: Path) -> RunResult:
+        assert not os.path.lexists(staging)
+        staging.symlink_to(tmp_path)
+        return RunResult("unsquashfs", "", "", 0)
+
+    art = tmp_path / "link-root.AppImage"
+    write_appimage_with_text(art, outer)
+    report = artifact.audit_artifact(art, baseline, inspector=inspector, extractor=link_root)
+    assert report.status == "fail"
+    assert made and not Path(made[0]).exists()
+    assert tmp_path.exists()

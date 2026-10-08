@@ -281,7 +281,7 @@ def audit_artifact(
             staging_parent = Path(tempfile.mkdtemp(prefix="artifact-gate.", dir=str(base)))
             os.chmod(staging_parent, 0o700)
             staging = staging_parent / "root"
-            staging.mkdir(mode=0o700)
+            # Leave staging absent; trusted unsquashfs creates it.
         except OSError as exc:
             meta = {"name": artifact_path.name, "sha256": before_sha, "size": file_size}
             return _fail(
@@ -304,7 +304,9 @@ def audit_artifact(
                     errors.append(f"{artifact_path.name}: artifact mutated during extraction")
         with contextlib.suppress(OSError):
             names = sorted(os.listdir(staging_parent))
-            if names != ["root"]:
+            if "root" not in names:
+                errors.append(f"{artifact_path.name}: extraction produced no staging root")
+            if any(name != "root" for name in names):
                 errors.append(f"{artifact_path.name}: extractor wrote outside staging")
         if errors:
             meta = {

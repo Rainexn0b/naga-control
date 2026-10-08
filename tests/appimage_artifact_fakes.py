@@ -299,6 +299,7 @@ def fake_extractor_factory(
     behavior: str = "ok",
 ) -> Callable[[int, int, Path], RunResult]:
     def extractor(fd: int, offset: int, staging: Path) -> RunResult:
+        assert not os.path.lexists(staging), f"staging destination must not pre-exist: {staging}"
         if record is not None:
             record["offset"] = offset
             record["staging"] = str(staging)
@@ -317,6 +318,8 @@ def fake_extractor_factory(
         if behavior == "outside":
             (staging.parent / "escape").write_text("outside")
             return RunResult("unsquashfs", "", "", 0)
+        # Mirror trusted unsquashfs: create the destination root.
+        staging.mkdir(parents=True, exist_ok=False)
         for relative, marker, _text in payloads:
             target = staging / relative
             target.parent.mkdir(parents=True, exist_ok=True)

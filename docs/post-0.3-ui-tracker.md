@@ -214,8 +214,9 @@ v0.4.0 as experimental functionality; earlier guided tests used source only.
 The confirmed firmware/driver interpretation now has a persistent, **read-only
 Device mode** tray submenu that stands alone at the tray root; it is not
 nested under the Software or Onboard groups. The tray root holds Show Naga
-Control, a **Software controls** submenu grouping **Active software profile**
-and **Scroll wheel**, a read-only **Onboard / firmware** submenu stating native
+Control, a non-clickable **Software controls** header with **Active software
+profile** and **Scroll wheel** directly under it, a read-only **Onboard /
+firmware** submenu stating native
 mouse behavior with no onboard editing, the independent **Device mode** status
 submenu, and Quit. Human labels are
 **Software / driver** and **Onboard / firmware**. Requested policy, observed mode,
@@ -226,7 +227,7 @@ unknown, not-ready and calibration states do not claim successful active mapping
 or firmware handoff. Inactive mode groups are greyed, and software profile and
 scroll actions run only through verified software-mode UI and entry guards,
 including pending-write, deferred-execution, and modal-confirmation checks.
-A short neutral disabled **Switch mode (unavailable)**
+A short neutral disabled **Switch mode (safety validation required)**
 keeps the still-closed switching gate discoverable even offline, with safety
 reasons in tooltips and docs. There is no selectable mode action,
 setter, new API or configuration behavior in this clarification.
@@ -410,3 +411,46 @@ grabs even if their immediate rescan fails.
   F13/F14/F17, held-output, wake, firmware-handoff, or reconnect tests run. Not a
   published release or portable ABI acceptance; earlier source-only and 0.4.0 records
   above stand as then-true history.
+- Tray flatten follow-up (source-only, not installed): the tray root now shows
+  Show Naga Control, a bold disabled **Software controls** header, **Active
+  software profile** and **Scroll wheel** directly under that header, then
+  Onboard / firmware, Device mode, and Quit. No Software controls submenu
+  remains. The safety gate now reads **Switch mode (safety validation
+  required)** with held-output, wake, failure and reconnect reasons plus a note
+  that software-mode readiness is separate from switching safety. Source
+  0.5.0 plus this change is
+  not installed; the installed local 0.5.0 image
+  (`26aeac622167d1d2cdc3755da60976f00f60af7f1500d625b3ea5b9d877aadc1`) and its
+  desktop proof above remain the last installed state.
+- 2026-10-08 flat-tray local install: rebuilt and installed
+  `Naga-Control-0.5.0-x86_64.AppImage` SHA256
+  `d9d42f8d2cf643233b2575e29dfe256ca3b38c34951076430729d950df266182`
+  (candidate and installed `~/.local/bin/naga-control.AppImage`
+  match) with backup of prior image/config/stamp/PIDs plus 98-file SHA
+  manifest retained under temporary `/tmp/opencode`; build log at
+  `/tmp/opencode/naga-flat-tray-install.nsoEGK/build.log`. This installs the
+  flattened root only (Show, bold disabled Software controls header, Active
+  software profile and Scroll wheel directly at root, no wrapper submenu,
+  Onboard / firmware, Device mode, Quit; gate reads Switch mode (safety
+  validation required) with readiness-versus-safety tooltip); profile/scroll
+  greying, entry guards, and read-only onboard/device-mode presentation are
+  unchanged. The prior `26aeac62...` image record above remains the earlier
+  install history.
+- Install checks: `ruff check .`, `ruff format --check .` (420 files), and
+  `pyright` passed; full offscreen `pytest` passed (3454 passed, 2 skipped,
+  5 hardware deselected); focused tray/mode/profile tests passed (115
+  passed). Hardware-free packaged checks passed: 0.5.0 runtime imports and
+  all 98 packaged product Python files matched source byte hashes with no
+  stale modules; offscreen Tray header/parents/mode-gating checks, `--help`
+  set, and 8-file `KillMode=mixed` payload checks passed. Source/metadata
+  manifests matched before and after build; no version bump, tag, publish,
+  or new release. Only `systemctl --user restart naga-control.service` ran
+  after verified GUI Quit, released controls, single transport, baseline
+  recheck, and per-user install lock with atomic replace and hash match.
+  New Naga PID 156169 active/running with `KillMode=mixed`; OpenRazer PID,
+  saved config, installed tag, and stamp unchanged. Settled snapshot at
+  generation 2: available HyperSpeed, desired/observed software, mode ready,
+  not calibrating, no mode/hardware/settings failures. GUI left closed for
+  user desktop confirmation; physical switch stays blocked. Clean-distro
+  smoke (Docker unavailable), physical F13/F14/F17, held-output, natural
+  wake, handoff, and reconnect checks were not run.

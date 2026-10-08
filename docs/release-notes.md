@@ -14,22 +14,26 @@ The release body is the matching
 `## [0.5.0] - 2026-10-08` section in [changelog.md](../changelog.md),
 extracted by `scripts/prepare_release.py`. This overview is not the release
 body, and the checkout installer notes below are not retroactive to already
-published tags. Controlled portable-build validation is currently blocked at
-buildpython AppImage assembly (actual error/log unknown); the static
-finished-artifact gate, 22.04/24.04 smoke, staging, and upload were never
-reached. This overview claims no real ABI, distro install, or launch
-acceptance.
+published tags. On committed `84d77df`, validation-only run `37840267274`
+passed AppImage assembly but the static finished-artifact gate failed at
+extraction staging before inspecting any payload. The extraction staging fix
+is in the reviewed working tree and awaits a real CI rerun. The 22.04 baseline
+and 24.04 smoke checks, staging, and upload were not reached. This overview
+claims no real ABI, distro install, or launch acceptance.
 
 ### Changes in 0.5.0
 
 - GUI profile and mode clarity: Device > Software profiles owns the single
   dropdown with explicit Activate; selectors distinguish editing selection from
-  activation and show names plus IDs; the tray groups Software controls
-  (Active software profile plus Scroll wheel) with read-only Onboard / firmware
-  status and an independently discoverable read-only Device mode. Requested
-  policy, observed mode, and remapping readiness stay separate; software
-  mutations require verified driver mode. Firmware/driver switching stays
-  blocked pending interactive held-output, wake, failure, and reconnect checks.
+  activation and show names plus IDs; the tray shows a bold disabled
+  **Software controls** header with **Active software profile** plus
+  **Scroll wheel** directly under it (no Software controls submenu), then
+  read-only Onboard / firmware status and an independently discoverable
+  read-only Device mode. Requested policy, observed mode, and remapping
+  readiness stay separate; software mutations require verified driver mode.
+  The closed gate reads **Switch mode (safety validation required)** and
+  firmware/driver switching stays blocked pending interactive held-output,
+  wake, failure, and reconnect checks.
 - Installer portability: PATH-robust `ldconfig` discovery, x86_64
   `libfuse.so.2` capability checks with exact per-release manual references,
   `/dev/fuse` and kernel FUSE gates, and an interpreter-free safely locked
@@ -43,8 +47,9 @@ acceptance.
   CPython 3.12 build candidate with a finished static audit of the AppImage
   outer runtime and extracted bundled ELF/provider closure (inspection only,
   nothing executed). No real ABI, distro install, or launch acceptance is
-  claimed; validation is blocked at AppImage assembly (actual error/log
-  unknown) and representative-environment checks are pending.
+  claimed; on `84d77df` assembly passed but the static gate failed at
+  extraction staging before payload inspection, and the corrected working tree
+  awaits a real CI rerun; representative-environment checks are pending.
 - Runtime robustness: teardown retains ownership and joins through cancellation
   and close failures, held-output cleanup attempts each release independently,
   provisional input/capture and OpenRazer/D-Bus acquisitions roll back, the

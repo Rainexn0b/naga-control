@@ -1,31 +1,46 @@
 # Distro Portability Execution Tracker
 
-Status (2026-10-08, HEAD `991f331` + `file` cause fix prepared): **source CI green,
-validation FAILED at AppImage assembly (known missing `file` cause), stable archive
-acceptance passed; v0.5.0 untagged/unpublished**.
+Status (2026-10-08, HEAD `84d77df`): **source CI `37840267101` SUCCESS,
+validation-only Release `37840267274` FAILED at the static finished-artifact
+gate after AppImage assembly PASSED; v0.5.0 untagged/unpublished, latest
+published stays v0.4.0**.
 The user approved [Distro Portability Plan (Revised)](distro-portability-plan-revised.md)
 with "then follow the revised plan. please continue". That read-only plan controls
 the sequence and scope; it supersedes this file's former execution waves.
 This is its compact evidence/register tracker, not another plan or support promise.
 
-- Source: `6ac962c` (notes plus step-14 diagnostics) has source CI `37837268775`
-  SUCCESS; `991f331` is README-only, pushed with no release/tag/dispatch.
-- Release: validation-only `37837269798` FAILED at appimagetool assembly with `file
-  command is missing but required, please install it` (diagnostic lines 8818-8820).
-  Prior `37834701338` stays UNKNOWN (unprinted log); its cause is not inferred.
-- Build: pinned 22.04/CPython 3.12.15 toolchain, stdlib probe, 0.5.0 wheel,
-  dbus-python 1.5.0 build, numpy/PySide6 install, and ldd libpython check passed;
-  only assembly failed. Static gate, 22.04/24.04 smoke, staging, and upload never
-  reached; no ABI, smoke, hardware, or distro pass is claimed.
-- Fix (3 paths, +8 lines): `Dockerfile.portable` adds `file`, fakes allow it, and
-  the portable build test adds a container-APT regression. No runtime
-  dependency-range, pin, gate, or asset-policy change.
-- Acceptance: 45 portable fake tests plus script checks passed; stable archive (of
-  `991f331` plus only the 3 fix paths, excluding concurrent GUI edits) passed Ruff,
-  format 419, Pyright 0, offscreen pytest 3440 passed / 2 skipped / 5 deselected
-  in 233.48s exit 0, pre/post hashes match. Shared-tree acceptance not claimed.
-- Next: commit/push 4 paths (this tracker plus the 3 fix paths), then rerun quality
-  plus validation-only Release; tag/publish v0.5.0 only when green.
+- Source: `991f331` was README-only and caused no release/tag/dispatch; the
+  `file` fix `84d77df` then reached source CI `37840267101` SUCCESS plus
+  validation-only dispatch `37840267274` (still no tag or publication). The
+  shared-tree GUI flat-tray plus gate-label edits, the extraction staging fix,
+  and these note updates are reviewed but uncommitted.
+- Release: validation-only `37840267274` assembled the AppImage in 56.6s
+  (`Naga-Control-0.5.0-x86_64.AppImage`, 269670904 bytes, sha256
+  `b22c30d0c15079d00d72bb9653524a84eae4e29b9352068f3bc87c13ecc3e45e`,
+  squashFS offset 944632), then FAILED the static gate at extraction staging
+  before inspecting any payload: the gate pre-created the destination the
+  trusted extractor must create. Source full-profile, release metadata, and
+  OpenRazer build/cohort gates were successful; 22.04 baseline and 24.04
+  userspace smoke, staging, and upload were never reached. No ABI, smoke,
+  hardware, or distro pass is claimed. Failure log:
+  `/tmp/opencode/naga-portability/file-prereq-release.failed.log`.
+- Historical: validation-only `37837269798` FAILED at appimagetool assembly with
+  `file command is missing` (fixed by `84d77df`); prior `37834701338` stays
+  UNKNOWN (unprinted log) and its cause is not inferred.
+- Fix: the extraction staging fix (leave the staging child absent for trusted
+  unsquashfs while keeping the private parent and fail-closed checks) is
+  reviewed but uncommitted; its focused fake tests pass (219, parent-verified).
+  Parent independently ran 141 GUI consumer tests on Python 3.14.7/Qt 6.11.2 and
+  Python 3.12.15/Qt 6.12.0, both PASS. Whole-tree local acceptance (exit 0):
+  Ruff pass, format 420, Pyright 0/0/0, offscreen pytest 3458 passed / 2 skipped
+  / 5 hardware deselected in 223.30s; all Python <=400 lines, 478 source files
+  hash-identical pre/post, including the new tray-sections test and 3 artifact
+  paths. Doc ASCII/link/README-fence checks pass; no hardware/live
+  service/GUI/node ops run. Logs under `/tmp/opencode/naga-portability/`.
+- Next: commit/push the reviewed paths, rerun the validation-only Release, and
+  tag/publish v0.5.0 only when green. Source CI for the new whole-tree SHA is
+  still pending; real ABI/smokes unverified until rerun; then record final
+  evidence notes.
 
 ## Verified baseline and limits
 

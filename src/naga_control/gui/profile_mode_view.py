@@ -15,12 +15,13 @@ PROFILE_MANAGEMENT_HELP = (
     "Choose a profile to edit; editors follow the active profile. "
     "Use Activate or the tray to switch. " + SOFTWARE_PROFILE_HELP
 )
-MODE_SWITCH_GATE = "Switch mode (unavailable)"
+MODE_SWITCH_GATE = "Switch mode (safety validation required)"
 DEVICE_MODE_HELP = (
     "Device mode is service-wide, separate from software profiles and scroll mode. "
     "Software / driver enables Naga Control remapping; Onboard / firmware uses native "
     "mouse behavior, not the selected software profile. No onboard slot upload is available. "
-    "Switching remains blocked pending held-output, wake, failure and reconnect safety tests."
+    "Switching remains blocked pending held-output, wake, failure and reconnect safety tests. "
+    "Software-mode readiness is reported separately; this lock concerns switching safety."
 )
 _MODE_LABELS = {"software": "Software / driver", "firmware": "Onboard / firmware"}
 

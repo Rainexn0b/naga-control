@@ -48,23 +48,27 @@ def test_persistent_mode_submenu_is_accessible_offline_and_explains_gate(
     mode = tray.device_mode
     assert mode.menu.title() == "Device mode"
     assert mode.menu.menuAction() in tray.menu.actions()
-    assert tray.software_menu.menuAction() in tray.menu.actions()
+    assert tray.software_header in tray.menu.actions()
+    assert not hasattr(tray, "software_menu")
     assert tray.onboard_menu.menuAction() in tray.menu.actions()
-    assert tray.profile_menu.menuAction() in tray.software_menu.actions()
-    assert tray.scroll_menu.menuAction() in tray.software_menu.actions()
+    assert tray.profile_menu.menuAction() in tray.menu.actions()
+    assert tray.scroll_menu.menuAction() in tray.menu.actions()
+    assert tray.profile_menu.parent() is tray.menu
+    assert tray.scroll_menu.parent() is tray.menu
     assert mode.menu.isEnabled()
     assert mode.menu.menuAction().isEnabled()
     assert mode.menu is not tray.scroll_menu
     assert not tray.scroll_menu.isEnabled()
-    assert not tray.software_menu.isEnabled()
+    assert not tray.profile_menu.isEnabled()
     assert not tray.onboard_menu.isEnabled()
     assert mode.requested_action.text() == "Requested: Unknown"
     assert mode.observed_action.text() == "Observed: Unknown (service offline)"
     assert mode.remapping_action.text() == "Software remapping: Unknown (service offline)"
     assert mode.gate_action.isVisible()
-    assert mode.gate_action.text() == "Switch mode (unavailable)"
+    assert mode.gate_action.text() == "Switch mode (safety validation required)"
     assert not mode.gate_action.isEnabled()
     assert "held-output, wake, failure and reconnect" in mode.gate_action.toolTip()
+    assert "readiness is reported separately" in mode.gate_action.toolTip()
     assert "not the selected software profile" in mode.menu.menuAction().toolTip()
     tray.menu.aboutToShow.emit()
     mode.menu.aboutToShow.emit()
@@ -209,7 +213,8 @@ def test_remote_refresh_and_all_programmatic_mode_triggers_have_zero_mutations(
     mode = tray.device_mode
     assert mode.requested_action.text() == "Requested: Software / driver"
     assert mode.remapping_action.text() == "Software remapping: Active (software mode verified)"
-    assert tray.software_menu.isEnabled()
+    assert tray.profile_menu.isEnabled()
+    assert tray.scroll_menu.isEnabled()
     assert not tray.onboard_menu.isEnabled()
     config = parse_toml(client.document)
     client.document = dump_toml(replace(config, revision=config.revision + 1, mode="firmware"))
@@ -222,7 +227,6 @@ def test_remote_refresh_and_all_programmatic_mode_triggers_have_zero_mutations(
     # Firmware verification greys software controls; onboard stays readable.
     assert not tray.profile_menu.isEnabled()
     assert not tray.scroll_menu.isEnabled()
-    assert not tray.software_menu.isEnabled()
     assert tray.onboard_menu.isEnabled()
     before = client.document
     for offline in (False, True):

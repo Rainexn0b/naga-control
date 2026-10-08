@@ -445,14 +445,19 @@ OpenRazer itself stays on the host):
 ```
 
 The builder writes `dist/Naga-Control-<version>-<arch>.AppImage` and stages its
-wheel, isolated runtime venv, and AppDir under `build/appimage/`. Build and
-release validation use `.venv/bin/python -m buildpython --profile release`,
-locally and in GitHub Actions. That profile also requires Docker for smoke tests.
+wheel, isolated runtime venv, and AppDir under `build/appimage/`. A local native
+build proves the packaging step only, not the portable glibc floor: native
+library and glibc compatibility still depend on the build host. Release
+validation instead runs source checks with
+`.venv/bin/python -m buildpython --profile full` on the host, then the
+controlled `buildpython/steps/appimage/portable-build.sh` (Ubuntu 22.04 /
+CPython 3.12.15, requires Docker and excludes host runtime influences), which
+runs the static finished-artifact gate before bundled userspace smoke and asset
+staging, followed by the Ubuntu 24.04 smoke step. No distribution support pass
+is claimed from a local build alone.
 Native Linux `x86_64` and `aarch64` builders are recognized; this is not a
 cross-compiler. `PYTHON_BIN` optionally selects a native, GIL-enabled CPython 3.12+ runtime;
-otherwise the invoking interpreter's base CPython is bundled. Native library and
-glibc compatibility still depend on the build host and must be smoke-tested on
-the intended target distribution. appimagetool 1.9.1 is checksum-verified.
+otherwise the invoking interpreter's base CPython is bundled. appimagetool 1.9.1 is checksum-verified.
 Build-time Python commands are isolated from inherited Python paths; the runtime
 disables user-site and current-directory imports and exposes only the intentional
 host OpenRazer client/daemon-helper bridge alongside bundled dependencies.

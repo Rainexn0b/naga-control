@@ -32,6 +32,10 @@ _SCROLL_LABELS: dict[str, str] = {
     "free_spin": "Free spin",
     "precision_tactile": "Precision tactile",
 }
+SOFTWARE_HEADER_HELP = (
+    "Software controls: saved software profile and scroll wheel settings, "
+    "not onboard slots. Onboard / firmware mode does not apply them."
+)
 
 
 def tray_icon_path() -> Path:
@@ -86,16 +90,21 @@ class TrayIcon(QObject):
 
         self.icon = QSystemTrayIcon(self)
         self.menu = QMenu()
+        self.menu.setToolTipsVisible(True)
         self.show_action = self.menu.addAction("Show Naga Control")
-        self.software_menu = self.menu.addMenu("Software controls")
-        self.software_menu.setToolTipsVisible(True)
-        self.software_menu.menuAction().setToolTip(PROFILE_SELECTION_HELP)
-        self.profile_menu = self.software_menu.addMenu("Active software profile")
+        self.software_header_action = self.menu.addAction("Software controls")
+        header_font = self.software_header_action.font()
+        header_font.setBold(True)
+        self.software_header_action.setFont(header_font)
+        self.software_header_action.setEnabled(False)
+        self.software_header_action.setToolTip(SOFTWARE_HEADER_HELP)
+        self.software_header = self.software_header_action
+        self.profile_menu = self.menu.addMenu("Active software profile")
         self.profile_menu.setToolTipsVisible(True)
         self.profile_menu.menuAction().setToolTip(PROFILE_SELECTION_HELP)
         self.profile_group = QActionGroup(self.profile_menu)
         self.profile_group.setExclusive(True)
-        self.scroll_menu = self.software_menu.addMenu("Scroll wheel")
+        self.scroll_menu = self.menu.addMenu("Scroll wheel")
         self.scroll_group = QActionGroup(self.scroll_menu)
         self.scroll_group.setExclusive(True)
         self.scroll_actions: dict[ScrollMode, QAction] = {}
@@ -118,6 +127,7 @@ class TrayIcon(QObject):
         self.scroll_failure_action = self.scroll_menu.addAction("")
         self.scroll_failure_action.setEnabled(False)
         self.scroll_failure_action.setVisible(False)
+        self.menu.addSeparator()
         self.onboard_menu = self.menu.addMenu("Onboard / firmware")
         self.onboard_menu.setToolTipsVisible(True)
         self.onboard_menu.menuAction().setToolTip(DEVICE_MODE_HELP)
@@ -142,8 +152,6 @@ class TrayIcon(QObject):
         self.scroll_menu.aboutToShow.connect(self._update_scroll)
         self.menu.aboutToShow.connect(self._update_onboard)
         self.onboard_menu.aboutToShow.connect(self._update_onboard)
-        self.software_menu.aboutToShow.connect(self._update_profiles)
-        self.software_menu.aboutToShow.connect(self._update_scroll)
 
         self.model.add_listener(self.model_changed.emit)
         self.model_changed.connect(self._update_from_model, Qt.ConnectionType.QueuedConnection)
@@ -254,7 +262,6 @@ class TrayIcon(QObject):
         self.scroll_failure_action.setVisible(bool(failures))
         allowed = configuration is not None and self._software_allowed()
         self.scroll_menu.setEnabled(allowed)
-        self.software_menu.setEnabled(allowed or self.profile_menu.isEnabled())
         self._update_onboard()
 
     @staticmethod
@@ -286,7 +293,6 @@ class TrayIcon(QObject):
             configuration = None
         if configuration is None:
             self.profile_menu.setEnabled(False)
-            self.software_menu.setEnabled(False)
             self._update_onboard()
             return
         if document != self._profile_document and (force or not self.profile_menu.isVisible()):
@@ -310,7 +316,6 @@ class TrayIcon(QObject):
             action.setChecked(identifier == configuration.active_profile)
         allowed = self._software_allowed()
         self.profile_menu.setEnabled(allowed)
-        self.software_menu.setEnabled(allowed or self.scroll_menu.isEnabled())
         self._update_onboard()
 
     def _update_onboard(self) -> None:

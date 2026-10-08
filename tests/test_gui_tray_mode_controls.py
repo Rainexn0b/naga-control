@@ -57,12 +57,16 @@ def _verified(model: ServiceModel, mode: str, qapp: QApplication) -> None:
 
 
 def test_split_groups_and_device_mode_discoverable(qapp: QApplication, tray: TrayIcon) -> None:
-    assert tray.software_menu.title() == "Software controls"
+    assert tray.software_header.text() == "Software controls"
+    assert tray.software_header_action is tray.software_header
+    assert not hasattr(tray, "software_menu")
     assert tray.onboard_menu.title() == "Onboard / firmware"
     assert tray.device_mode.menu.title() == "Device mode"
-    assert tray.profile_menu.menuAction() in tray.software_menu.actions()
-    assert tray.scroll_menu.menuAction() in tray.software_menu.actions()
-    assert tray.software_menu.menuAction() in tray.menu.actions()
+    assert tray.profile_menu.menuAction() in tray.menu.actions()
+    assert tray.scroll_menu.menuAction() in tray.menu.actions()
+    assert tray.profile_menu.parent() is tray.menu
+    assert tray.scroll_menu.parent() is tray.menu
+    assert tray.software_header in tray.menu.actions()
     assert tray.onboard_menu.menuAction() in tray.menu.actions()
     assert tray.device_mode.menu.menuAction() in tray.menu.actions()
     assert tray.device_mode.menu.isEnabled()
@@ -76,9 +80,10 @@ def test_neutral_gate_never_enables_and_keeps_safety_help(
     qapp: QApplication, tray: TrayIcon
 ) -> None:
     gate = tray.device_mode.gate_action
-    assert gate.text() == "Switch mode (unavailable)"
+    assert gate.text() == "Switch mode (safety validation required)"
     assert not gate.isEnabled()
     assert "held-output, wake, failure and reconnect" in gate.toolTip()
+    assert "readiness is reported separately" in gate.toolTip()
     gate.setEnabled(True)
     gate.trigger()
     qapp.processEvents()
@@ -115,9 +120,9 @@ def test_software_greyed_unless_verified(
     tray.model.apply_configuration(1, dump_toml(default_configuration()))
     _verified(tray.model, "software", qapp)
     qapp.processEvents()
-    assert tray.software_menu.isEnabled()
     assert tray.profile_menu.isEnabled()
     assert tray.scroll_menu.isEnabled()
+    assert tray.software_header.text() == "Software controls"
     tray.model.apply_snapshot(
         ServiceSnapshotView(
             status,
@@ -132,9 +137,9 @@ def test_software_greyed_unless_verified(
         )
     )
     qapp.processEvents()
-    assert not tray.software_menu.isEnabled()
     assert not tray.profile_menu.isEnabled()
     assert not tray.scroll_menu.isEnabled()
+    assert tray.software_header.text() == "Software controls"
 
 
 def test_saved_firmware_policy_conflicts_with_verified_software_snapshot(
@@ -151,7 +156,6 @@ def test_saved_firmware_policy_conflicts_with_verified_software_snapshot(
     assert parse_toml(firmware_doc).mode == "firmware"
     _verified(tray.model, "software", qapp)
     qapp.processEvents()
-    assert not tray.software_menu.isEnabled()
     assert not tray.profile_menu.isEnabled()
     assert not tray.scroll_menu.isEnabled()
     assert not tray.onboard_menu.isEnabled()
@@ -164,7 +168,6 @@ def test_verified_software_enables_only_software_group(qapp: QApplication, tray:
     tray.model.apply_configuration(1, dump_toml(default_configuration()))
     _verified(tray.model, "software", qapp)
     qapp.processEvents()
-    assert tray.software_menu.isEnabled()
     assert tray.profile_menu.isEnabled()
     assert tray.scroll_menu.isEnabled()
     assert not tray.onboard_menu.isEnabled()
@@ -172,7 +175,6 @@ def test_verified_software_enables_only_software_group(qapp: QApplication, tray:
 
 def test_verified_firmware_enables_only_onboard_group(qapp: QApplication, tray: TrayIcon) -> None:
     _verified(tray.model, "firmware", qapp)
-    assert not tray.software_menu.isEnabled()
     assert not tray.profile_menu.isEnabled()
     assert not tray.scroll_menu.isEnabled()
     assert tray.onboard_menu.isEnabled()
@@ -197,7 +199,8 @@ def test_blocked_triggers_reconcile_without_mutations(qapp: QApplication, varian
     presenter = GuiPresenter(tray.model, open_client=lambda: opened(client))
     sync_run(presenter.refresh)
     qapp.processEvents()
-    assert tray.software_menu.isEnabled()
+    assert tray.profile_menu.isEnabled()
+    assert tray.scroll_menu.isEnabled()
     if variant == "offline":
         tray.model.mark_unreachable("offline")
     elif variant == "firmware":
@@ -237,7 +240,8 @@ def test_blocked_triggers_reconcile_without_mutations(qapp: QApplication, varian
             )
         )
     qapp.processEvents()
-    assert not tray.software_menu.isEnabled()
+    assert not tray.profile_menu.isEnabled()
+    assert not tray.scroll_menu.isEnabled()
     checked_before = [a.isChecked() for a in tray.scroll_actions.values()]
     profile_before = [a.isChecked() for a in tray.profile_actions.values()]
     tray.scroll_actions["free_spin"].trigger()
@@ -263,11 +267,12 @@ def test_snapshot_while_open_updates_enabling(qapp: QApplication, tray: TrayIcon
     from naga_control.domain.defaults import default_configuration
 
     tray.model.apply_configuration(1, dump_toml(default_configuration()))
-    tray.software_menu.show()
+    tray.menu.show()
     tray.scroll_menu.show()
     qapp.processEvents()
     _verified(tray.model, "software", qapp)
-    assert tray.software_menu.isEnabled()
+    assert tray.profile_menu.isEnabled()
+    assert tray.scroll_menu.isEnabled()
     tray.model.apply_snapshot(
         ServiceSnapshotView(
             "available",
@@ -280,6 +285,7 @@ def test_snapshot_while_open_updates_enabling(qapp: QApplication, tray: TrayIcon
         )
     )
     qapp.processEvents()
-    assert not tray.software_menu.isEnabled()
+    assert not tray.profile_menu.isEnabled()
+    assert not tray.scroll_menu.isEnabled()
     assert tray.onboard_menu.isEnabled()
-    tray.software_menu.hide()
+    tray.menu.hide()

@@ -195,7 +195,8 @@ left click) once; restart the service. The journal names the node.
 The active profile's bindings are the defaults. Open the GUI Buttons page
 and apply the desired bindings, or activate another profile using the
 **Activate** button in **Device > Software profiles** or the tray's
-**Software controls > Active software profile**. Choosing a profile in the
+**Active software profile** directly under the **Software controls**
+header. Choosing a profile in the
 Software profiles dropdown only selects it for editing; editors follow the
 active profile. Entries show the display name and identifier, so identical
 names remain distinguishable.
@@ -207,15 +208,17 @@ hardware settings, not onboard mouse slots. **Onboard / firmware** device mode
 uses the mouse's native behavior and does not apply the selected software
 profile. No onboard-slot enumeration or binding upload is provided.
 
-The tray groups **Software controls** (Active software profile plus Scroll
-wheel) and **Onboard / firmware** read-only native-behavior status, with
+The tray shows a non-clickable **Software controls** header with **Active
+software profile** and **Scroll wheel** directly under it, plus **Onboard /
+firmware** read-only native-behavior status, with
 **Device mode** independently discoverable offline. Software mutations require
 verified driver mode plus saved software policy; unverified, offline,
 mismatched, calibrating, or legacy states leave those actions greyed and their
 handlers blocked with saved values reconciled. The **Device mode** submenu is
 read-only and stays accessible offline. It separates the requested service-wide
 policy, observed hardware mode, and software-remapping readiness, plus a neutral
-disabled **Switch mode (unavailable)**. **Software / driver** readback alone is
+disabled **Switch mode (safety validation required)**. **Software /
+driver** readback alone is
 not proof that mappings are active: readiness, matching modes, calibration and
 errors also matter. Disconnected retained snapshots show unknown/offline
 observations rather than current verified mode or activity. Scroll wheel mode

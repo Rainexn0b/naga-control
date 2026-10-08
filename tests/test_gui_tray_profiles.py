@@ -64,8 +64,12 @@ def test_initial_offline_tray_has_no_profile_shortcuts(qapp: QApplication) -> No
         quit_app=lambda: None,
     )
     assert tray.icon.contextMenu() is tray.menu
+    assert not hasattr(tray, "software_menu")
+    assert tray.software_header.text() == "Software controls"
+    assert tray.software_header_action is tray.software_header
+    assert not tray.software_header.isEnabled()
     assert not tray.profile_menu.isEnabled()
-    assert not tray.software_menu.isEnabled()
+    assert not tray.scroll_menu.isEnabled()
     assert not tray.onboard_menu.isEnabled()
     assert tray.device_mode.menu.isEnabled()
     assert not tray.profile_actions
@@ -78,12 +82,25 @@ def test_tray_owns_persistent_grouped_menu_and_show_quit_actions(
     tray = _tray(widget)
     assert tray.icon.contextMenu() is tray.menu
     assert tray.menu.actions()[0] is tray.show_action
-    assert tray.software_menu.menuAction() in tray.menu.actions()
-    assert tray.profile_menu.menuAction() in tray.software_menu.actions()
-    assert tray.scroll_menu.menuAction() in tray.software_menu.actions()
+    assert tray.menu.actions()[1] is tray.software_header
+    assert tray.profile_menu.menuAction() in tray.menu.actions()
+    assert tray.scroll_menu.menuAction() in tray.menu.actions()
+    assert tray.profile_menu.parent() is tray.menu
+    assert tray.scroll_menu.parent() is tray.menu
+    assert not hasattr(tray, "software_menu")
     assert tray.onboard_menu.menuAction() in tray.menu.actions()
     assert tray.device_mode.menu.menuAction() in tray.menu.actions()
     assert tray.menu.actions()[-1] is tray.quit_action
+    order = tray.menu.actions()
+    assert (
+        order.index(tray.show_action)
+        < order.index(tray.software_header)
+        < order.index(tray.profile_menu.menuAction())
+        < order.index(tray.scroll_menu.menuAction())
+        < order.index(tray.onboard_menu.menuAction())
+        < order.index(tray.device_mode.menu.menuAction())
+        < order.index(tray.quit_action)
+    )
 
     tray.show_action.trigger()
     qapp.processEvents()
@@ -114,7 +131,9 @@ def test_profiles_are_exclusive_authoritative_and_id_based(
     assert set(tray.profile_actions) == {"first", "second", "third"}
     assert tray.profile_group.isExclusive()
     assert tray.profile_menu.title() == "Active software profile"
-    assert tray.software_menu.title() == "Software controls"
+    assert tray.software_header.text() == "Software controls"
+    assert tray.software_header_action is tray.software_header
+    assert not hasattr(tray, "software_menu")
     assert tray.onboard_menu.title() == "Onboard / firmware"
     assert not hasattr(widget, "profiles_box")
     assert "not onboard slots" in tray.profile_menu.menuAction().toolTip()
@@ -136,7 +155,10 @@ def test_profiles_are_exclusive_authoritative_and_id_based(
     assert _checked(tray) == ["first"]
     assert page.active_label.text().endswith("(first)")
     assert page.profiles_box.currentData() == "first"
-    assert tray.software_menu.isEnabled()
+    assert tray.profile_menu.isEnabled()
+    assert tray.scroll_menu.isEnabled()
+    assert tray.software_header.text() == "Software controls"
+    assert not tray.software_header.isEnabled()
     assert not tray.onboard_menu.isEnabled()
 
     tray.profile_actions["second"].trigger()
@@ -190,7 +212,6 @@ def test_submenu_refreshes_after_remote_rename_while_parent_stays_open(
     widget, client = window
     tray = _tray(widget)
     tray.menu.show()
-    tray.software_menu.show()
     tray.profile_menu.show()
     qapp.processEvents()
     assert tray.profile_menu.isVisible()
@@ -227,7 +248,8 @@ def test_offline_and_unreadable_configuration_disable_selection(
     widget.model.mark_unreachable("offline")
     qapp.processEvents()
     assert not tray.profile_menu.isEnabled()
-    assert not tray.software_menu.isEnabled()
+    assert not tray.scroll_menu.isEnabled()
+    assert tray.software_header.text() == "Software controls"
     assert not page.activate_button.isEnabled()
     assert tray.device_mode.menu.isEnabled()
     tray.profile_actions["second"].trigger()
@@ -239,7 +261,7 @@ def test_offline_and_unreadable_configuration_disable_selection(
     widget.model.apply_configuration(99, "not valid toml = [")
     qapp.processEvents()
     assert not tray.profile_menu.isEnabled()
-    assert not tray.software_menu.isEnabled()
+    assert not tray.scroll_menu.isEnabled()
     assert not page.activate_button.isEnabled()
     tray.profile_actions["second"].trigger()
     qapp.processEvents()
@@ -247,7 +269,7 @@ def test_offline_and_unreadable_configuration_disable_selection(
     widget.model.apply_configuration(100, client.document)
     qapp.processEvents()
     assert tray.profile_menu.isEnabled()
-    assert tray.software_menu.isEnabled()
+    assert tray.scroll_menu.isEnabled()
     assert _checked(tray) == ["first"]
 
 
@@ -304,7 +326,7 @@ async def test_pending_tray_switch_blocks_duplicates_and_reconciles(
         tray.profile_actions["second"].trigger()
         assert len(jobs) == 1
         assert not tray.profile_menu.isEnabled()
-        assert not tray.software_menu.isEnabled()
+        assert not tray.scroll_menu.isEnabled()
         assert not widget.device.isEnabled()
         assert _checked(tray) == ["first"]
         tray.profile_actions["third"].trigger()
@@ -318,7 +340,7 @@ async def test_pending_tray_switch_blocks_duplicates_and_reconciles(
         await presenter.refresh()
         qapp.processEvents()
         assert not tray.profile_menu.isEnabled()
-        assert not tray.software_menu.isEnabled()
+        assert not tray.scroll_menu.isEnabled()
         assert _checked(tray) == ["first"]
         assert not task.done()
         assert client.selected == ["second"]
@@ -331,7 +353,7 @@ async def test_pending_tray_switch_blocks_duplicates_and_reconciles(
         assert _checked(tray) == [active]
         assert page.active_label.text().endswith(f"({active})")
         assert tray.profile_menu.isEnabled()
-        assert tray.software_menu.isEnabled()
+        assert tray.scroll_menu.isEnabled()
         assert model.apply_status == ("Profile switch failed" if fail else "Profile switched")
         assert client.selected == ["second"]
         assert not jobs

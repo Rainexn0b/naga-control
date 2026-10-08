@@ -39,8 +39,10 @@ def test_saved_checks_and_observation_are_independent_and_read_only(
 ) -> None:
     widget, client = window
     tray = _tray(widget)
-    assert tray.scroll_menu.menuAction() in tray.software_menu.actions()
-    assert tray.software_menu.menuAction() in tray.menu.actions()
+    assert tray.scroll_menu.menuAction() in tray.menu.actions()
+    assert tray.profile_menu.menuAction() in tray.menu.actions()
+    assert not hasattr(tray, "software_menu")
+    assert tray.software_header in tray.menu.actions()
     assert tray.onboard_menu.menuAction() in tray.menu.actions()
     assert tray.scroll_group.isExclusive()
     assert [action.text() for action in tray.scroll_actions.values()] == [
@@ -216,7 +218,8 @@ async def test_pending_guard_and_failure_reconcile(qapp: QApplication, failure: 
         assert len(jobs) == 1
         assert not tray.scroll_menu.isEnabled()
         assert not tray.profile_menu.isEnabled()
-        assert not tray.software_menu.isEnabled()
+        assert not tray.software_header.isEnabled()
+        assert tray.software_header.text() == "Software controls"
         assert not widget.device.isEnabled()
         assert _checked(tray) == ["tactile"]
         tray.smart_reel_action.trigger()

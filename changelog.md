@@ -63,11 +63,14 @@ release-pipeline safety.
   the header shows only the mouse title. Dropdown selection edits the selected
   profile (stable IDs disambiguate duplicates) while Buttons/Settings/Power
   follow the active profile; per-profile plate drafts survive selection changes
-  with concise pending feedback. The tray nests Active software profile plus
-  Scroll wheel under Software controls and read-only native behavior under
-  Onboard / firmware, with Device mode independently discoverable; software
-  actions stay greyed and blocked unless driver mode is verified, and the gate
-  reads Switch mode (unavailable). Requested policy, observed hardware mode,
+  with concise pending feedback. The tray shows a bold disabled **Software
+  controls** header with **Active software profile** plus **Scroll wheel**
+  directly under it (no Software controls submenu), then read-only native
+  behavior under Onboard / firmware with Device mode independently
+  discoverable; software actions stay greyed and blocked unless driver mode is
+  verified, and the closed gate reads **Switch mode (safety validation
+  required)**, distinguishing software-mode readiness from switching safety.
+  Requested policy, observed hardware mode,
   and remapping readiness are shown separately using existing snapshots; this
   presentation clarification opens no hardware gate and claims no new hardware
   validation.
@@ -117,6 +120,12 @@ release-pipeline safety.
   `CoroutineType` subscription, and offscreen Qt widget teardown uses
   deterministic close/deleteLater with strict deletion verification. This
   covers the test suite only and changes no product behavior.
+- The controlled portable-build toolchain installs the `file` utility, so
+  AppImage assembly no longer fails with `file command is missing`. The
+  finished-artifact static gate leaves the extraction staging child absent for
+  the trusted extractor while keeping the private parent directory and
+  fail-closed checks. These are build-pipeline fixes only and establish no
+  real ABI, distro install, or launch acceptance.
 
 ### Known Limitations
 
