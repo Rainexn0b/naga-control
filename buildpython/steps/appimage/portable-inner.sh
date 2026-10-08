@@ -105,7 +105,18 @@ phase_build() {
   mkdir -p "$HOME" /tmp/opencode
   env -u PYTHONHOME -u PYTHONPATH -u LD_PRELOAD LD_LIBRARY_PATH=/opt/naga-python/lib "$CONTROL_BIN" -m venv /tmp/opencode/portable-venv
   /tmp/opencode/portable-venv/bin/pip install -e ".[dev]"
-  /tmp/opencode/portable-venv/bin/python -m buildpython --run-steps AppImage
+  appimage_log="/workspace/buildlog/naga-control/step-14-appimage.log"
+  if /tmp/opencode/portable-venv/bin/python -m buildpython --run-steps AppImage; then
+    :
+  else
+    status=$?
+    if [ -f "$appimage_log" ]; then
+      cat "$appimage_log" || true
+    else
+      echo "portable-inner.sh: AppImage build failed; log missing: $appimage_log" >&2
+    fi
+    return "$status"
+  fi
   image="$(one_appimage)"
   test -s "$image"
   printf '%s\n' "portable build complete; static gate pending"

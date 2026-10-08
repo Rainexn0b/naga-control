@@ -1,20 +1,40 @@
 # Distro Portability Execution Tracker
 
-Status (2026-10-08, HEAD `31ccc23` + 8 uncommitted paths): **CI root fix verified locally; awaiting user-authorized main push and CI rerun**.
+Status (2026-10-08, HEAD `3b5d6c8` + 5 dirty paths): **source CI green, validation FAILED at AppImage assembly (cause UNKNOWN), step-14 diagnostic wrapper done and tested, ready to commit/push main and rerun quality + validation Release; v0.5.0 untagged/unpublished**.
 The user approved [Distro Portability Plan (Revised)](distro-portability-plan-revised.md)
 with "then follow the revised plan. please continue". That read-only plan controls
 the sequence and scope; it supersedes this file's former execution waves.
 This is its compact evidence/register tracker, not another plan or support promise.
-`b6d6c71` holds the reviewed full tree (84 files) with portable builder and finished
+`b6d6c71` holds the reviewed full tree with portable builder and finished
 static gate plus release 0.5.0 metadata; `31ccc23` adds a diagnostic wrapper that
-exposes the pytest log while retaining exit status. The user authorized everything
-in tree, push directly to main, review-branch deletion (deleted remote/local), and
-fixing failing CI. No tag/publication until green. v0.5.0 is untagged/unpublished;
-latest published remains v0.4.0. The seven test paths plus this tracker are reviewed
-but uncommitted (see checkpoint below). Guidance, portable builder, artifact gate, and
-workflow wiring below are historical FAKE-ACCEPTED local receipts; real CI
-build/ABI/smoke were dispatched and then blocked by the now-historical segfault failure.
-Actual portable artifact remains UNKNOWN/PENDING.
+exposes the pytest log while retaining exit status; `3b5d6c8` adds Python
+3.12-safe test annotations and deterministic Qt teardown (test-only, no product
+change). All tree was included in the release approval, pushed direct to main,
+and the review branch was deleted. Source CI `37834706341` is SUCCESS on this
+SHA and remains valid. Validation-only Release `37834701338` is FAILURE:
+metadata SUCCESS; pinned OpenRazer build/compiler/metadata/import/hash gates
+SUCCESS; source full profile SUCCESS; pinned CPython 3.12.15 Ubuntu 22.04 image
+build plus stdlib probe plus Qt 6.12 dependency install SUCCESS; then
+buildpython AppImage assembly FAILED (21.8s, exit 1, 19:59:21 UTC).
+`/workspace/buildlog/naga-control/step-14-appimage.log` was not printed and the
+runner is gone, so the actual assembly error/log is UNKNOWN. Static
+finished-artifact gate, 22.04 smoke, 24.04 smoke, staging, and upload were
+never reached; no real ABI, smoke, or distro pass is claimed. Parent failed
+log: `/tmp/opencode/naga-portability/ci-fix-release.failed.log` (~8334 lines).
+v0.5.0 is untagged/unpublished; latest published remains v0.4.0 (see GitHub
+releases for current publication status). Guidance, portable builder, artifact
+gate, and workflow wiring below are historical FAKE-ACCEPTED local receipts; the
+implemented portable-build/static gate is distinct from the still-pending real
+portable artifact and representative distro install/launch evidence. Diagnostic
+work is DONE: `portable-inner.sh` wrapper prints `step-14-appimage.log` on
+failure while preserving the original status, with no fallthrough to gate or
+smoke (Bash/ShellCheck PASS). Tested: focused 166 portable/release contracts
+PASS in both venvs (3.20s, 3.62s); global Ruff PASS, format 419, Pyright 0;
+full parent venv pytest 3439 passed, 2 skipped, 224.40s EXIT 0 with pre/post
+hashes identical (cmp PASS). Current 5 dirty paths ready to commit/push main,
+then rerun quality + validation Release: `buildpython/steps/appimage/portable-inner.sh`,
+`changelog.md`, `docs/release-notes.md`, `docs/distro-portability-plan.md`,
+`tests/test_appimage_portable_failure_logs.py` (5 tests). Tag only when green.
 
 ## Verified baseline and limits
 
@@ -80,14 +100,15 @@ install_user/uninstall/distro_report plus ShellCheck: exit 0 silent.
 - Focused wrapper checks after `31ccc23`: 70 passed, 2 skipped, 4.22s, plus global
   Ruff/format/Pyright passed.
 
-## CI root-fix checkpoint (verified locally; awaiting main push and CI rerun)
+## CI root-fix checkpoint (pushed to main; source CI green, validation build failed at AppImage assembly)
 
 - Source fix is test-only across 7 reviewed paths: modified
   `tests/gui_version_panel_fakes.py`, `tests/test_gui_update_shutdown.py`,
   `tests/test_gui_version_panel.py`, `tests/test_service_cli_main.py`; new
   `tests/conftest.py`, `tests/gui_qt_lifetime.py`,
   `tests/test_gui_qt_lifetime.py`. No product/dependency/workflow changes.
-  The 8th uncommitted path is this tracker.
+  Those 8 paths are committed at `3b5d6c8` (historical); the current dirty set
+  is 5 paths (see header).
 - Root cause addressed: Qt 6.12 native proof showed test widgets
   garbage-collected/deleted inside a signal and a shared QObject destroyed at
   app shutdown. Tests now use test-scoped main-thread close/deleteLater,
@@ -110,16 +131,20 @@ install_user/uninstall/distro_report plus ShellCheck: exit 0 silent.
 - Environment note: private 3.12 loader RUNPATH relinked under `/tmp` only so
   hermetic test children run without `LD_*`; parent uid 1000. Earlier 73
   failures traced to worker root/env loader, not a repo fix.
-- CI status: no new CI dispatched for these fixes yet. Earlier branch 12-error
-  runs have unknown exact logs (no retroactive cause claim); latest main
-  segfault runs remain the latest remote results and are now historical
-  evidence. Parent next: commit/push 8 paths, then dispatch validation
-  Release.
-- Portable controlled build/static gate and 22.04/24.04 smoke remain
-  unreached/UNKNOWN pending CI; no hardware or new distro evidence in this
-  checkpoint.
+- CI status: source CI `37834706341` SUCCESS on `3b5d6c8`; validation-only
+  Release `37834701338` FAILURE at buildpython AppImage assembly (21.8s, exit
+  1, 19:59:21 UTC) after pinned image build, stdlib probe, and Qt 6.12 install
+  passed. `step-14-appimage.log` was not printed and the runner is gone, so the
+  assembly error is UNKNOWN. Earlier branch 12-error runs have unknown exact
+  logs (no retroactive cause claim); main segfault runs are now historical
+  evidence. Parent next: push these notes plus a step-14 diagnostic wrapper,
+  then a bounded pipeline fix; tag only when green.
+- Portable controlled build/static gate and 22.04/24.04 smoke: assembly FAILED
+  before the static finished-artifact gate; 22.04/24.04 smoke, staging, and
+  upload never reached. No ABI, smoke, hardware, or new distro evidence is
+  claimed in this checkpoint.
 
-## Dispatched CI failure (historical evidence; fix above awaits CI rerun)
+## Dispatched CI failures (historical evidence; source fix now green, assembly blocker current)
 
 - First review-branch runs failed source pytest with **3399 passed, 2 skipped,
   12 errors**; logs unavailable: quality `37826632305`, validation Release `37826632804`.
@@ -246,8 +271,9 @@ cover userspace only, not FUSE desktop, permissions, DKMS, session services, or 
    driver/static-gate wiring. That wiring was dispatched; real CI build/ABI/smoke
    did not complete because both runs segfaulted before the AppImage stage
    (now historical evidence; fix verified locally above).
-3. Push the 8 reviewed paths direct to main under the existing user
-   authorization, then rerun quality plus validation-only Release. Concrete
+3. Historical: the 8 reviewed paths were pushed direct to main as `3b5d6c8`
+   under the existing user authorization, then quality plus validation-only
+   Release were rerun (source green, assembly red). Concrete
    pipeline results take precedence over manual package lookups.
 4. Then representative ordinary install -> CLI/launch -> upgrade -> remove paths
    with safe fakes and available authorized environments; fix proven gaps only.
@@ -257,7 +283,8 @@ cover userspace only, not FUSE desktop, permissions, DKMS, session services, or 
    and no hardware evidence newly accepted here.
 6. Git/CI/release (historical branch step superseded): the review-branch push/dispatch
    already happened and the branch was deleted remote/local. Current requirement is
-   direct-to-main commit/push of the 8 reviewed paths, with quality and validation-only
+   direct-to-main commit/push of the current 5 paths (wrapper + 3 docs + new
+   failure test), with quality and validation-only
    Release reruns. Only when green: record final evidence notes, tag/publish v0.5.0 with
    6 assets, verify checksums, run a safe isolated installer test or name the blocker.
    Latest published stays v0.4.0 until then.

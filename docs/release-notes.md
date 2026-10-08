@@ -1,22 +1,24 @@
 # Release Notes
 
 The root [changelog.md](../changelog.md) is the authoritative versioned release
-history. It contains Unreleased, the preparing 0.5.0 entry dated 2026-10-08,
-and the 0.4.0, 0.3.0, 0.2.0, and 0.1.4 entries. The latest published release
-remains v0.4.0; v0.5.0 is preparing and has not been published or tagged.
+history. It contains Unreleased and the dated 0.5.0, 0.4.0, 0.3.0, 0.2.0,
+and 0.1.4 entries. See GitHub releases for current publication status.
 Release publishing extracts only the
 matching version section via `scripts/prepare_release.py`, not this overview
-or the entire changelog. The v0.5.0 GitHub body will come from the
+or the entire changelog. The v0.5.0 GitHub body comes from the
 `## [0.5.0] - 2026-10-08` section in the root changelog.
 
-## v0.5.0 readiness (preparing, not published)
+## v0.5.0
 
-v0.5.0 is preparing and has not been published or tagged; the latest published
-release remains v0.4.0. The release body will be the matching
+The release body is the matching
 `## [0.5.0] - 2026-10-08` section in [changelog.md](../changelog.md),
 extracted by `scripts/prepare_release.py`. This overview is not the release
 body, and the checkout installer notes below are not retroactive to already
-published tags.
+published tags. Controlled portable-build validation is currently blocked at
+buildpython AppImage assembly (actual error/log unknown); the static
+finished-artifact gate, 22.04/24.04 smoke, staging, and upload were never
+reached. This overview claims no real ABI, distro install, or launch
+acceptance.
 
 ### Changes in 0.5.0
 
@@ -41,7 +43,8 @@ published tags.
   CPython 3.12 build candidate with a finished static audit of the AppImage
   outer runtime and extracted bundled ELF/provider closure (inspection only,
   nothing executed). No real ABI, distro install, or launch acceptance is
-  claimed; CI and representative-environment checks are pending.
+  claimed; validation is blocked at AppImage assembly (actual error/log
+  unknown) and representative-environment checks are pending.
 - Runtime robustness: teardown retains ownership and joins through cancellation
   and close failures, held-output cleanup attempts each release independently,
   provisional input/capture and OpenRazer/D-Bus acquisitions roll back, the
@@ -50,6 +53,9 @@ published tags.
   No new hardware acceptance is claimed.
 - Checkout-only `scripts/distro_report.sh` remains a read-only offline
   diagnostic, not installer integration and not a support certificate.
+- Test-suite CI compatibility: Python 3.12-safe annotations and deterministic
+  offscreen Qt widget teardown with strict deletion verification. Test-only
+  improvement; no product behavior change.
 
 ### Known limits for 0.5.0
 

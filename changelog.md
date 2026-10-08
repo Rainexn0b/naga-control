@@ -14,9 +14,8 @@ installing or upgrading.
 
 ## [0.5.0] - 2026-10-08
 
-This release prepares installer portability, GUI profile/mode clarity, and
-release-pipeline safety. v0.5.0 is preparing and has not been published or
-tagged; the latest published release remains v0.4.0.
+This release improves installer portability, GUI profile/mode clarity, and
+release-pipeline safety.
 
 ### Added
 
@@ -48,8 +47,8 @@ tagged; the latest published release remains v0.4.0.
   (`Dockerfile.portable` plus `portable-build.sh`), alongside a finished static
   audit of the AppImage outer runtime and extracted bundled ELF/provider
   closure (inspection only, nothing executed). This is a build candidate and
-  static gate only; real ABI, distro install, and launch acceptance are still
-  pending CI and representative-environment checks.
+  static gate only; it does not establish real ABI, distro install, or launch
+  acceptance.
 - Interpreter-free safe uninstaller `scripts/uninstall.sh` needs no AppImage
   and no host Python. It reuses the stable per-user install lock, verifies HOME
   ownership and symlink safety, removes only known installer-owned files,
@@ -71,7 +70,7 @@ tagged; the latest published release remains v0.4.0.
   reads Switch mode (unavailable). Requested policy, observed hardware mode,
   and remapping readiness are shown separately using existing snapshots; this
   presentation clarification opens no hardware gate and claims no new hardware
-  validation. Release notes are prepared; the release itself is still pending.
+  validation.
 - Profile selectors now say **Active software profile** and show names plus IDs;
   **Software profiles** management explains selection for editing versus activation.
   These are Naga Control saved profiles, not onboard slots. Device mode uses
@@ -114,6 +113,10 @@ tagged; the latest published release remains v0.4.0.
   payloads, lifecycle failures report without identifier payloads, and failed
   scroll reads invalidate cached state with bounded battery conversion so no
   stale readback is reported.
+- Test-suite CI compatibility: Python 3.12-safe annotations avoid a runtime
+  `CoroutineType` subscription, and offscreen Qt widget teardown uses
+  deterministic close/deleteLater with strict deletion verification. This
+  covers the test suite only and changes no product behavior.
 
 ### Known Limitations
 
@@ -136,7 +139,7 @@ tagged; the latest published release remains v0.4.0.
 - Representative distro install, launch, upgrade, and uninstall checks are not
   yet verified; the controlled build candidate and static outer-runtime and
   bundled ELF/provider-closure audit do not imply real ABI or distro
-  acceptance. CI and representative-environment validation are pending.
+  acceptance.
 
 ## [0.4.0] - 2026-10-05
 
