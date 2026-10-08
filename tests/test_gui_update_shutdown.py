@@ -6,6 +6,7 @@ from typing import cast
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from gui_version_panel_fakes import close_panel
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
@@ -54,4 +55,4 @@ def test_stalled_update_check_does_not_block_worker_shutdown(tmp_path: Path) -> 
         release.set()
         assert finished.wait(5)
         worker.stop()
-        panel.close()
+        close_panel(panel, qapp)

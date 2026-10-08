@@ -1,5 +1,7 @@
 """CLI composition/exit tests: no hardware factories, bus, discovery, or signals."""
 
+from __future__ import annotations
+
 import logging
 import sys
 from collections.abc import Callable, Coroutine

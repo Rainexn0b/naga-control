@@ -10,8 +10,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from gui_version_panel_fakes import browser as browser
 from gui_version_panel_fakes import check_panel as _check
+from gui_version_panel_fakes import close_panel as _close
 from gui_version_panel_fakes import make_panel as _panel
 from gui_version_panel_fakes import make_releases as _releases
+from gui_version_panel_fakes import managed_panels as managed_panels
 from gui_version_panel_fakes import no_http as no_http
 from gui_version_panel_fakes import qapp as qapp
 from gui_version_panel_fakes import settings as settings
@@ -251,6 +253,7 @@ def test_closed_worker_is_friendly_and_does_not_fetch(
     assert settings.allKeys() == ["unrelated"]
     fetcher.assert_not_called()
     browser.assert_not_called()
+    _close(panel, qapp)
 
 
 def test_real_worker_keeps_qt_responsive_queues_mutations_and_ignores_stale_jobs(
@@ -333,4 +336,4 @@ def test_real_worker_keeps_qt_responsive_queues_mutations_and_ignores_stale_jobs
         for future in futures:
             future.result(timeout=5)
         qapp.processEvents()
-        panel.close()
+        _close(panel, qapp)
