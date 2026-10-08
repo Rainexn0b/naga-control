@@ -7,6 +7,7 @@ from naga_control.gui.models import ServiceModel
 from naga_control.gui.overview_page import OverviewPage
 from naga_control.gui.power_page import PowerPage
 from naga_control.gui.presenter import GuiPresenter
+from naga_control.gui.profile_mode_view import SOFTWARE_PROFILE_HELP
 from naga_control.gui.profiles_page import ProfilesPage
 from naga_control.gui.two_columns import TwoColumns
 from naga_control.gui.version_panel import VersionPanel
@@ -34,7 +35,8 @@ class DevicePage(TwoColumns):
         left_layout.addWidget(connection)
         left_layout.addWidget(power)
 
-        profiles = QGroupBox("Profiles")
+        profiles = QGroupBox("Software profiles")
+        profiles.setToolTip(SOFTWARE_PROFILE_HELP)
         QVBoxLayout(profiles).addWidget(self.profiles)
         self.updates = VersionPanel(run)
         updates = QGroupBox("Updates")

@@ -1,0 +1,5 @@
+# Synthetic identity, not a capture from a host.
+NAME="Synthetic Ubuntu fixture"
+ID=ubuntu
+ID_LIKE=debian
+VERSION_ID="22.04"

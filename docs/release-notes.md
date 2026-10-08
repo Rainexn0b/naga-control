@@ -1,9 +1,64 @@
 # Release Notes
 
 The root [changelog.md](../changelog.md) is the authoritative versioned release
-history. It contains Unreleased changes and the 0.4.0, 0.3.0, 0.2.0, and 0.1.4 entries.
+history. It contains Unreleased, the preparing 0.5.0 entry dated 2026-10-08,
+and the 0.4.0, 0.3.0, 0.2.0, and 0.1.4 entries. The latest published release
+remains v0.4.0; v0.5.0 is preparing and has not been published or tagged.
 Release publishing extracts only the
-matching version section, not this overview or the entire changelog.
+matching version section via `scripts/prepare_release.py`, not this overview
+or the entire changelog. The v0.5.0 GitHub body will come from the
+`## [0.5.0] - 2026-10-08` section in the root changelog.
+
+## v0.5.0 readiness (preparing, not published)
+
+v0.5.0 is preparing and has not been published or tagged; the latest published
+release remains v0.4.0. The release body will be the matching
+`## [0.5.0] - 2026-10-08` section in [changelog.md](../changelog.md),
+extracted by `scripts/prepare_release.py`. This overview is not the release
+body, and the checkout installer notes below are not retroactive to already
+published tags.
+
+### Changes in 0.5.0
+
+- GUI profile and mode clarity: Device > Software profiles owns the single
+  dropdown with explicit Activate; selectors distinguish editing selection from
+  activation and show names plus IDs; the tray groups Software controls
+  (Active software profile plus Scroll wheel) with read-only Onboard / firmware
+  status and an independently discoverable read-only Device mode. Requested
+  policy, observed mode, and remapping readiness stay separate; software
+  mutations require verified driver mode. Firmware/driver switching stays
+  blocked pending interactive held-output, wake, failure, and reconnect checks.
+- Installer portability: PATH-robust `ldconfig` discovery, x86_64
+  `libfuse.so.2` capability checks with exact per-release manual references,
+  `/dev/fuse` and kernel FUSE gates, and an interpreter-free safely locked
+  uninstaller. Source safety keeps checksums before execution, read-only
+  preflight, stable locks, private staging with atomic replacement,
+  consent-based Naga-only upgrades with verified rollback pairs, and deferred
+  activation. Ordinary installs stay app-only; the experimental OpenRazer path
+  stays a separate exact-pin Arch-only opt-in cohort at
+  `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` (`3.12.1.pr2904.fix2-1`).
+- Portability candidate: controlled Ubuntu 22.04 / glibc 2.35 / x86_64 plus
+  CPython 3.12 build candidate with a finished static audit of the AppImage
+  outer runtime and extracted bundled ELF/provider closure (inspection only,
+  nothing executed). No real ABI, distro install, or launch acceptance is
+  claimed; CI and representative-environment checks are pending.
+- Runtime robustness: teardown retains ownership and joins through cancellation
+  and close failures, held-output cleanup attempts each release independently,
+  provisional input/capture and OpenRazer/D-Bus acquisitions roll back, the
+  D-Bus name is reserved before startup with a readiness gate, diagnostics
+  redact identifiers, and failed scroll/power reads never report stale values.
+  No new hardware acceptance is claimed.
+- Checkout-only `scripts/distro_report.sh` remains a read-only offline
+  diagnostic, not installer integration and not a support certificate.
+
+### Known limits for 0.5.0
+
+- Exact-pin natural idle/wake, held-output handoff, and interactive mode-switch
+  tests are unverified; wired 6- and 2-button signatures remain uncaptured.
+- Manual extraction is launch-only, not managed FUSEless installation.
+- Representative distro install and launch are not yet verified.
+- Safety pins and the exact-pin OpenRazer cohort are unchanged; see the
+  matching changelog section for the full prerequisite and limitation list.
 
 ## Checkout installer safety
 

@@ -12,19 +12,81 @@ installing or upgrading.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-08
+
+This release prepares installer portability, GUI profile/mode clarity, and
+release-pipeline safety. v0.5.0 is preparing and has not been published or
+tagged; the latest published release remains v0.4.0.
+
 ### Added
 
+- Read-only **Device mode** tray status distinguishes requested mode, observed
+  hardware mode and software-remapping readiness, including offline and errors.
+  Physical firmware/driver switching remains blocked pending interactive safety
+  validation; this clarification does not enable it.
 - Releases now include CI-built pinned OpenRazer Arch packages
   (driver-dkms/daemon/Python client from fork commit `26b0eeb5...`) plus a
   sha256 sidecar, installable as one pacman transaction.
 - OpenRazer replacement is explicitly opt-in: the installer validates the
   release's pinned Arch packages before one interactive sudo pacman transaction;
   other distributions keep the manual matching-source procedure.
+- Installer portability diagnostics check the actual capability first: a
+  PATH-robust `ldconfig` lookup for an x86_64 `libfuse.so.2` cache entry, a
+  usable `/dev/fuse` character device, and kernel FUSE support. Exact
+  per-release manual package references live in the README and troubleshooting
+  guide; the ordinary app-only path never installs distro dependencies and never
+  guesses a package name from branding or `ID_LIKE` (the explicit Arch
+  OpenRazer helper remains the only opt-in package path).
+- Checkout-only `scripts/distro_report.sh` gives read-only offline distro
+  advice with no network, device access, prompts, or filesystem changes and no
+  host Python requirement. It parses `os-release` as data, reports reviewed
+  manual FUSE2 rows only for Ubuntu 22.04, Ubuntu 24.04, and Arch, and stays a
+  diagnostic: it is not installer integration, eligibility, or a support
+  certificate, and it never checks prerequisite presence.
+- Controlled portable-build candidate: `buildpython/steps/appimage/` pins an
+  Ubuntu 22.04 (glibc 2.35) x86_64 toolchain with CPython 3.12.15
+  (`Dockerfile.portable` plus `portable-build.sh`), alongside a finished static
+  audit of the AppImage outer runtime and extracted bundled ELF/provider
+  closure (inspection only, nothing executed). This is a build candidate and
+  static gate only; real ABI, distro install, and launch acceptance are still
+  pending CI and representative-environment checks.
+- Interpreter-free safe uninstaller `scripts/uninstall.sh` needs no AppImage
+  and no host Python. It reuses the stable per-user install lock, verifies HOME
+  ownership and symlink safety, removes only known installer-owned files,
+  refuses unsafe state with files retained, keeps profiles unless
+  `--purge-config` is passed, retains OpenRazer packages/group/daemon, and
+  still asks consent for udev rule removal.
 
 ### Changed
 
+- Device > Software profiles now owns the single profile dropdown with
+  New/Rename/Delete, an authoritative active indicator, and explicit Activate;
+  the header shows only the mouse title. Dropdown selection edits the selected
+  profile (stable IDs disambiguate duplicates) while Buttons/Settings/Power
+  follow the active profile; per-profile plate drafts survive selection changes
+  with concise pending feedback. The tray nests Active software profile plus
+  Scroll wheel under Software controls and read-only native behavior under
+  Onboard / firmware, with Device mode independently discoverable; software
+  actions stay greyed and blocked unless driver mode is verified, and the gate
+  reads Switch mode (unavailable). Requested policy, observed hardware mode,
+  and remapping readiness are shown separately using existing snapshots; this
+  presentation clarification opens no hardware gate and claims no new hardware
+  validation. Release notes are prepared; the release itself is still pending.
+- Profile selectors now say **Active software profile** and show names plus IDs;
+  **Software profiles** management explains selection for editing versus activation.
+  These are Naga Control saved profiles, not onboard slots. Device mode uses
+  **Software / driver** and **Onboard / firmware**, separately from scroll mode.
 - The project license changes from MIT to GPL-2.0-only to match OpenRazer,
   which the project uses for all hardware operations.
+- Checkout installer safety: exact-tag AppImage checksum verification before
+  execution, replacement, service stop, or sudo; read-only desktop/FUSE/tool
+  preflight; stable per-user install lock; private staging with atomic
+  replacement; consent-based Naga-only upgrades with verified image/tag
+  rollback pairs; and deferred activation without `--now`. App-only completion
+  means a running service, not hardware readiness. Ordinary installation stays
+  app-only and never offers or modifies OpenRazer; the experimental Arch helper
+  remains a separate exact-pin opt-in cohort with isolated `/usr/bin/python3`
+  checks, active-kernel preflight, and reboot/re-login activation.
 
 ### Fixed
 
@@ -32,6 +94,49 @@ installing or upgrading.
   keeping the AppImage's FUSE filesystem alive until Python exits. Previously,
   stopping the whole control group could remove image-backed library pages
   during native cleanup and cause SIGBUS.
+- Installer FUSE errors no longer assume `ldconfig` is on PATH and no longer
+  guess per-release package names; missing-library, runtime, and kernel
+  failures report the SONAME/capability check plus the README and
+  troubleshooting references.
+- Profile activation and tray scroll requests now gate on verified
+  software/driver mode, reachability, and pending apply state, rechecking after
+  confirmation and at deferred execution. Blocked requests fail cleanly without
+  false success, preserve all drafts, and reconcile tray checkmarks.
+- Runtime teardown hardening: session, reader, and hardware-worker teardown
+  retains ownership and joins through cancellation and close failures;
+  generated-output cleanup attempts each held release independently; and
+  provisional input/capture plus OpenRazer/D-Bus acquisitions roll back on
+  failure instead of leaving partial state.
+- The service reserves the public D-Bus name before startup and gates wire
+  calls on readiness; failed startup closes the gate with an unavailable error
+  rather than entering uninitialized providers.
+- Diagnostics preserve CLI failures while redacting identifier and I/O error
+  payloads, lifecycle failures report without identifier payloads, and failed
+  scroll reads invalidate cached state with bounded battery conversion so no
+  stale readback is reported.
+
+### Known Limitations
+
+- Requires the custom OpenRazer baseline at
+  `26b0eeb5ed70d638fa3528851adcd5e58369a7f5`
+  (fork `Rainexn0b/openrazer`, branch `test-pr-2904-edualb`, Arch packages
+  `3.12.1.pr2904.fix2-1` attached to this release); no released upstream
+  minimum replaces it. Use compatible kernel module, daemon, Python client,
+  udev rules, and metadata. The temporary Arch prerequisite bridge is
+  explicitly opt-in; source pinning is not an indefinite security freeze.
+- Only Razer Naga V3 Pro wired `1532:00E7` and HyperSpeed `1532:00E8` are
+  supported, one transport at a time. Bluetooth and other devices are excluded.
+- Do not run the GUI or service as root.
+- Exact-pin natural idle/wake, held-output handoff, and interactive
+  firmware/driver mode-switch checks remain unverified; firmware mode is not
+  for daily use and the tray switch stays unavailable.
+- Wired 6- and 2-button plate signatures remain uncaptured and are not enabled.
+- Manual AppImage extraction remains launch-only; it is not a managed FUSEless
+  installation.
+- Representative distro install, launch, upgrade, and uninstall checks are not
+  yet verified; the controlled build candidate and static outer-runtime and
+  bundled ELF/provider-closure audit do not imply real ABI or distro
+  acceptance. CI and representative-environment validation are pending.
 
 ## [0.4.0] - 2026-10-05
 

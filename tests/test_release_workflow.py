@@ -94,3 +94,38 @@ def test_arch_prerequisites_and_unprivileged_build_without_sudoers() -> None:
     assert 'make KERNELDIR="$header" LLVM=1 driver' in package
     assert 'make KERNELDIR="$header" driver' in package
     assert "modprobe" not in package
+
+
+def test_appimage_validates_source_then_controlled_builder_then_smoke() -> None:
+    appimage = jobs()["appimage"]
+    assert ".venv/bin/python -m buildpython --profile full" in appimage
+    assert "--profile release" not in appimage
+    assert "buildpython/steps/appimage/portable-build.sh" in appimage
+    assert '.venv/bin/python -m buildpython --run-steps "AppImage Smoke"' in appimage
+    full_pos = appimage.index("--profile full")
+    portable_pos = appimage.index("portable-build.sh")
+    smoke_pos = appimage.index('--run-steps "AppImage Smoke"')
+    stage_pos = appimage.index("Stage exactly one AppImage")
+    assert full_pos < portable_pos < smoke_pos < stage_pos
+
+
+def test_static_gate_precedes_any_bundled_execution_or_staging() -> None:
+    appimage = jobs()["appimage"]
+    assert "RELEASE_VERSION: ${{ needs.metadata.outputs.version }}" in appimage
+    assert appimage.index("RELEASE_VERSION") < appimage.index("portable-build.sh")
+    assert "build/appimage/AppDir/usr/bin/python3" not in appimage
+    assert 'PYTHONHOME="$PWD/build/appimage' not in appimage
+    assert "dist/Naga-Control-*-x86_64.AppImage" in appimage
+    assert 'test "${#images[@]}" = 1' in appimage
+
+
+def test_controlled_timeout_is_bounded_and_assets_unchanged() -> None:
+    appimage = jobs()["appimage"]
+    assert "timeout-minutes: 60" in appimage
+    assert "timeout-minutes: 30" not in appimage
+    assert WORKFLOW.count("actions/upload-artifact@v4") == 3
+    assert "name: appimage-release-assets" in WORKFLOW
+    assert "name: openrazer-release-assets" in WORKFLOW
+    assert "name: release-metadata" in WORKFLOW
+    assert "workflow_dispatch" in WORKFLOW
+    assert "if: github.event_name == 'push'" in jobs()["publish"]

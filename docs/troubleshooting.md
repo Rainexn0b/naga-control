@@ -19,9 +19,10 @@ management; the installer never invokes apt/pacman for an ordinary app install:
   and session D-Bus (Debian/Ubuntu: systemd user support and `dbus-user-session`;
   Arch/Fedora: systemd and dbus desktop session integration). Do not use sudo
   for the installer or borrow another user's bus credentials.
-- FUSE2: Arch `fuse2`; Ubuntu 24.04 `libfuse2t64`; older Debian/Ubuntu
-  `libfuse2`; Fedora `fuse-libs`. Also provide FUSE runtime/kernel support and
-  access to `/dev/fuse` through your normal distribution/session policy.
+- FUSE2: an x86_64 `libfuse.so.2` library. Use the README's
+  [exact-release package references](../README.md#install), not package guesses
+  inherited from another release or derivative. Also provide FUSE runtime/kernel
+  support and access to `/dev/fuse` through your normal distribution/session policy.
   Preflight discovers the library and checks runtime **metadata only**; it never
   opens/mounts `/dev/fuse`. Containers may lack usable FUSE even with the library.
   Managed installation always requires normal FUSE2/runtime support. Leave
@@ -192,8 +193,38 @@ left click) once; restart the service. The journal names the node.
 ## Mapped buttons emit digits instead of their mapping
 
 The active profile's bindings are the defaults. Open the GUI Buttons page
-and apply the desired bindings, or select another profile on the Profiles
-page.
+and apply the desired bindings, or activate another profile using the
+**Activate** button in **Device > Software profiles** or the tray's
+**Software controls > Active software profile**. Choosing a profile in the
+Software profiles dropdown only selects it for editing; editors follow the
+active profile. Entries show the display name and identifier, so identical
+names remain distinguishable.
+
+## Software profiles versus device mode
+
+Naga Control profiles are saved application/software profiles with desired
+hardware settings, not onboard mouse slots. **Onboard / firmware** device mode
+uses the mouse's native behavior and does not apply the selected software
+profile. No onboard-slot enumeration or binding upload is provided.
+
+The tray groups **Software controls** (Active software profile plus Scroll
+wheel) and **Onboard / firmware** read-only native-behavior status, with
+**Device mode** independently discoverable offline. Software mutations require
+verified driver mode plus saved software policy; unverified, offline,
+mismatched, calibrating, or legacy states leave those actions greyed and their
+handlers blocked with saved values reconciled. The **Device mode** submenu is
+read-only and stays accessible offline. It separates the requested service-wide
+policy, observed hardware mode, and software-remapping readiness, plus a neutral
+disabled **Switch mode (unavailable)**. **Software / driver** readback alone is
+not proof that mappings are active: readiness, matching modes, calibration and
+errors also matter. Disconnected retained snapshots show unknown/offline
+observations rather than current verified mode or activity. Scroll wheel mode
+is a separate setting.
+
+Firmware/driver switching is still unavailable pending the remaining interactive
+held-output, wake, failure and reconnect safety checks in
+[Device-Mode Handoff](hardware-validation.md#device-mode-handoff-ui-06-not-yet-validated).
+This UI clarification does not open that gate or authorize live hardware tests.
 
 ## Inputs behave oddly while another remapper runs
 

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from collections.abc import Iterator
 from dataclasses import replace
@@ -25,6 +26,20 @@ from naga_control.gui.worker import CoroFactory
 from naga_control.ipc.client import UnknownProfileError
 
 type Editor = Literal["settings", "power", "buttons"]
+
+VERIFIED = json.dumps(
+    {
+        "status": "available",
+        "generation": 9,
+        "transport": "hyperspeed",
+        "error": None,
+        "desired_mode": "software",
+        "observed_mode": "software",
+        "mode_ready": True,
+        "mode_error": None,
+        "calibrating": False,
+    }
+)
 
 
 def _document() -> str:
@@ -82,6 +97,10 @@ def window(qapp: QApplication) -> Iterator[tuple[MainWindow, FakeClient]]:
     widget = MainWindow(presenter, model, sync_run)
     widget._poll_timer.stop()  # pyright: ignore[reportPrivateUsage]
     sync_run(presenter.refresh)
+    from naga_control.gui.models import parse_snapshot
+
+    model.apply_snapshot(parse_snapshot(VERIFIED))
+    qapp.processEvents()
     widget.show()
     qapp.processEvents()
     yield widget, client
@@ -148,7 +167,7 @@ def test_undo_to_clean_loads_new_active_fields_and_retargets_next_apply(
     assert page.has_unsaved_changes()
     _external_switch(widget, client, qapp)
     latest = parse_toml(client.document)
-    assert widget.profiles_box.currentData() == "other"
+    assert widget.device.profiles.active_label.text().endswith("(other)")
     assert page.profile_id == "original"
     assert page.has_unsaved_changes()
 
@@ -217,7 +236,7 @@ def test_retained_draft_target_warning_survives_unrelated_status_notifications(
         assert "unsaved" in page.status_label.text().lower()
         assert page.profile_id == "original"
         assert page.has_unsaved_changes()
-        assert widget.profiles_box.currentData() == "other"
+        assert widget.device.profiles.active_label.text().endswith("(other)")
     assert not client.applied
 
 
@@ -228,6 +247,9 @@ class GatedClient(FakeClient):
         self.started = asyncio.Event()
         self.finish = asyncio.Event()
         self.selected: list[str] = []
+
+    async def snapshot_document(self) -> str:
+        return VERIFIED
 
     async def select_profile(self, profile_id: str) -> int:
         self.selected.append(profile_id)
@@ -247,13 +269,12 @@ def _assert_frozen(window: MainWindow, *, frozen: bool) -> None:
     for page in (window.device, window.buttons, window.settings):
         assert page.isEnabled() is not frozen
     for control in (
-        window.profiles_box,
         window.settings.dpi.rows[0].x_spin,
         window.device.power.idle_spin,
         window.device.profiles.plate_box,
         _ring_row(window).detail_edit,
     ):
-        assert control.isEnabled() is not frozen
+        assert control.isEnabledTo(window) is not frozen
 
 
 @pytest.mark.parametrize("fail", [False, True], ids=["successful-switch", "failed-switch"])
@@ -273,7 +294,9 @@ async def test_gated_profile_switch_freezes_synchronously_until_queued_completio
         qapp.processEvents()
         before = parse_toml(client.document)
         _assert_fields(widget, before.profile("original"))
-        widget.profiles_box.setCurrentIndex(widget.profiles_box.findData("other"))
+        profiles = widget.device.profiles
+        profiles.profiles_box.setCurrentIndex(profiles.profiles_box.findData("other"))
+        profiles.activate_button.click()
         _assert_frozen(widget, frozen=True)
         assert len(jobs) == 1
         assert client.selected == []
@@ -291,7 +314,6 @@ async def test_gated_profile_switch_freezes_synchronously_until_queued_completio
 
         client.finish.set()
         await asyncio.wait_for(task, timeout=5)
-        # Completion must reach Qt through its queued signal, not touch widgets from asyncio.
         _assert_frozen(widget, frozen=True)
         qapp.processEvents()
         _assert_frozen(widget, frozen=False)
@@ -299,7 +321,7 @@ async def test_gated_profile_switch_freezes_synchronously_until_queued_completio
         after = parse_toml(client.document)
         assert after.active_profile == active
         assert after.revision == before.revision + (0 if fail else 1)
-        assert widget.profiles_box.currentData() == active
+        assert widget.device.profiles.active_label.text().endswith(f"({active})")
         for page in (widget.settings, widget.device.power, widget.buttons):
             assert page.profile_id == active
             assert not page.has_unsaved_changes()

@@ -31,6 +31,11 @@ class ScrollClient(FakeClient):
             "generation": 9,
             "transport": "hyperspeed",
             "error": None,
+            "desired_mode": "software",
+            "observed_mode": "software",
+            "mode_ready": True,
+            "mode_error": None,
+            "calibrating": False,
             "observed": {
                 "scroll_mode": "tactile",
                 "scroll_acceleration": False,

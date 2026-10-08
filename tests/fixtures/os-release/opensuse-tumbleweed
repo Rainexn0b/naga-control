@@ -1,0 +1,4 @@
+# Synthetic identity; no artifact/snapshot acceptance is claimed.
+ID=opensuse-tumbleweed
+ID_LIKE="opensuse suse"
+VERSION_ID="20261008"

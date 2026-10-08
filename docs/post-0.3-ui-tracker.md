@@ -12,9 +12,9 @@ validation contracts.
 | UI-01 | Attached-plate identification | Investigation complete; implementation blocked | Reliable physical swap/identity evidence |
 | UI-02 | Click-before-wheel binding editors | Implemented and installed; awaiting desktop confirmation | None; GUI-only |
 | UI-03 | Per-zone color wheels and manual color entry | Implemented and installed; awaiting desktop confirmation | UI-02 verified |
-| UI-04 | Tray menu ownership and active-profile shortcuts | Implemented and installed; awaiting desktop confirmation | UI-03 verified |
-| UI-05 | Tray scroll mode, acceleration, and Smart Reel | Implemented and installed; awaiting desktop confirmation | UI-04 verified |
-| UI-06 | Tray software versus hardware mode | Service mode policy in v0.4.0; wake/held-output validation blocks tray control | Wireless wake recovery and remaining failure/ownership tests |
+| UI-04 | Tray menu ownership and active-profile shortcuts | Local polish installed; desktop confirmation pending | UI-03 verified |
+| UI-05 | Tray scroll mode, acceleration, and Smart Reel | Local polish installed; desktop confirmation pending | UI-04 verified |
+| UI-06 | Tray software versus hardware mode | Read-only Device mode status polished and installed locally; physical switch still blocked | Wireless wake recovery and remaining failure/ownership tests |
 
 Delivery order: UI-02, UI-03, UI-04, UI-05. Revisit UI-01 when a guided hardware
 capture is available. Resolve UI-06's meaning before implementing its service
@@ -25,17 +25,24 @@ settings, and transferring input ownership have different safety requirements.
 
 ### Current Selection
 
-Device > Profiles edits the plate layout of the selected management-list
-profile, which need not be the active profile. Apply plate saves that profile's
-`plate_layout` without activating it. The header's active-profile selector is
-the separate activation control.
+Device > Software profiles owns the single profile dropdown (stable itemData
+IDs), Activate, New/Rename/Delete, and the authoritative Active indicator;
+there is no header selector or management list. The dropdown selects the
+profile being edited (plate, rename, and other per-profile drafts), which
+need not be the active profile; explicit Activate, or tray activation
+through the same guard, switches the service-active profile. Buttons,
+Settings, and Power editors follow the service-active profile. Per-profile
+plate drafts are preserved across selection changes; the activate global
+guard discards them only after a confirmed successful service switch. Apply
+plate saves the selected profile's `plate_layout` without activating it.
 
 At runtime, the active profile's layout selects raw-signature translations,
 the binding group used on key-down, and the input interfaces to read/grab/proxy.
 This is a manual declaration, not an attached-plate observation or an artwork
 filter. All three plate groups remain editable on Buttons.
 
-Relevant code: `gui/profiles_page.py`, `gui/editors.py`,
+Relevant code: `gui/profiles_page.py`, `gui/profile_controls.py`,
+`gui/profile_plate_drafts.py`, `gui/editors.py`,
 `application/remapping.py`, `adapters/evdev/signatures.py`, and
 `domain/profiles.py`, under `src/naga_control/`.
 
@@ -138,9 +145,18 @@ typing a color must not issue immediate hardware writes.
 and Quit. Extend that menu, keeping explicit ownership of menu/action objects
 and preserving tray battery updates, window toggling, and close-to-tray.
 
-Add a checkable Active profile submenu built from service configuration, with
-the authoritative active profile marked. Use the existing asynchronous
-SelectProfile path and the same unsaved-edit guard as the window header.
+Add a checkable Active software profile submenu built from service configuration,
+with the authoritative active profile marked. Use the existing asynchronous
+SelectProfile path and the same unsaved-edit guard as the Software profiles
+Activate button.
+
+The window header shows only the mouse title; Device > Software profiles owns
+the single dropdown, New/Rename/Delete, active indicator, and explicit
+Activate. The dropdown manages selection for editing (stable itemData IDs);
+editors follow the service-active profile. The tray remains a quick-activation
+shortcut. These are Naga Control saved software profiles with desired hardware
+settings, not onboard slots. Firmware mode does not apply the selected software
+profile. The clarification preserves profile and scroll editing behavior.
 
 ### Acceptance
 
@@ -194,6 +210,30 @@ firmware mode. A daemon rescan tears down old input ownership before checking
 mode again. The Device summary shows mode readback and errors, but the tray
 switch is deliberately not enabled. The service mode policy is included in
 v0.4.0 as experimental functionality; earlier guided tests used source only.
+
+The confirmed firmware/driver interpretation now has a persistent, **read-only
+Device mode** tray submenu that stands alone at the tray root; it is not
+nested under the Software or Onboard groups. The tray root holds Show Naga
+Control, a **Software controls** submenu grouping **Active software profile**
+and **Scroll wheel**, a read-only **Onboard / firmware** submenu stating native
+mouse behavior with no onboard editing, the independent **Device mode** status
+submenu, and Quit. Human labels are
+**Software / driver** and **Onboard / firmware**. Requested policy, observed mode,
+software-remapping readiness and errors are shown separately using existing
+snapshots/configuration. The Device summary shares the same presentation. Offline
+retained snapshots cannot claim current mode or mapping activity; mismatch,
+unknown, not-ready and calibration states do not claim successful active mapping
+or firmware handoff. Inactive mode groups are greyed, and software profile and
+scroll actions run only through verified software-mode UI and entry guards,
+including pending-write, deferred-execution, and modal-confirmation checks.
+A short neutral disabled **Switch mode (unavailable)**
+keeps the still-closed switching gate discoverable even offline, with safety
+reasons in tooltips and docs. There is no selectable mode action,
+setter, new API or configuration behavior in this clarification.
+
+These presentation changes are now installed locally; they do not prove
+hardware acceptance. Held-output, wake, failure and reconnect checks remain
+interactive prerequisites before enabling any physical mode switch.
 
 OpenRazer also reasserts driver mode on startup/resume/wireless wake, so a single
 device-mode write is not a durable policy. Resolve ownership with OpenRazer
@@ -303,3 +343,70 @@ grabs even if their immediate rescan fails.
   The installed build has not been replaced, and the original device-mode
   drift trigger remains unknown. v0.4.0 includes the fake-tested recovery fix,
   but the remaining physical checks are still deferred.
+- 2026-10-08 local install: rebuilt `Naga-Control-0.4.0-x86_64.AppImage`
+  (SHA256 `f66f4efbc3ae7c7e03338ca2c03ef6204e6dc027f210a6f70801b6c6ebccab31`)
+  and installed it atomically to the local GUI path with backup retained under
+  a temporary `/tmp/opencode` directory; no new release, tag, or version bump.
+  Source-line check exempts `.opencode` and retains the project 400-line guard
+  (426 focused tests pass); `ruff check .`, `ruff format --check .`, and `pyright`
+  passed, and full offscreen `pytest` passed (3263 passed, 2 skipped,
+  5 hardware deselected, coverage unavailable). Hardware-free mounted-image,
+  Qt offscreen/presentation, service/capture/integration `--help`, and
+  temporary `KillMode=mixed` payload checks passed; clean-distro smoke not
+  claimed. Only the Naga user service was restarted after GUI Quit with
+  controls released and single transport; OpenRazer, saved config, and
+  installed tag unchanged. Snapshot recovered to available HyperSpeed with
+  desired/observed software, mode ready, and no mode/settings failures. GUI
+  left closed for user desktop confirmation. No physical F13/F14/F17,
+  held-output, wake, or mode-handoff tests were run; UI-06 switch stays blocked.
+- GUI polish (source-only, not installed): unified Device > Software profiles
+  dropdown with New/Rename/Delete, active indicator, and explicit Activate
+  replaces the header selector and management list; per-profile plate drafts are
+  preserved across selection and cleared only after confirmed service writes.
+  The tray splits into Software controls (Active profile plus Scroll wheel) and
+  Onboard / firmware read-only status, with Device mode independently
+  discoverable; software mutations require verified driver mode and saved
+  software policy, and the gate reads Switch mode (unavailable). Fake/offscreen
+  coverage updated; no build, install, release, or hardware validation claimed.
+- GUI polish correction (source-only, not installed): activation and scroll
+  intents now also gate on pending `applying…`, revalidate after modal
+  confirmation, and recheck verified software/reachability at deferred execution
+  before any presenter call; blocked deferred intents emit clean completion,
+  preserve all drafts, reconcile tray checkmarks, and never report false
+  success. Tray profile requests use the shared software-allowed gate including
+  scroll-pending. Plate drafts accept only exact `int` 12/6/2; Activate shows
+  Already active when appropriate and pending reason while saving. No service,
+  IPC, schema, hardware, or install changes; UI-06 switch stays blocked.
+- 2026-10-08 polish supervisor verification: `ruff check .`,
+  `ruff format --check .`, and `pyright` passed. Full fake/offscreen
+  `QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q` passed (3382 passed,
+  2 skipped for unavailable coverage, 5 hardware deselected); the focused
+  GUI suite passed 449 tests. Fake-only offscreen previews confirmed the
+  consolidated desktop layout and inactive onboard tray greying. Changes
+  remain source-only; no AppImage replacement, service restart, or new
+  hardware evidence is claimed for this polish.
+- 2026-10-08 local 0.5.0 polish install: `Naga-Control-0.5.0-x86_64.AppImage`
+  SHA256 `26aeac622167d1d2cdc3755da60976f00f60af7f1500d625b3ea5b9d877aadc1`, installed
+  to the local GUI path; prior image, config, installed tag, and Naga/OpenRazer
+  PIDs (3261508/2054792) backed up under `/tmp/opencode/naga-polish-install.LZs6LV`.
+- The 0.5.0 version came from a concurrent release-prep `pyproject.toml` change
+  during the build, not this wave. The primary stopped before install, confirmed all
+  9 GUI source hashes unchanged, and the user explicitly approved the local test build;
+  no publish, tag, or new release authorized; release-prep docs/changelog untouched.
+- User confirmed GUI Quit, released buttons, and one USB transport (hidden GUI on first
+  check was quit and absence verified). Under the per-user installer lock with baseline
+  rechecked unchanged, atomic replace ran with `KillMode=mixed` and hash verification;
+  only `systemctl --user restart naga-control.service` executed afterwards.
+- No integration files, config, OpenRazer, permissions, or installed tag changed
+  (config/tag match backup; OpenRazer PID 2054792 unchanged). New Naga PID 3646324
+  active/running; read-only snapshot at generation 2 HyperSpeed: available,
+  desired/observed software, mode ready, no mode/hardware/settings failures. GUI left
+  closed for user desktop launch.
+- Checks: ruff, ruff format (412 files), pyright, full offscreen pytest (3382 passed,
+  2 skipped, 5 hardware deselected) and focused GUI pytest (449 passed) passed.
+  Mounted-image hardware-free checks (0.5.0 version, bundled imports, 9 GUI hashes,
+  offscreen MainWindow/Tray, 360px layout, `--help` set, 8-file `KillMode=mixed`
+  payload) passed. Clean-distro smoke not run (Docker unavailable); no physical
+  F13/F14/F17, held-output, wake, firmware-handoff, or reconnect tests run. Not a
+  published release or portable ABI acceptance; earlier source-only and 0.4.0 records
+  above stand as then-true history.

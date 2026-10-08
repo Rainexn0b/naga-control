@@ -1,0 +1,4 @@
+# Synthetic derivative version is NOT its parent's version.
+ID=linuxmint
+ID_LIKE="ubuntu debian"
+VERSION_ID="22"

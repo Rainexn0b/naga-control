@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from collections.abc import Callable, Coroutine, Iterator
 from dataclasses import replace
@@ -19,7 +20,19 @@ from naga_control.gui.overview_page import OverviewPage
 from naga_control.gui.presenter import GuiPresenter
 from naga_control.ipc.client import NagaControlClient
 
-SNAPSHOT = '{"status":"available","generation":9,"transport":"hyperspeed","error":null}'
+SNAPSHOT = json.dumps(
+    {
+        "status": "available",
+        "generation": 9,
+        "transport": "hyperspeed",
+        "error": None,
+        "desired_mode": "software",
+        "observed_mode": "software",
+        "mode_ready": True,
+        "mode_error": None,
+        "calibrating": False,
+    }
+)
 
 
 class _NullCalls:
@@ -102,18 +115,25 @@ def _overview(window: MainWindow) -> OverviewPage:
     return window.device.overview
 
 
+def _profiles(window: MainWindow):  # pyright: ignore[reportUnknownParameterType]
+    return window.device.profiles
+
+
 def test_overview_reflects_the_model(qapp: QApplication) -> None:
     window, _client = _window(qapp)
     overview = _overview(window)
 
     assert overview.connection_label.text() == "online"
-    assert overview.status_label.text() == "available"
+    assert overview.status_label.text() == "Active (software mode verified)"
     assert overview.transport_label.text() == "hyperspeed"
     assert overview.generation_label.text() == "9"
     assert overview.revision_label.text() == str(default_configuration().revision)
     assert overview.error_label.text() == "none"
-    assert window.profiles_box.count() > 0
-    assert window.profiles_box.currentData() == default_configuration().active_profile
+    assert not hasattr(window, "profiles_box")
+    assert not hasattr(window, "profile_selector_label")
+    page = _profiles(window)
+    assert page.profiles_box.count() > 0
+    assert page.active_label.text().endswith(f"({default_configuration().active_profile})")
     assert _client.selected == []
 
 
@@ -126,14 +146,21 @@ def test_release_button_drives_the_presenter(qapp: QApplication) -> None:
     assert client.released
 
 
-def test_profile_combo_selects_through_the_presenter(qapp: QApplication) -> None:
+def test_dropdown_selection_manages_without_activating(qapp: QApplication) -> None:
     window, client = _window(qapp)
     _add_second_profile(window, client, qapp)
-    window.profiles_box.setCurrentIndex(window.profiles_box.findData("mmo"))
+    page = _profiles(window)
+    assert page.profiles_box.findData("mmo") != -1
+    page.profiles_box.setCurrentIndex(page.profiles_box.findData("mmo"))
     qapp.processEvents()
 
+    assert client.selected == []
+    assert page.active_label.text().endswith(f"({default_configuration().active_profile})")
+    assert page.profiles_box.currentData() == "mmo"
+    page.activate_button.click()
+    qapp.processEvents()
     assert client.selected == ["mmo"]
-    assert window.profiles_box.currentData() == "mmo"
+    assert page.active_label.text().endswith("(mmo)")
 
 
 def test_model_updates_reach_the_overview_without_user_action(qapp: QApplication) -> None:
@@ -189,6 +216,50 @@ def test_opening_size_fits_small_screen(qapp: QApplication) -> None:
     assert window.height() <= available.height()
 
 
+def test_software_dropdown_fits_360_pixels_with_duplicate_names(qapp: QApplication) -> None:
+    window, client = _window(qapp)
+    base = parse_toml(client.document)
+    profile = replace(base.profile(base.active_profile), display_name="Same")
+    client.document = dump_toml(
+        replace(
+            base,
+            active_profile="first",
+            default_profile="first",
+            profiles=(("first", profile), ("second", profile)),
+        )
+    )
+    _sync_run(window.presenter.refresh)
+    qapp.processEvents()
+    page = _profiles(window)
+    window.resize(360, 660)
+    window.show()
+    qapp.processEvents()
+    assert window.minimumWidth() == 360
+    assert window.width() == 360
+    assert [page.profiles_box.itemText(i) for i in range(page.profiles_box.count())] == [
+        "Same (first)",
+        "Same (second)",
+    ]
+    assert [page.profiles_box.itemData(i) for i in range(page.profiles_box.count())] == [
+        "first",
+        "second",
+    ]
+    assert page.profiles_box.fontMetrics().horizontalAdvance("Same (second)") + 60 <= 360
+    assert client.selected == []
+    assert page.active_label.text() == "Active: Same (first)"
+    page.profiles_box.setCurrentIndex(page.profiles_box.findData("second"))
+    qapp.processEvents()
+    assert client.selected == []
+    assert page.active_label.text() == "Active: Same (first)"
+    page.activate_button.click()
+    qapp.processEvents()
+    assert client.selected == ["second"]
+    assert page.active_label.text() == "Active: Same (second)"
+    assert window.width() == 360
+    window.deleteLater()
+    qapp.processEvents()
+
+
 def test_buttons_splitter_gives_more_room_to_artwork(qapp: QApplication) -> None:
     from naga_control.gui.buttons_page import ButtonsPage
 
@@ -211,9 +282,12 @@ def _add_second_profile(window: MainWindow, client: FakeClient, qapp: QApplicati
     qapp.processEvents()
 
 
-def test_shared_selector_tracks_external_profile_change_without_writing(qapp: QApplication) -> None:
+def test_unified_selector_tracks_external_change_without_writing(qapp: QApplication) -> None:
     window, client = _window(qapp)
     _add_second_profile(window, client, qapp)
+    page = _profiles(window)
+    page.profiles_box.setCurrentIndex(page.profiles_box.findData("mmo"))
+    qapp.processEvents()
     configuration = parse_toml(client.document)
     client.document = dump_toml(
         replace(configuration, active_profile="mmo", revision=configuration.revision + 1)
@@ -221,17 +295,18 @@ def test_shared_selector_tracks_external_profile_change_without_writing(qapp: QA
     _sync_run(window.presenter.refresh)
     qapp.processEvents()
 
-    assert window.profiles_box.currentData() == "mmo"
+    assert page.active_label.text().endswith("(mmo)")
     assert client.selected == []
 
 
 @pytest.mark.parametrize("editor", ["settings", "buttons", "power", "plate"])
 @pytest.mark.parametrize("discard", [False, True])
-def test_profile_switch_warns_about_unsaved_edits(
+def test_profile_activation_warns_about_unsaved_edits(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch, editor: str, discard: bool
 ) -> None:
     window, client = _window(qapp)
     _add_second_profile(window, client, qapp)
+    page = _profiles(window)
     if editor == "settings":
         window.settings.dpi.rows[0].x_spin.setValue(3200)
     elif editor == "buttons":
@@ -239,9 +314,7 @@ def test_profile_switch_warns_about_unsaved_edits(
     elif editor == "power":
         window.device.power.idle_spin.setValue(600)
     else:
-        window.device.profiles.plate_box.setCurrentIndex(
-            window.device.profiles.plate_box.findData(6)
-        )
+        page.plate_box.setCurrentIndex(page.plate_box.findData(6))
     prompts: list[str] = []
 
     def answer(*args: object, **_kwargs: object) -> QMessageBox.StandardButton:
@@ -249,13 +322,14 @@ def test_profile_switch_warns_about_unsaved_edits(
         return QMessageBox.StandardButton.Yes if discard else QMessageBox.StandardButton.No
 
     monkeypatch.setattr(QMessageBox, "question", answer)
-    window.profiles_box.setCurrentIndex(window.profiles_box.findData("mmo"))
+    page.profiles_box.setCurrentIndex(page.profiles_box.findData("mmo"))
+    qapp.processEvents()
+    assert prompts == []
+    assert client.selected == []
+    page.activate_button.click()
     qapp.processEvents()
 
     assert len(prompts) == 1
     assert client.selected == (["mmo"] if discard else [])
-    assert window.profiles_box.currentData() == (
-        "mmo" if discard else default_configuration().active_profile
-    )
     editors = (window.settings, window.buttons, window.device)
     assert any(page.has_unsaved_changes() for page in editors) == (not discard)

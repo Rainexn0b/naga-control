@@ -7,7 +7,6 @@ from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QIcon
 from PySide6.QtWidgets import (
     QApplication,
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -26,6 +25,7 @@ from naga_control.gui.editors import set_scroll
 from naga_control.gui.models import ServiceModel
 from naga_control.gui.mouse_settings_page import MouseSettingsPage
 from naga_control.gui.presenter import ApplyOutcome, GuiPresenter
+from naga_control.gui.profile_mode_view import is_software_verified
 from naga_control.gui.tray_icon import TrayIcon
 from naga_control.gui.worker import Runner
 
@@ -38,7 +38,7 @@ def app_icon_path() -> Path:
 
 
 class MainWindow(QMainWindow):
-    """Tabbed host for the service pages; owns no business logic."""
+    """Tabbed host; profile activation intent comes from the Software profiles page."""
 
     model_changed = Signal()
     profile_switch_finished = Signal(object)
@@ -70,17 +70,13 @@ class MainWindow(QMainWindow):
         self.buttons = ButtonsPage(presenter, model, run)
         self.settings = MouseSettingsPage(presenter, model, run)
         self.device.profiles.confirm_profile_change = self._confirm_and_discard
+        self.device.profiles.activate_requested.connect(self._request_profile)
         self.tabs.addTab(self.device, "Device")
         self.tabs.addTab(self.buttons, "Buttons")
         self.tabs.addTab(self.settings, "Settings")
-        self.profiles_box = QComboBox()
-        self.profiles_box.setMaximumWidth(260)
-        self.profiles_box.currentIndexChanged.connect(self._profile_selected)
         header = QHBoxLayout()
         header.addWidget(QLabel("Naga V3 Pro"))
         header.addStretch()
-        header.addWidget(QLabel("Active profile"))
-        header.addWidget(self.profiles_box)
         central = QWidget()
         column = QVBoxLayout(central)
         column.addLayout(header)
@@ -113,27 +109,6 @@ class MainWindow(QMainWindow):
 
     def _update_header(self) -> None:
         self.statusBar().showMessage(self.model.apply_status or "")
-        document = self.model.configuration_document
-        if document is None:
-            self.profiles_box.setEnabled(False)
-            return
-        try:
-            configuration = parse_toml(document)
-        except ConfigValidationError:
-            self.profiles_box.setEnabled(False)
-            return
-        self.profiles_box.blockSignals(True)
-        self.profiles_box.clear()
-        for identifier, profile in configuration.profiles:
-            self.profiles_box.addItem(profile.display_name, identifier)
-        self.profiles_box.setCurrentIndex(self.profiles_box.findData(configuration.active_profile))
-        self.profiles_box.blockSignals(False)
-        self.profiles_box.setEnabled(
-            self.model.connection.reachable
-            and self.model.apply_status != "applying…"
-            and not self._profile_switching
-            and not self._scroll_switching
-        )
 
     def _confirm_discard(self) -> bool:
         editors = (self.device, self.buttons, self.settings)
@@ -155,11 +130,6 @@ class MainWindow(QMainWindow):
             editor.discard_changes()
         return True
 
-    def _profile_selected(self, _index: int) -> None:
-        profile_id = self.profiles_box.currentData()
-        if isinstance(profile_id, str):
-            self._request_profile(profile_id)
-
     def _request_profile(self, profile_id: str) -> None:
         document = self.model.configuration_document
         if (
@@ -167,6 +137,8 @@ class MainWindow(QMainWindow):
             or self._scroll_switching
             or not self.model.connection.reachable
             or document is None
+            or not is_software_verified(self.model)
+            or self.model.apply_status == "applying…"
         ):
             self._update_header()
             return
@@ -183,6 +155,27 @@ class MainWindow(QMainWindow):
         if not self._confirm_discard():
             self._update_header()
             return
+        document = self.model.configuration_document
+        if (
+            self._profile_switching
+            or self._scroll_switching
+            or not self.model.connection.reachable
+            or document is None
+            or not is_software_verified(self.model)
+            or self.model.apply_status == "applying…"
+        ):
+            self._update_header()
+            return
+        try:
+            configuration = parse_toml(document)
+        except ConfigValidationError:
+            self._update_header()
+            return
+        if profile_id == configuration.active_profile or profile_id not in {
+            identifier for identifier, _ in configuration.profiles
+        }:
+            self._update_header()
+            return
         self._profile_discard_pending = any(
             editor.has_unsaved_changes() for editor in (self.device, self.buttons, self.settings)
         )
@@ -191,11 +184,18 @@ class MainWindow(QMainWindow):
             self._tray.set_profile_switching(True)
         for editor in (self.device, self.buttons, self.settings):
             editor.setEnabled(False)
-        self.profiles_box.setEnabled(False)
         self.model.set_apply_status("Switching profile...")
         self._run(lambda: self._select_profile(profile_id))
 
     async def _select_profile(self, profile_id: str) -> None:
+        if not self.model.connection.reachable:
+            self.model.set_apply_status("Profile switch failed")
+            self.profile_switch_finished.emit(ApplyOutcome.UNREACHABLE)
+            return
+        if not is_software_verified(self.model):
+            self.model.set_apply_status("Profile switch failed")
+            self.profile_switch_finished.emit(ApplyOutcome.INVALID)
+            return
         outcome = await self.presenter.select_profile(profile_id)
         self.model.set_apply_status(
             "Profile switched" if outcome is ApplyOutcome.APPLIED else "Profile switch failed"
@@ -227,19 +227,11 @@ class MainWindow(QMainWindow):
             or self.model.apply_status == "applying…"
             or not self.model.connection.reachable
             or document is None
+            or not is_software_verified(self.model)
         ):
             return
         try:
             configuration = parse_toml(document)
-            profile = configuration.profile(configuration.active_profile)
-            current = profile.scroll
-            updated = set_scroll(
-                document,
-                configuration.active_profile,
-                mode if mode is not None else current.mode,
-                acceleration if acceleration is not None else current.acceleration,
-                smart_reel if smart_reel is not None else current.smart_reel,
-            )
         except ConfigValidationError:
             self.model.set_apply_status("Invalid scroll settings")
             return
@@ -255,16 +247,51 @@ class MainWindow(QMainWindow):
             )
             if answer != QMessageBox.StandardButton.Yes:
                 return
+            document = self.model.configuration_document
+            if (
+                self._scroll_switching
+                or self._profile_switching
+                or self.model.apply_status == "applying…"
+                or not self.model.connection.reachable
+                or document is None
+                or not is_software_verified(self.model)
+            ):
+                return
+            try:
+                configuration = parse_toml(document)
+            except ConfigValidationError:
+                self.model.set_apply_status("Invalid scroll settings")
+                return
+        try:
+            profile = configuration.profile(configuration.active_profile)
+            current = profile.scroll
+            updated = set_scroll(
+                document,
+                configuration.active_profile,
+                mode if mode is not None else current.mode,
+                acceleration if acceleration is not None else current.acceleration,
+                smart_reel if smart_reel is not None else current.smart_reel,
+            )
+        except ConfigValidationError:
+            self.model.set_apply_status("Invalid scroll settings")
+            return
         self._scroll_switching = True
         if self._tray is not None:
             self._tray.set_scroll_switching(True)
         for editor in (self.device, self.buttons, self.settings):
             editor.setEnabled(False)
-        self.profiles_box.setEnabled(False)
         self.model.set_apply_status("Saving scroll settings...")
         self._run(lambda: self._apply_scroll(updated))
 
     async def _apply_scroll(self, document: str) -> None:
+        if not self.model.connection.reachable:
+            self.model.set_apply_status("Service unreachable")
+            self.scroll_change_finished.emit(ApplyOutcome.UNREACHABLE)
+            return
+        if not is_software_verified(self.model):
+            self.model.set_apply_status("Scroll settings rejected")
+            self.scroll_change_finished.emit(ApplyOutcome.INVALID)
+            return
         outcome = await self.presenter.apply_configuration(document)
         if outcome is ApplyOutcome.APPLIED:
             await self.presenter.refresh()

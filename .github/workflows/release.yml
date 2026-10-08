@@ -46,7 +46,7 @@ jobs:
     name: Build and validate AppImage (read only)
     needs: metadata
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,26 +63,18 @@ jobs:
           python -m venv .venv
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -e ".[dev]"
-      - name: Validate, build, and smoke-test AppImage
+      - name: Validate source with full profile on host
         env:
           QT_QPA_PLATFORM: offscreen
-        run: .venv/bin/python -m buildpython --profile release
-      - name: Verify bundled package version
+        run: .venv/bin/python -m buildpython --profile full
+      - name: Controlled Ubuntu 22.04 build, static gate, and baseline check
         env:
           RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
-        run: |
-          PYTHONHOME="$PWD/build/appimage/AppDir/usr" \
-          LD_LIBRARY_PATH="$PWD/build/appimage/AppDir/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-          build/appimage/AppDir/usr/bin/python3 -c '
-          import os
-          from importlib.metadata import version
-          from packaging.version import Version
-          actual = Version(version("naga-control"))
-          expected = Version(os.environ["RELEASE_VERSION"])
-          if actual != expected:
-              raise SystemExit(f"Bundled package version {actual} != expected version {expected}")
-          print(f"Bundled package version: {actual}")
-          '
+        run: buildpython/steps/appimage/portable-build.sh
+      - name: AppImage smoke on host container (Ubuntu 24.04)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: .venv/bin/python -m buildpython --run-steps "AppImage Smoke"
       - name: Stage exactly one AppImage and checksum
         run: |
           shopt -s nullglob

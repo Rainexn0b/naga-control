@@ -1,4 +1,4 @@
-"""Profiles page: manage profiles and their manually selected attached plate."""
+"""Profiles page: unified dropdown for editing plus explicit activation."""
 
 from collections.abc import Callable
 
@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -26,6 +25,13 @@ from naga_control.gui.editors import (
 )
 from naga_control.gui.models import ServiceModel
 from naga_control.gui.presenter import ApplyOutcome, GuiPresenter
+from naga_control.gui.profile_controls import activation_gate
+from naga_control.gui.profile_mode_view import (
+    PROFILE_MANAGEMENT_HELP,
+    is_software_verified,
+    software_profile_label,
+)
+from naga_control.gui.profile_plate_drafts import PlateDrafts
 from naga_control.gui.worker import Runner
 
 OUTCOME_TEXT = {
@@ -37,9 +43,10 @@ OUTCOME_TEXT = {
 
 
 class ProfilesPage(QWidget):
-    """Profile actions and explicit plate changes through the apply flow."""
+    """One dropdown manages selection; Activate switches via the shell guard."""
 
     model_changed = Signal()
+    activate_requested = Signal(str)
 
     def __init__(self, presenter: GuiPresenter, model: ServiceModel, run: Runner) -> None:
         super().__init__()
@@ -48,17 +55,32 @@ class ProfilesPage(QWidget):
         self._run = run
         self._loaded_document: str | None = None
         self._configuration: Configuration | None = None
-        self._updating_list = False
+        self._plate_drafts = PlateDrafts()
+        self._updating = False
         self.confirm_profile_change: Callable[[], bool] = lambda: True
 
         self.model.add_listener(self.model_changed.emit)
         self.model_changed.connect(self._on_model_changed, Qt.ConnectionType.QueuedConnection)
 
-        self.list_widget = QListWidget()
-        self.list_widget.setMaximumHeight(220)
+        self.active_label = QLabel("Active: unknown")
+        self.active_label.setWordWrap(True)
+        self.profiles_box = QComboBox()
+        self.profiles_box.setToolTip(PROFILE_MANAGEMENT_HELP)
+        self.profiles_box.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.profiles_box.setMinimumContentsLength(12)
+        self.activate_button = QPushButton("Activate")
+        self.activate_button.setToolTip(
+            "Switch to the selected profile. " + PROFILE_MANAGEMENT_HELP
+        )
+        self.help_label = QLabel("Choose a profile to edit; editors follow the active profile.")
+        self.help_label.setWordWrap(True)
+        self.draft_label = QLabel("")
+        self.draft_label.setWordWrap(True)
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
-        self.new_button = QPushButton("New from selected…")
+        self.new_button = QPushButton("New…")
         self.rename_button = QPushButton("Rename…")
         self.delete_button = QPushButton("Delete")
         self.plate_box = QComboBox()
@@ -70,6 +92,9 @@ class ProfilesPage(QWidget):
         )
         self.apply_plate_button = QPushButton("Apply plate")
 
+        selector_row = QHBoxLayout()
+        selector_row.addWidget(self.profiles_box, 1)
+        selector_row.addWidget(self.activate_button)
         plate_form = QFormLayout()
         plate_form.addRow("Attached plate", self.plate_box)
         plate_form.addRow(self.apply_plate_button)
@@ -80,113 +105,187 @@ class ProfilesPage(QWidget):
         buttons.addWidget(self.delete_button)
         column = QVBoxLayout()
         column.setAlignment(Qt.AlignmentFlag.AlignTop)
-        column.addWidget(self.list_widget)
+        column.addWidget(self.active_label)
+        column.addLayout(selector_row)
+        column.addWidget(self.help_label)
         column.addLayout(buttons)
         column.addLayout(plate_form)
+        column.addWidget(self.draft_label)
         column.addWidget(self.status_label)
         self.setLayout(column)
 
+        self.profiles_box.currentIndexChanged.connect(self._selection_changed)
+        self.plate_box.currentIndexChanged.connect(self._plate_changed)
+        self.activate_button.clicked.connect(self._request_activate)
         self.new_button.clicked.connect(self._new_from_selected)
         self.rename_button.clicked.connect(self._rename_selected)
         self.delete_button.clicked.connect(self._delete_selected)
-        self.list_widget.currentItemChanged.connect(self._load_selected_plate)
-        self.plate_box.currentIndexChanged.connect(self._update_plate_enabled)
         self.apply_plate_button.clicked.connect(self._apply_plate)
         self._on_model_changed()
 
+    def _selected_id(self) -> str | None:
+        value = self.profiles_box.currentData()
+        return value if isinstance(value, str) else None
+
+    def _active_id(self) -> str | None:
+        return self._configuration.active_profile if self._configuration is not None else None
+
     def _on_model_changed(self) -> None:
-        pending_layout = self.plate_box.currentData() if self.has_unsaved_changes() else None
-        pending_id = self._selected_id()
         self.status_label.setText(self.model.apply_status or "")
         document = self.model.configuration_document
         if document is None:
             self._configuration = None
-            self._load_selected_plate()
+            self._refresh_chrome()
+            self._update_enabled()
+            self._update_draft_label()
             return
         try:
             configuration = parse_toml(document)
         except ConfigValidationError:
             self._configuration = None
-            self._load_selected_plate()
+            self._refresh_chrome()
             self.status_label.setText("service configuration is unreadable")
+            self._update_enabled()
+            self._update_draft_label()
             return
-        reload = document != self._loaded_document or self._configuration is None
         self._configuration = configuration
-        if reload:
+        self._plate_drafts.prune(configuration)
+        if document != self._loaded_document:
             self._loaded_document = document
-            self._reload_list(configuration)
-            if pending_layout is not None and self._selected_id() == pending_id:
-                self.plate_box.setCurrentIndex(self.plate_box.findData(pending_layout))
-        self._update_plate_enabled()
+            self._rebuild_combo(configuration)
+        else:
+            self._refresh_chrome()
+            self._load_selected_plate()
+        self._update_enabled()
+        self._update_draft_label()
 
-    def _reload_list(self, configuration: Configuration) -> None:
-        selected = self._selected_id() or configuration.active_profile
-        if selected not in {identifier for identifier, _ in configuration.profiles}:
-            selected = configuration.active_profile
-        self._updating_list = True
+    def _rebuild_combo(self, configuration: Configuration) -> None:
+        previous = self._selected_id()
+        identifiers = {identifier for identifier, _ in configuration.profiles}
+        if previous not in identifiers:
+            previous = configuration.active_profile
+        self._updating = True
         try:
-            self.list_widget.clear()
+            self.profiles_box.blockSignals(True)
+            self.profiles_box.clear()
             for identifier, profile in configuration.profiles:
-                label = f"{profile.display_name} ({identifier})"
-                if identifier == configuration.active_profile:
-                    label = f"▸ {label}"
-                self.list_widget.addItem(label)
-            for index in range(self.list_widget.count()):
-                if self.list_widget.item(index).text().endswith(f"({selected})"):
-                    self.list_widget.setCurrentRow(index)
-                    break
+                self.profiles_box.addItem(
+                    software_profile_label(profile.display_name, identifier), identifier
+                )
+            self.profiles_box.setCurrentIndex(self.profiles_box.findData(previous))
         finally:
-            self._updating_list = False
+            self.profiles_box.blockSignals(False)
+            self._updating = False
+        self._refresh_chrome()
         self._load_selected_plate()
+        self._update_enabled()
+        self._update_draft_label()
 
-    def _id_of(self, list_label: str) -> str:
-        return list_label.rstrip(")").rpartition("(")[2]
+    def _refresh_chrome(self) -> None:
+        active = self._active_id()
+        name: str | None = None
+        if active is not None and self._configuration is not None:
+            try:
+                name = self._configuration.profile(active).display_name
+            except KeyError:
+                name = None
+        if name is not None and active is not None:
+            self.active_label.setText(f"Active: {software_profile_label(name, active)}")
+        else:
+            self.active_label.setText("Active: unknown")
 
-    def _selected_id(self) -> str | None:
-        item = self.list_widget.currentItem()
-        return self._id_of(item.text()) if item else None
-
-    def has_unsaved_changes(self) -> bool:
-        selected = self._selected_id()
-        if self._configuration is None or selected is None:
-            return False
-        try:
-            return (
-                self.plate_box.currentData() != self._configuration.profile(selected).plate_layout
-            )
-        except KeyError:
-            return False
-
-    def discard_changes(self) -> None:
+    def _selection_changed(self, _index: int) -> None:
+        if self._updating:
+            return
         self._load_selected_plate()
+        self._update_enabled()
 
     def _load_selected_plate(self) -> None:
-        if self._updating_list:
+        if self._updating:
             return
         selected = self._selected_id()
-        index = -1
-        if self._configuration is not None and selected is not None:
+        layout = self._plate_drafts.get(selected)
+        if layout is None and selected is not None and self._configuration is not None:
             try:
                 layout = self._configuration.profile(selected).plate_layout
-                index = self.plate_box.findData(layout)
             except KeyError:
-                pass
-        self.plate_box.setCurrentIndex(index)
-        self._update_plate_enabled()
+                layout = None
+        self.plate_box.blockSignals(True)
+        try:
+            self.plate_box.setCurrentIndex(
+                self.plate_box.findData(layout) if layout in (12, 6, 2) else -1
+            )
+        finally:
+            self.plate_box.blockSignals(False)
+        self._update_enabled()
+        self._update_draft_label()
 
-    def _update_plate_enabled(self) -> None:
+    def _plate_changed(self, _index: int) -> None:
+        if self._updating:
+            return
         selected = self._selected_id()
-        enabled = (
+        if selected is None or self._configuration is None:
+            return
+        try:
+            configured = self._configuration.profile(selected).plate_layout
+        except KeyError:
+            return
+        self._plate_drafts.record(selected, configured, self.plate_box.currentData())
+        self._update_draft_label()
+        self._update_enabled()
+
+    def _update_draft_label(self) -> None:
+        pending = ", ".join(self._plate_drafts.pending_ids())
+        self.draft_label.setText(f"Unsaved plate edits pending: {pending}" if pending else "")
+
+    def _update_enabled(self) -> None:
+        selected = self._selected_id()
+        identifiers: set[str] = (
+            {identifier for identifier, _ in self._configuration.profiles}
+            if self._configuration is not None
+            else set()
+        )
+        pending = self.model.apply_status == "applying…"
+        editable = (
             self.model.connection.reachable
             and self._configuration is not None
-            and selected in {identifier for identifier, _ in self._configuration.profiles}
+            and selected in identifiers
+            and not pending
         )
-        self.new_button.setEnabled(enabled)
-        self.rename_button.setEnabled(enabled)
-        self.delete_button.setEnabled(enabled and self.list_widget.count() > 1)
-        plate_enabled = enabled and self.plate_box.currentData() in (12, 6, 2)
-        self.plate_box.setEnabled(plate_enabled)
-        self.apply_plate_button.setEnabled(plate_enabled)
+        self.profiles_box.setEnabled(
+            self.model.connection.reachable and self._configuration is not None
+        )
+        self.new_button.setEnabled(bool(editable))
+        self.rename_button.setEnabled(bool(editable))
+        self.delete_button.setEnabled(bool(editable) and len(identifiers) > 1)
+        plate_ok = bool(editable) and self.plate_box.currentData() in (12, 6, 2)
+        self.plate_box.setEnabled(plate_ok)
+        self.apply_plate_button.setEnabled(plate_ok)
+        can_activate, tip = activation_gate(self.model, bool(editable), selected, self._active_id())
+        self.activate_button.setEnabled(can_activate)
+        self.activate_button.setToolTip(tip)
+
+    def has_unsaved_changes(self) -> bool:
+        return bool(self._plate_drafts)
+
+    def discard_changes(self) -> None:
+        self._plate_drafts.clear()
+        self._load_selected_plate()
+
+    def _request_activate(self) -> None:
+        selected = self._selected_id()
+        if selected is None or self._configuration is None:
+            return
+        if selected == self._configuration.active_profile:
+            return
+        if (
+            not self.model.connection.reachable
+            or not is_software_verified(self.model)
+            or self.model.apply_status == "applying…"
+        ):
+            self._update_enabled()
+            return
+        self.activate_requested.emit(selected)
 
     def _apply_plate(self) -> None:
         selected = self._selected_id()
@@ -273,6 +372,8 @@ class ProfilesPage(QWidget):
         self.apply_document(updated)
 
     def apply_document(self, updated: str) -> None:
+        if self.model.apply_status == "applying…":
+            return
         self.model.set_apply_status("applying…")
         self._run(lambda: self._send(updated))
 
@@ -291,7 +392,6 @@ class ProfilesPage(QWidget):
     def _prompt(self, title: str, label: str, default: str) -> str | None:
         from PySide6.QtWidgets import QInputDialog
 
-        ok = False
         answer, ok = QInputDialog.getText(self, title, label, text=default)
         return answer.strip() if ok and answer.strip() else None
 

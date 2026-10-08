@@ -98,17 +98,27 @@ for path in "$APPIMAGE_DST" "$STAMP" "$STATE_DIR/install.lock"; do safe_file "$p
 for path in "${USER_FILES[@]}"; do safe_file "$HOME/$path"; done
 systemctl --user show --property=Version --value >/dev/null || die "user systemd unavailable; log into a normal desktop session (install systemd user support)"
 busctl --user status >/dev/null || die "session D-Bus unavailable; log into a desktop session with dbus-user-session/dbus"
-command -v ldconfig >/dev/null || die "ldconfig is required for FUSE2 library discovery (install libc-bin/glibc)"
+# Desktop-user PATHs may omit the system administration directories.
+ldconfig_tool="$(command -v ldconfig)" || ldconfig_tool=""
+if [ ! -f "$ldconfig_tool" ] || [ ! -x "$ldconfig_tool" ]; then
+  ldconfig_tool=""
+  for tool in /usr/sbin/ldconfig /sbin/ldconfig; do
+    if [ -f "$tool" ] && [ -x "$tool" ]; then ldconfig_tool="$tool"; break; fi
+  done
+fi
+[ -n "$ldconfig_tool" ] || die "ldconfig is required for FUSE2 library discovery (install libc-bin/glibc)"
+fuse_cache="$(LC_ALL=C "$ldconfig_tool" -p)" || die "ldconfig -p failed; cannot verify FUSE2 library availability"
 fuse_library=""
 while read -r library rest; do
   if [ "$library" = libfuse.so.2 ] && [[ "$rest" == *"x86-64"* && "$rest" == *"=> "* ]]; then
     candidate="${rest##*=> }"
     [ ! -r "$candidate" ] || fuse_library="$candidate"
   fi
-done < <(ldconfig -p)
-[ -n "$fuse_library" ] || die "FUSE2 library missing: Arch fuse2; Ubuntu 24.04 libfuse2t64; older Debian/Ubuntu libfuse2; Fedora fuse-libs"
+done <<< "$fuse_cache"
+# The check needs x86_64 libfuse.so.2; exact per-release package names live in the README, not here.
+[ -n "$fuse_library" ] || die "FUSE2 library missing: x86_64 libfuse.so.2 not in ldconfig cache; see README install prerequisites or docs/troubleshooting.md#installer-prerequisites for exact per-release manual references"
 [ "$(LC_ALL=C stat -c '%F' /dev/fuse 2>/dev/null)" = "character special file" ] && [ -r /dev/fuse ] && [ -w /dev/fuse ] \
-  || die "FUSE runtime unavailable: install fuse/fuse2, ask your administrator to enable FUSE, then log in again; no device was opened"
+  || die "FUSE runtime unavailable: /dev/fuse is not a usable character device; ask your administrator to enable FUSE, then log in again; no device was opened"
 [ -d /sys/module/fuse ] || grep -Eq '(^|[[:space:]])fuse(blk)?$' /proc/filesystems \
   || die "kernel FUSE support unavailable; ask your administrator to enable FUSE for managed installation"
 

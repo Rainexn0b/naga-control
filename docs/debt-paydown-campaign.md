@@ -9,7 +9,7 @@ scores look better. This campaign does not add product features or replace the
 [architecture](architecture.md), [implementation plan](implementation-plan.md),
 or [hardware validation](hardware-validation.md) contracts.
 
-Campaign status: **started; DEBT-01/02/11/04/03/05/14/13/15/12/06 complete; DEBT-09 ShellCheck subset complete (whole item blocked on Docker), DEBT-07 in progress (types implementation committed; standard safety checks pass; separate campaign acceptance pending; no completion claimed); DEBT-08/10 queued**.
+Campaign status: **started; DEBT-01/02/11/04/03/05/14/13/15/12/06 complete; DEBT-09 ShellCheck subset complete (whole item blocked on Docker), DEBT-07 in progress (types committed `643d791`; campaign acceptance blocked: active shared build-report ownership prevents full/extended/package gate start; focused 477 plus Ruff/format/Pyright pass; no completion claimed); DEBT-08/10 queued**.
 Baseline commit: `4baf4e8` (`Build: consolidate AppImage packaging and validation`).
 Baseline date: 2026-10-05.
 
@@ -104,7 +104,7 @@ a reason and an explicit decision, not a skipped check disguised as completion.
 | DEBT-04 | P1 | OpenRazer backend failure/recovery coverage | complete | Verified 2026-10-05; backend 92.68%, capabilities 100% |
 | DEBT-05 | P2 | IPC, service CLI, and uinput boundary coverage | complete | Verified 2026-10-06; all four target files exceed 85% |
 | DEBT-06 | P2 | Source and test file headroom | complete | Verified 2026-10-07; closure decision below; 3 reviewed retained exceptions plus 1 concurrent externally owned file |
-| DEBT-07 | P3 | Concrete Qt event/future annotations | in progress (campaign acceptance pending) | Types committed; standard Ruff/format/Pyright/pytest safety checks pass; buildpython default/extended and package gates unrerun; no completion or new measurements claimed |
+| DEBT-07 | P3 | Concrete Qt event/future annotations | in progress (campaign acceptance blocked) | Types committed `643d791`; active shared build-report ownership prevents full/extended/package gate start; focused 477 plus Ruff/format/Pyright pass; dated 2026-10-08 external uninstaller lint/type failure records retained below; no completion or new measurements claimed |
 | DEBT-08 | P3 | Structure and dead-code disposition | queued | DEBT-02 scanner review; DEBT-06 |
 | DEBT-09 | P1 | Docker and ShellCheck verification gaps | blocked (ShellCheck subset complete; Docker pending) | ShellCheck now available and passing; Docker still unavailable per DEBT-15 package check and 2026-10-06 packaging check |
 | DEBT-10 | P2 | Reviewed, reproducible debt ratchets | queued | DEBT-02 through DEBT-08 reviewed |
@@ -1363,6 +1363,218 @@ XDG_CACHE_HOME=/tmp/opencode TMPDIR=/tmp/opencode dist/Naga-Control-0.4.0-x86_64
 - Docs-worker checks: ASCII, local link targets, headline/queue status, and
   shared-tree path review only. No product tests or full reruns in this
   docs wave.
+
+### DEBT-07 Acceptance Checkpoint (blocked, 2026-10-08)
+
+- Status: DEBT-07 remains IN PROGRESS, campaign acceptance BLOCKED. Current
+  HEAD `154b308`; historical campaign baseline `4baf4e8`. Types implementation
+  is committed in `643d791`, not currently uncommitted. The 2026-10-07 records
+  above describe their dated state; the 2,718-test standard pass and cohort7
+  94.31% coverage remain historical, not current acceptance. DEBT-06 remains
+  COMPLETE with its retained exceptions; DEBT-08/10 stay QUEUED. The read-only
+  DEBT-08 scout is not delivery or completion.
+- Owner/scope: prior executor implemented the bounded source-limit discovery
+  correction; supervisor reviewed the actual diff/new file and shared-tree
+  status/stat/diff check and reran checks below. This fresh docs-only executor
+  changes ONLY `docs/debt-paydown-campaign.md`. The only new implementation
+  changes from this campaign session are `tests/test_source_limits.py` (25
+  physical lines) and new `tests/test_source_limit_discovery.py` (96 lines),
+  both uncommitted/unstaged. No product/type implementation was added here.
+- Initial supervisor default command: `.venv/bin/python -m buildpython`, run
+  `c854fd6e-a311-4623-92b6-e4f8489d0917`, UTC
+  `2026-10-08T16:32:45.255Z`, EXIT 1: 4 passed, 1 failed, 4 not run. Compile,
+  Ruff, Format, and Pyright passed; Pytest failed: 22 failed, 3,109 passed,
+  2 optional coverage skips, 8 warnings. ALL 22 failures were source-limit
+  cases scanning third-party `.opencode/node_modules/node-gyp/gyp` Python
+  files, not 22 product bugs. This triggered the narrow correction below.
+- Discovery correction: exclude exact `node_modules` DIRECTORY components
+  anywhere, not `.opencode` wholesale or similar names. Existing exclusions
+  are preserved; owned hidden/custom/root/scripts/src/buildpython/tests and
+  hardware-test source files remain statically checked. Hard 400 stays intact;
+  scanning hardware-test source does not run hardware tests. No installed
+  dependency, OpenCode configuration, scanner, budget, or coverage gate changed.
+  The 39 synthetic cases prove exclusions versus similar names and 400-pass /
+  401-fail across eight ownership locations. Worker RED before correction was
+  4 failed, 35 passed; focused post-fix was 407 passed (physical-file parameters
+  can vary with concurrent additions). Worker initial full Ruff/format/Pyright
+  passes were advisory, not supervisor acceptance or current global passes.
+- Supervisor focused command, EXIT 0: 460 passed, 8 warnings:
+
+```bash
+QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q tests/test_source_limits.py tests/test_source_limit_discovery.py tests/test_gui_log_failure.py tests/test_gui_worker.py tests/test_gui_app.py tests/test_gui_mapping_map.py tests/test_gui_update_shutdown.py tests/test_gui_version_panel.py
+```
+
+- Supervisor default rerun: `.venv/bin/python -m buildpython`, run
+  `74e92468-400d-43f0-b1ac-eaff93c7dc56`, UTC
+  `2026-10-08T16:41:04.827Z`, EXIT 1: 1 passed, 1 failed, 7 NOT RUN. Compile
+  passed; Ruff FAILED `F401` unused `os` at `tests/uninstaller_fakes.py:4`, an
+  externally active untracked file, not ours. The remaining checks, including
+  Pytest, did not run. No external fix, skip, suppression, or bypass applied;
+  the campaign stopped at the owner blocker.
+- Follow-up supervisor scoped checks:
+
+```bash
+.venv/bin/ruff check tests/test_source_limits.py tests/test_source_limit_discovery.py
+.venv/bin/ruff format --check tests/test_source_limits.py tests/test_source_limit_discovery.py
+.venv/bin/pyright
+```
+
+  Ruff EXIT 0: `All checks passed!`; format EXIT 0: `2 files already formatted`.
+  Global Pyright EXIT 1, CURRENT 4 external errors:
+  `tests/test_uninstaller_cleanup.py:61` `inode` possibly unbound,
+  `:64` `result` possibly unbound, `:65` `commands` possibly unbound;
+  `tests/uninstaller_fakes.py:4` unused `os`. No type errors reported in our
+  two test paths. Global Pyright is NOT passing; the latest complete suite
+  is NOT passing and there is no current full-suite coverage capture.
+- Unrun: extended 17-check campaign and required package gates intentionally
+  NOT RUN after the failed standard gate. No new scanner, coverage, watchlist,
+  or ratchet measurements claimed. Docker remains BLOCKED as previously
+  recorded, not rechecked physically. No package build/install, live GUI/service,
+  bus/device/sysfs/raw-HID operation, root, network deployment, staging, commit,
+  credential read, or paid-model call in this checkpoint.
+- Shared-tree handoff from `git status --short` at this docs wave's start:
+  campaign-owned implementation paths are the two tests above. ALL other paths
+  below are externally active GUI/device-mode, portability, and uninstaller
+  work, preserved without attribution or edits. This is a changing snapshot,
+  not acceptance of those external changes. `M` means tracked modified; `??`
+  means untracked (the fixture directory entry is as reported by Git):
+
+```text
+ M changelog.md
+ M docs/post-0.3-ui-tracker.md
+ M docs/troubleshooting.md
+ M scripts/uninstall.sh
+ M src/naga_control/gui/device_page.py
+ M src/naga_control/gui/main_window.py
+ M src/naga_control/gui/overview_page.py
+ M src/naga_control/gui/profiles_page.py
+ M src/naga_control/gui/tray_icon.py
+ M tests/test_gui_app.py
+ M tests/test_gui_device_page.py
+ M tests/test_gui_profiles_page.py
+ M tests/test_gui_tray_profiles.py
+ M tests/test_source_limits.py
+?? buildpython/steps/appimage/abi.py
+?? buildpython/steps/appimage/elf.py
+?? docs/distro-portability-plan-revised.md
+?? docs/distro-portability-plan.md
+?? scripts/distro_report.sh
+?? src/naga_control/gui/profile_mode_view.py
+?? src/naga_control/gui/tray_device_mode.py
+?? tests/appimage_abi_fakes.py
+?? tests/distro_report_fakes.py
+?? tests/fixtures/os-release/
+?? tests/test_appimage_abi.py
+?? tests/test_appimage_abi_inventory.py
+?? tests/test_appimage_elf.py
+?? tests/test_distro_report_parsing.py
+?? tests/test_distro_report_plans.py
+?? tests/test_distro_report_sandbox.py
+?? tests/test_gui_profile_mode.py
+?? tests/test_gui_tray_mode.py
+?? tests/test_source_limit_discovery.py
+?? tests/test_uninstaller_cleanup.py
+?? tests/test_uninstaller_failures.py
+?? tests/uninstaller_fakes.py
+```
+
+- Later docs-check status additionally showed external modified
+  `scripts/install_user.sh` and new `tests/installer_ldconfig_fakes.py`,
+  `tests/test_installer_ldconfig.py`, and `tests/test_uninstaller_lock.py`.
+  These concurrent additions are also preserved without attribution; reread
+  status before resuming. The tracker itself is now modified by this docs wave.
+- Next bounded authorized wave ONLY after the external uninstaller owner fixes
+  the lint/type errors: reread current state and ownership, rerun the focused
+  DEBT-07 suite and full standard checks, then the exact extended 17-step
+  campaign command and required package gates. Accept DEBT-07 only on passing
+  required gates, with Docker's existing blocker separately explicit; then
+  proceed to DEBT-08 docs dispositions and DEBT-10 read-only scout. Do not
+  solicit new authorization to fix external files or silently fix them here.
+- Docs-only validation: ASCII, local Markdown link targets, header/queue status,
+  shared-tree status, and `git diff --check` only; no Python workload reruns.
+  This checkpoint is a handoff, not campaign completion or release acceptance.
+
+### DEBT-07/08/10 Parallel Prep Checkpoint (docs-only, 2026-10-08)
+
+- Status: DEBT-06 COMPLETE (unchanged); DEBT-07 IN PROGRESS, campaign
+  acceptance BLOCKED; DEBT-08/10 QUEUED (unchanged); DEBT-09 BLOCKED on
+  Docker (unchanged, not rechecked). No completion claimed; no new
+  measurement row (no fresh full/extended run started, so no new
+  coverage/ratchet numbers).
+- Scope: this fresh docs-only executor changed ONLY
+  `docs/debt-paydown-campaign.md` via manual edit. No code changes by us
+  this turn. Campaign-owned `tests/test_source_limits.py` and
+  `tests/test_source_limit_discovery.py` remain uncommitted/unstaged and
+  untouched here. HEAD `154b308` confirmed; all other changed/untracked
+  paths in `git status --short` are concurrent external
+  GUI/device-mode/portability/uninstaller/installer work, preserved
+  without attribution, edits, or ownership claims. No commits, stages,
+  branches, root/model pins, credentials, hardware, live GUI/service
+  operations, package installs, or network in this wave.
+- Supervisor-run evidence (advisory, not executor runs): first fresh Ruff
+  still `F401` at externally owned `tests/uninstaller_fakes.py:4`; during
+  two parallel read-only scouts the external owner removed `os`, then
+  supervisor `.venv/bin/pyright` EXIT 0 with 0 errors, 0 warnings,
+  0 informations. Supervisor `.venv/bin/python -m buildpython` EXIT 2 with
+  `Build not started: another buildpython run owns
+  /home/cyril/Projects/Naga-controlpanel/buildlog/naga-control.`; it did
+  NOT start, so NO new run ID, no lock overwrite/tamper, no poll/remove,
+  and externally owned existing reports were not read/reinterpreted for a
+  new campaign snapshot. Supervisor then `.venv/bin/ruff check .` EXIT 0
+  (`All checks passed!`), `.venv/bin/ruff format --check .` EXIT 0 (394
+  files already formatted), and `QT_QPA_PLATFORM=offscreen
+  .venv/bin/pytest -q tests/test_source_limits.py
+  tests/test_source_limit_discovery.py tests/test_gui_log_failure.py
+  tests/test_gui_worker.py tests/test_gui_app.py
+  tests/test_gui_mapping_map.py tests/test_gui_update_shutdown.py
+  tests/test_gui_version_panel.py` EXIT 0 with 477 passed, 8 warnings,
+  2.21s. The 477 count reflects concurrent new-file physical guards, NOT
+  17 new campaign behaviors. Full standard, extended 17-step, and package
+  gates were NOT executed this turn.
+- DEBT-07 note: types committed in `643d791`, pending acceptance. Shared
+  build-report ownership prevents full verification; no ownership or
+  acceptance claim is made here; the historical external uninstaller
+  lint/type failure records are retained unchanged until the external
+  owner finishes.
+- DEBT-08 read-only prep (NOT complete, no dispositions applied): 8
+  HISTORICAL Vulture candidates verified in source. Five duplicate
+  second-raises are retain-or-optional-remove redundancy only
+  (`tests/gui_buttons_fakes.py:36`, `tests/gui_support.py:37`,
+  `tests/test_gui_app.py:47`, `tests/test_gui_dpi_page.py:44`,
+  `tests/test_gui_presenter.py:108`). Three async-generator sentinels MUST
+  be retained because deletion changes the coroutine interface:
+  `tests/test_capture_cli_behavior.py:69` fail-fast unreachable yield,
+  `tests/test_evdev_source_adapter.py:89`
+  `if False` yield, `tests/test_first_slice_session.py:181`
+  `if False` yield. No barrel imports, facades, flat-directory churn, or
+  scanner waivers. Import/flat-scan counts need a fresh valid run; do NOT
+  freeze the historical 25-warning/5-critical/8-directory snapshot. The
+  externally modified `tests/test_gui_app.py` sentinel is unchanged and
+  remains externally owned.
+- DEBT-10 read-only prep (NOT complete, no budgets adopted): per-file
+  floors EXIST as `coverage_step.models.CoverageBaseline.per_file_minimums`
+  with `payload.py build_coverage_report` supporting
+  `per_file`/`per_file_missing`; reviewed budgets remain unset and none
+  adopted. Future work
+  needs synthetic pass-at-floor, fail-below, and missing-file tests plus a
+  `coverage_runner` exit-1 test preserving legitimate cleanup; note
+  `tests/test_buildpython_analysis.py` currently asserts the baseline is
+  EMPTY and must change when reviewed budgets are adopted. Do NOT invent
+  floors from historical 94.31 or from any incomplete current capture.
+  Prefer 6-8 stabilized boundary-file floors after a fresh measurement
+  over total-only or freezing all raw broad counts; profile wiring for
+  explicit extended invocation versus default no-floor behavior without
+  coverage must be proved as intended. No baseline config, product, or
+  test changes were authorized or made in this docs wave.
+- Handoff: shared-report ownership is UNSAFE to use until the other build
+  owner is done; no polling or auto-bypass. Next bounded wave (fresh
+  context, not a resume): reread ownership/tree, then run default and
+  extended 17-step campaign invocations only once exclusive ownership is
+  available, plus package checks if required with the Docker blocker kept
+  distinct. Accept 07 only on passing required gates, then take 08
+  dispositions in docs and 10 tests/budgets as a small reviewed wave.
+- Docs-worker checks: ASCII, local link targets, header/queue consistency,
+  and `git diff --check` only (EXIT 0); no product workloads run here.
 
 ## Exit Criteria
 

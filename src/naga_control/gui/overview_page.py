@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QFormLayout, QLabel, QPushButton, QVBoxLayout, QWi
 
 from naga_control.gui.models import ServiceModel
 from naga_control.gui.presenter import GuiPresenter
+from naga_control.gui.profile_mode_view import DEVICE_MODE_HELP, device_mode_view
 from naga_control.gui.worker import Runner
 
 
@@ -30,6 +31,12 @@ class OverviewPage(QWidget):
         self.error_label = QLabel("none")
         self.error_label.setWordWrap(True)
         self.mode_label = QLabel("unknown")
+        self.mode_label.setWordWrap(True)
+        self.requested_mode_label = QLabel("unknown")
+        self.requested_mode_label.setWordWrap(True)
+        for label in (self.mode_label, self.requested_mode_label, self.status_label):
+            label.setToolTip(DEVICE_MODE_HELP)
+        self.status_label.setWordWrap(True)
         self.mode_error_label = QLabel("none")
         self.mode_error_label.setWordWrap(True)
         self.observed_dpi_label = QLabel("unknown")
@@ -46,13 +53,14 @@ class OverviewPage(QWidget):
 
         form = QFormLayout()
         form.addRow("Service", self.connection_label)
-        form.addRow("Mapping status", self.status_label)
-        form.addRow("Device mode", self.mode_label)
+        form.addRow("Software remapping", self.status_label)
+        form.addRow("Requested device mode", self.requested_mode_label)
+        form.addRow("Observed device mode", self.mode_label)
         form.addRow("Mode error", self.mode_error_label)
         form.addRow("Transport", self.transport_label)
         form.addRow("Hardware error", self.error_label)
         form.addRow("Observed DPI", self.observed_dpi_label)
-        form.addRow("Scroll mode", self.scroll_mode_label)
+        form.addRow("Scroll wheel mode", self.scroll_mode_label)
         form.addRow("Poll rate", self.poll_rate_label)
         form.addRow("Battery", self.battery_label)
         form.addRow("Charging", self.charging_label)
@@ -108,21 +116,11 @@ class OverviewPage(QWidget):
             "online" if connection.reachable else f"offline: {connection.detail}"
         )
         snapshot = self.model.snapshot
-        self.status_label.setText(
-            "firmware (software mapping off)"
-            if snapshot and snapshot.desired_mode == "firmware" and snapshot.mode_ready
-            else snapshot.status
-            if snapshot
-            else "unknown"
-        )
-        if snapshot and snapshot.desired_mode:
-            observed_mode = snapshot.observed_mode or "unknown"
-            self.mode_label.setText(f"{observed_mode} (desired {snapshot.desired_mode})")
-        else:
-            self.mode_label.setText("unknown")
-        self.mode_error_label.setText(
-            snapshot.mode_error if snapshot and snapshot.mode_error else "none"
-        )
+        mode = device_mode_view(self.model)
+        self.status_label.setText(mode.remapping)
+        self.requested_mode_label.setText(mode.requested)
+        self.mode_label.setText(mode.observed)
+        self.mode_error_label.setText(mode.error or "none")
         self.calibrate_button.setEnabled(not (snapshot and snapshot.desired_mode == "firmware"))
         self.transport_label.setText(
             snapshot.transport if snapshot and snapshot.transport else "none"

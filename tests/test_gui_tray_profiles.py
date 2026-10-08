@@ -47,6 +47,10 @@ def _tray(window: MainWindow) -> TrayIcon:
     return tray
 
 
+def _page(window: MainWindow):  # pyright: ignore[reportUnknownParameterType]
+    return window.device.profiles
+
+
 def _checked(tray: TrayIcon) -> list[str]:
     return [key for key, action in tray.profile_actions.items() if action.isChecked()]
 
@@ -61,17 +65,24 @@ def test_initial_offline_tray_has_no_profile_shortcuts(qapp: QApplication) -> No
     )
     assert tray.icon.contextMenu() is tray.menu
     assert not tray.profile_menu.isEnabled()
+    assert not tray.software_menu.isEnabled()
+    assert not tray.onboard_menu.isEnabled()
+    assert tray.device_mode.menu.isEnabled()
     assert not tray.profile_actions
 
 
-def test_tray_owns_persistent_context_menu_and_show_quit_actions(
+def test_tray_owns_persistent_grouped_menu_and_show_quit_actions(
     qapp: QApplication, window: tuple[MainWindow, SelectingClient]
 ) -> None:
     widget, _client = window
     tray = _tray(widget)
     assert tray.icon.contextMenu() is tray.menu
     assert tray.menu.actions()[0] is tray.show_action
-    assert tray.profile_menu.menuAction() in tray.menu.actions()
+    assert tray.software_menu.menuAction() in tray.menu.actions()
+    assert tray.profile_menu.menuAction() in tray.software_menu.actions()
+    assert tray.scroll_menu.menuAction() in tray.software_menu.actions()
+    assert tray.onboard_menu.menuAction() in tray.menu.actions()
+    assert tray.device_mode.menu.menuAction() in tray.menu.actions()
     assert tray.menu.actions()[-1] is tray.quit_action
 
     tray.show_action.trigger()
@@ -81,7 +92,6 @@ def test_tray_owns_persistent_context_menu_and_show_quit_actions(
     assert not widget.isVisible()
 
     quit_app = Mock()
-    # The action's callback is bound at construction; test it on a standalone tray.
     standalone = TrayIcon(
         widget.model,
         toggle_window=lambda: None,
@@ -100,34 +110,53 @@ def test_profiles_are_exclusive_authoritative_and_id_based(
 ) -> None:
     widget, client = window
     tray = _tray(widget)
+    page = _page(widget)
     assert set(tray.profile_actions) == {"first", "second", "third"}
     assert tray.profile_group.isExclusive()
+    assert tray.profile_menu.title() == "Active software profile"
+    assert tray.software_menu.title() == "Software controls"
+    assert tray.onboard_menu.title() == "Onboard / firmware"
+    assert not hasattr(widget, "profiles_box")
+    assert "not onboard slots" in tray.profile_menu.menuAction().toolTip()
+    assert "does not apply the selected software profile" in page.profiles_box.toolTip()
     assert [action.text() for action in tray.profile_menu.actions()] == [
         "Same (first)",
         "Same (second)",
         "Third (third)",
     ]
+    assert [page.profiles_box.itemText(i) for i in range(page.profiles_box.count())] == [
+        action.text() for action in tray.profile_actions.values()
+    ]
+    assert [page.profiles_box.itemData(i) for i in range(page.profiles_box.count())] == [
+        "first",
+        "second",
+        "third",
+    ]
     assert all(action.isCheckable() for action in tray.profile_actions.values())
     assert _checked(tray) == ["first"]
-    assert widget.profiles_box.currentData() == "first"
+    assert page.active_label.text().endswith("(first)")
+    assert page.profiles_box.currentData() == "first"
+    assert tray.software_menu.isEnabled()
+    assert not tray.onboard_menu.isEnabled()
 
     tray.profile_actions["second"].trigger()
     qapp.processEvents()
     assert client.selected == ["second"]
     assert parse_toml(client.document).active_profile == "second"
     assert _checked(tray) == ["second"]
-    assert widget.profiles_box.currentData() == "second"
+    assert page.active_label.text().endswith("(second)")
     tray.profile_actions["second"].trigger()
     qapp.processEvents()
     assert client.selected == ["second"]
     assert _checked(tray) == ["second"]
 
 
-def test_external_changes_rebuild_menu_and_sync_header(
+def test_external_changes_rebuild_menu_and_update_active_label(
     qapp: QApplication, window: tuple[MainWindow, SelectingClient]
 ) -> None:
     widget, client = window
     tray = _tray(widget)
+    page = _page(widget)
     config = parse_toml(client.document)
     client.document = dump_toml(
         replace(
@@ -144,11 +173,11 @@ def test_external_changes_rebuild_menu_and_sync_header(
     qapp.processEvents()
     assert set(tray.profile_actions) == {"first", "second"}
     assert tray.profile_actions["first"].text() == "Renamed (first)"
+    assert page.profiles_box.itemText(page.profiles_box.findData("first")) == "Renamed (first)"
     assert _checked(tray) == ["second"]
-    assert widget.profiles_box.currentData() == "second"
-    assert widget.profiles_box.findData("third") == -1
+    assert page.active_label.text().endswith("(second)")
+    assert page.profiles_box.findData("third") == -1
 
-    # A queued callback holding a removed ID must not select it after a refresh.
     tray._profile_requested("third")  # pyright: ignore[reportPrivateUsage]
     qapp.processEvents()
     assert client.selected == []
@@ -161,6 +190,7 @@ def test_submenu_refreshes_after_remote_rename_while_parent_stays_open(
     widget, client = window
     tray = _tray(widget)
     tray.menu.show()
+    tray.software_menu.show()
     tray.profile_menu.show()
     qapp.processEvents()
     assert tray.profile_menu.isVisible()
@@ -193,10 +223,13 @@ def test_offline_and_unreadable_configuration_disable_selection(
 ) -> None:
     widget, client = window
     tray = _tray(widget)
+    page = _page(widget)
     widget.model.mark_unreachable("offline")
     qapp.processEvents()
     assert not tray.profile_menu.isEnabled()
-    assert not widget.profiles_box.isEnabled()
+    assert not tray.software_menu.isEnabled()
+    assert not page.activate_button.isEnabled()
+    assert tray.device_mode.menu.isEnabled()
     tray.profile_actions["second"].trigger()
     qapp.processEvents()
     assert not client.selected
@@ -206,14 +239,15 @@ def test_offline_and_unreadable_configuration_disable_selection(
     widget.model.apply_configuration(99, "not valid toml = [")
     qapp.processEvents()
     assert not tray.profile_menu.isEnabled()
-    assert not widget.profiles_box.isEnabled()
+    assert not tray.software_menu.isEnabled()
+    assert not page.activate_button.isEnabled()
     tray.profile_actions["second"].trigger()
     qapp.processEvents()
     assert not client.selected
     widget.model.apply_configuration(100, client.document)
     qapp.processEvents()
     assert tray.profile_menu.isEnabled()
-    assert widget.profiles_box.isEnabled()
+    assert tray.software_menu.isEnabled()
     assert _checked(tray) == ["first"]
 
 
@@ -226,6 +260,7 @@ def test_hidden_draft_confirmation_preserves_or_discards(
 ) -> None:
     widget, client = window
     tray = _tray(widget)
+    page = _page(widget)
     widget.settings.dpi.rows[0].x_spin.setValue(2300)
     assert widget.settings.has_unsaved_changes()
     assert not widget.isVisible()
@@ -242,12 +277,12 @@ def test_hidden_draft_confirmation_preserves_or_discards(
         assert widget.settings.dpi.rows[0].x_spin.value() == 2300
         assert client.selected == []
         assert _checked(tray) == ["first"]
-        assert widget.profiles_box.currentData() == "first"
+        assert page.active_label.text().endswith("(first)")
     else:
         assert not widget.settings.has_unsaved_changes()
         assert client.selected == ["second"]
         assert _checked(tray) == ["second"]
-        assert widget.profiles_box.currentData() == "second"
+        assert page.active_label.text().endswith("(second)")
 
 
 @pytest.mark.parametrize("fail", [False, True], ids=["success", "failure"])
@@ -265,13 +300,16 @@ async def test_pending_tray_switch_blocks_duplicates_and_reconciles(
         await presenter.refresh()
         qapp.processEvents()
         tray = _tray(widget)
+        page = _page(widget)
         tray.profile_actions["second"].trigger()
         assert len(jobs) == 1
         assert not tray.profile_menu.isEnabled()
-        assert not widget.profiles_box.isEnabled()
+        assert not tray.software_menu.isEnabled()
+        assert not widget.device.isEnabled()
         assert _checked(tray) == ["first"]
         tray.profile_actions["third"].trigger()
-        widget.profiles_box.setCurrentIndex(widget.profiles_box.findData("third"))
+        page.profiles_box.setCurrentIndex(page.profiles_box.findData("third"))
+        page.activate_button.click()
         assert len(jobs) == 1
         assert _checked(tray) == ["first"]
 
@@ -280,7 +318,7 @@ async def test_pending_tray_switch_blocks_duplicates_and_reconciles(
         await presenter.refresh()
         qapp.processEvents()
         assert not tray.profile_menu.isEnabled()
-        assert not widget.profiles_box.isEnabled()
+        assert not tray.software_menu.isEnabled()
         assert _checked(tray) == ["first"]
         assert not task.done()
         assert client.selected == ["second"]
@@ -291,9 +329,9 @@ async def test_pending_tray_switch_blocks_duplicates_and_reconciles(
         active = "first" if fail else "second"
         assert parse_toml(client.document).active_profile == active
         assert _checked(tray) == [active]
-        assert widget.profiles_box.currentData() == active
+        assert page.active_label.text().endswith(f"({active})")
         assert tray.profile_menu.isEnabled()
-        assert widget.profiles_box.isEnabled()
+        assert tray.software_menu.isEnabled()
         assert model.apply_status == ("Profile switch failed" if fail else "Profile switched")
         assert client.selected == ["second"]
         assert not jobs

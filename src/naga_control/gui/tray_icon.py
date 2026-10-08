@@ -1,4 +1,4 @@
-"""System tray icon with a battery percentage overlay."""
+"""System tray icon with grouped software and onboard controls."""
 
 import logging
 from collections.abc import Callable
@@ -13,7 +13,15 @@ from naga_control.config import parse_toml
 from naga_control.domain.errors import ConfigValidationError
 from naga_control.domain.profiles import ScrollMode
 from naga_control.gui.models import ServiceModel
+from naga_control.gui.profile_mode_view import (
+    DEVICE_MODE_HELP,
+    PROFILE_SELECTION_HELP,
+    is_firmware_verified,
+    is_software_verified,
+    software_profile_label,
+)
 from naga_control.gui.settings_view import SCROLL_MODES
+from naga_control.gui.tray_device_mode import TrayDeviceMode
 
 logger = logging.getLogger(__name__)
 
@@ -79,10 +87,15 @@ class TrayIcon(QObject):
         self.icon = QSystemTrayIcon(self)
         self.menu = QMenu()
         self.show_action = self.menu.addAction("Show Naga Control")
-        self.profile_menu = self.menu.addMenu("Active profile")
+        self.software_menu = self.menu.addMenu("Software controls")
+        self.software_menu.setToolTipsVisible(True)
+        self.software_menu.menuAction().setToolTip(PROFILE_SELECTION_HELP)
+        self.profile_menu = self.software_menu.addMenu("Active software profile")
+        self.profile_menu.setToolTipsVisible(True)
+        self.profile_menu.menuAction().setToolTip(PROFILE_SELECTION_HELP)
         self.profile_group = QActionGroup(self.profile_menu)
         self.profile_group.setExclusive(True)
-        self.scroll_menu = self.menu.addMenu("Scroll wheel")
+        self.scroll_menu = self.software_menu.addMenu("Scroll wheel")
         self.scroll_group = QActionGroup(self.scroll_menu)
         self.scroll_group.setExclusive(True)
         self.scroll_actions: dict[ScrollMode, QAction] = {}
@@ -105,6 +118,16 @@ class TrayIcon(QObject):
         self.scroll_failure_action = self.scroll_menu.addAction("")
         self.scroll_failure_action.setEnabled(False)
         self.scroll_failure_action.setVisible(False)
+        self.onboard_menu = self.menu.addMenu("Onboard / firmware")
+        self.onboard_menu.setToolTipsVisible(True)
+        self.onboard_menu.menuAction().setToolTip(DEVICE_MODE_HELP)
+        self.onboard_status_action = self.onboard_menu.addAction("Uses mouse native behavior")
+        self.onboard_status_action.setEnabled(False)
+        self.onboard_status_action.setToolTip(DEVICE_MODE_HELP)
+        self.onboard_note_action = self.onboard_menu.addAction("No onboard editing supported")
+        self.onboard_note_action.setEnabled(False)
+        self.onboard_note_action.setToolTip(DEVICE_MODE_HELP)
+        self.device_mode = TrayDeviceMode(self.menu, model)
         self.menu.addSeparator()
         self.quit_action = self.menu.addAction("Quit")
         self.icon.setContextMenu(self.menu)
@@ -117,6 +140,10 @@ class TrayIcon(QObject):
         self.profile_menu.aboutToHide.connect(lambda: QTimer.singleShot(0, self._update_profiles))
         self.menu.aboutToShow.connect(self._update_scroll)
         self.scroll_menu.aboutToShow.connect(self._update_scroll)
+        self.menu.aboutToShow.connect(self._update_onboard)
+        self.onboard_menu.aboutToShow.connect(self._update_onboard)
+        self.software_menu.aboutToShow.connect(self._update_profiles)
+        self.software_menu.aboutToShow.connect(self._update_scroll)
 
         self.model.add_listener(self.model_changed.emit)
         self.model_changed.connect(self._update_from_model, Qt.ConnectionType.QueuedConnection)
@@ -131,11 +158,22 @@ class TrayIcon(QObject):
         self._switching = switching
         self._update_profiles()
         self._update_scroll()
+        self._update_onboard()
 
     def set_scroll_switching(self, switching: bool) -> None:
         self._scroll_switching = switching
         self._update_profiles()
         self._update_scroll()
+        self._update_onboard()
+
+    def _software_allowed(self) -> bool:
+        return (
+            is_software_verified(self.model)
+            and self.model.connection.reachable
+            and not self._switching
+            and not self._scroll_switching
+            and self.model.apply_status != "applying…"
+        )
 
     def _scroll_mode_requested(self, mode: ScrollMode, _checked: bool = False) -> None:
         self._scroll_requested(mode=mode)
@@ -157,13 +195,7 @@ class TrayIcon(QObject):
             configuration = parse_toml(document) if document is not None else None
         except ConfigValidationError:
             configuration = None
-        if (
-            configuration is not None
-            and self.model.connection.reachable
-            and not self._switching
-            and not self._scroll_switching
-            and self.model.apply_status != "applying…"
-        ):
+        if configuration is not None and self._software_allowed():
             current = configuration.profile(configuration.active_profile).scroll
             if (
                 (mode is not None and mode != current.mode)
@@ -220,13 +252,10 @@ class TrayIcon(QObject):
             failures = [snapshot.status]
         self.scroll_failure_action.setText("Hardware error: " + "; ".join(failures))
         self.scroll_failure_action.setVisible(bool(failures))
-        self.scroll_menu.setEnabled(
-            configuration is not None
-            and self.model.connection.reachable
-            and not self._switching
-            and not self._scroll_switching
-            and self.model.apply_status != "applying…"
-        )
+        allowed = configuration is not None and self._software_allowed()
+        self.scroll_menu.setEnabled(allowed)
+        self.software_menu.setEnabled(allowed or self.profile_menu.isEnabled())
+        self._update_onboard()
 
     @staticmethod
     def _observed_flag(value: bool | None) -> str:
@@ -239,11 +268,9 @@ class TrayIcon(QObject):
         except ConfigValidationError:
             configuration = None
         if (
-            not self.model.connection.reachable
-            or self._switching
-            or self.model.apply_status == "applying…"
-            or configuration is None
+            configuration is None
             or profile_id not in {identifier for identifier, _ in configuration.profiles}
+            or not self._software_allowed()
         ):
             self._update_profiles()
             return
@@ -259,6 +286,8 @@ class TrayIcon(QObject):
             configuration = None
         if configuration is None:
             self.profile_menu.setEnabled(False)
+            self.software_menu.setEnabled(False)
+            self._update_onboard()
             return
         if document != self._profile_document and (force or not self.profile_menu.isVisible()):
             for action in self.profile_actions.values():
@@ -267,7 +296,10 @@ class TrayIcon(QObject):
             self.profile_actions.clear()
             self._profile_document = document
             for identifier, profile in configuration.profiles:
-                action = self.profile_menu.addAction(f"{profile.display_name} ({identifier})")
+                action = self.profile_menu.addAction(
+                    software_profile_label(profile.display_name, identifier)
+                )
+                action.setToolTip(PROFILE_SELECTION_HELP)
                 action.setCheckable(True)
                 self.profile_group.addAction(action)
                 action.triggered.connect(
@@ -276,12 +308,13 @@ class TrayIcon(QObject):
                 self.profile_actions[identifier] = action
         for identifier, action in self.profile_actions.items():
             action.setChecked(identifier == configuration.active_profile)
-        self.profile_menu.setEnabled(
-            self.model.connection.reachable
-            and not self._switching
-            and not self._scroll_switching
-            and self.model.apply_status != "applying…"
-        )
+        allowed = self._software_allowed()
+        self.profile_menu.setEnabled(allowed)
+        self.software_menu.setEnabled(allowed or self.scroll_menu.isEnabled())
+        self._update_onboard()
+
+    def _update_onboard(self) -> None:
+        self.onboard_menu.setEnabled(is_firmware_verified(self.model))
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason in (
@@ -293,6 +326,8 @@ class TrayIcon(QObject):
     def _update_from_model(self) -> None:
         self._update_profiles()
         self._update_scroll()
+        self.device_mode.refresh()
+        self._update_onboard()
         snapshot = self.model.snapshot
         status = snapshot.status if snapshot else "unknown"
         transport = f" · {snapshot.transport}" if snapshot and snapshot.transport else ""

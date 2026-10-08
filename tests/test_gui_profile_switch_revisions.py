@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from collections.abc import Iterator
 from dataclasses import replace
@@ -20,6 +21,20 @@ from naga_control.gui.presenter import ApplyOutcome, GuiPresenter
 from naga_control.gui.tray_icon import TrayIcon
 from naga_control.gui.worker import CoroFactory
 from naga_control.ipc.client import UnknownProfileError
+
+VERIFIED = json.dumps(
+    {
+        "status": "available",
+        "generation": 1,
+        "transport": "hyperspeed",
+        "error": None,
+        "desired_mode": "software",
+        "observed_mode": "software",
+        "mode_ready": True,
+        "mode_error": None,
+        "calibrating": False,
+    }
+)
 
 
 def _document() -> str:
@@ -44,6 +59,9 @@ class GatedClient(FakeClient):
         self.started = asyncio.Event()
         self.finish = asyncio.Event()
 
+    async def snapshot_document(self) -> str:
+        return VERIFIED
+
     async def select_profile(self, profile_id: str) -> int:
         self.selected.append(profile_id)
         self.started.set()
@@ -64,6 +82,9 @@ class DelayedRefreshClient(FakeClient):
         self.delay = False
         self.started = asyncio.Event()
         self.finish = asyncio.Event()
+
+    async def snapshot_document(self) -> str:
+        return VERIFIED
 
     async def configuration_document(self) -> str:
         document = self.document
@@ -86,6 +107,10 @@ def _tray(window: MainWindow) -> TrayIcon:
     return tray
 
 
+def _page(window: MainWindow):  # pyright: ignore[reportUnknownParameterType]
+    return window.device.profiles
+
+
 def _checked(tray: TrayIcon) -> list[str]:
     return [key for key, action in tray.profile_actions.items() if action.isChecked()]
 
@@ -103,7 +128,8 @@ def _assert_drafts(window: MainWindow) -> None:
     assert window.settings.dpi.rows[0].x_spin.value() == 2300
     assert window.buttons.rows[0].kind_box.currentText() == "disabled"
     assert window.device.power.idle_spin.value() == 420
-    assert window.device.profiles.plate_box.currentData() == 6
+    assert window.device.profiles.has_unsaved_changes()
+    assert window.device.profiles.draft_label.text() != ""
     for editor in (
         window.settings,
         window.buttons,
@@ -113,7 +139,7 @@ def _assert_drafts(window: MainWindow) -> None:
         assert editor.has_unsaved_changes()
 
 
-@pytest.mark.parametrize("source", ["header", "tray"])
+@pytest.mark.parametrize("source", ["page", "tray"])
 @pytest.mark.parametrize("visible", [False, True], ids=["hidden", "visible"])
 @pytest.mark.parametrize(
     ("answer", "failure"),
@@ -128,7 +154,7 @@ def _assert_drafts(window: MainWindow) -> None:
 async def test_dirty_profile_switch_waits_for_confirmed_apply(
     qapp: QApplication,
     monkeypatch: pytest.MonkeyPatch,
-    source: Literal["header", "tray"],
+    source: Literal["page", "tray"],
     visible: bool,
     answer: QMessageBox.StandardButton,
     failure: Literal["unknown", "connection", "none"],
@@ -147,6 +173,7 @@ async def test_dirty_profile_switch_waits_for_confirmed_apply(
         qapp.processEvents()
         _dirty(window)
         tray = _tray(window)
+        page = _page(window)
         original = parse_toml(client.document)
         question = Mock(return_value=answer)
         monkeypatch.setattr(QMessageBox, "question", question)
@@ -154,7 +181,8 @@ async def test_dirty_profile_switch_waits_for_confirmed_apply(
         if source == "tray":
             tray.profile_actions["other"].trigger()
         else:
-            window.profiles_box.setCurrentIndex(window.profiles_box.findData("other"))
+            page.profiles_box.setCurrentIndex(page.profiles_box.findData("other"))
+            page.activate_button.click()
         qapp.processEvents()
         question.assert_called_once()
         assert question.call_args.args[0] is (window if visible else None)
@@ -163,14 +191,13 @@ async def test_dirty_profile_switch_waits_for_confirmed_apply(
         if answer == QMessageBox.StandardButton.No:
             assert not jobs
             assert not client.selected
-            assert window.profiles_box.currentData() == original.active_profile
+            assert page.active_label.text().endswith(f"({original.active_profile})")
             return
 
         assert len(jobs) == 1
-        assert not window.profiles_box.isEnabled()
         assert not tray.profile_menu.isEnabled()
-        # Neither entry point may enqueue a second request while one is pending.
-        window.profiles_box.setCurrentIndex(window.profiles_box.findData("other"))
+        assert not window.device.isEnabled()
+        page.profiles_box.setCurrentIndex(page.profiles_box.findData("other"))
         tray.profile_actions["other"].trigger()
         assert len(jobs) == 1
         question.assert_called_once()
@@ -183,21 +210,20 @@ async def test_dirty_profile_switch_waits_for_confirmed_apply(
         assert not task.done()
         assert client.selected == ["other"]
         assert model.configuration_revision == original.revision
-        assert window.profiles_box.currentData() == original.active_profile
+        assert page.active_label.text().endswith(f"({original.active_profile})")
         assert _checked(tray) == [original.active_profile]
         _assert_drafts(window)
 
         client.finish.set()
         await asyncio.wait_for(task, timeout=5)
-        _assert_drafts(window)  # Queued Qt completion has not run yet.
+        _assert_drafts(window)
         qapp.processEvents()
         applied = failure == "none"
         active = "other" if applied else original.active_profile
         assert parse_toml(client.document).active_profile == active
-        assert window.profiles_box.currentData() == active
+        assert page.active_label.text().endswith(f"({active})")
         assert _checked(tray) == [active]
         assert model.apply_status == ("Profile switched" if applied else "Profile switch failed")
-        assert window.profiles_box.isEnabled() is (failure != "connection")
         assert tray.profile_menu.isEnabled() is (failure != "connection")
         assert client.selected == ["other"]
         if applied:
@@ -218,7 +244,7 @@ async def test_dirty_profile_switch_waits_for_confirmed_apply(
         qapp.processEvents()
 
 
-async def test_delayed_refresh_cannot_undo_newer_apply_in_header_or_tray(
+async def test_delayed_refresh_cannot_undo_newer_apply_in_page_or_tray(
     qapp: QApplication,
 ) -> None:
     client = DelayedRefreshClient()
@@ -240,7 +266,7 @@ async def test_delayed_refresh_cannot_undo_newer_apply_in_header_or_tray(
         assert await presenter.apply_configuration(newer) is ApplyOutcome.APPLIED
         qapp.processEvents()
         tray = _tray(window)
-        assert window.profiles_box.currentData() == "other"
+        assert _page(window).active_label.text().endswith("(other)")
         assert _checked(tray) == ["other"]
         notifications: list[bool] = []
         model.add_listener(lambda: notifications.append(True))
@@ -250,7 +276,7 @@ async def test_delayed_refresh_cannot_undo_newer_apply_in_header_or_tray(
         qapp.processEvents()
         assert model.configuration_revision == config.revision + 1
         assert model.configuration_document == newer
-        assert window.profiles_box.currentData() == "other"
+        assert _page(window).active_label.text().endswith("(other)")
         assert _checked(tray) == ["other"]
         assert not notifications
     finally:

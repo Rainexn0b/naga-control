@@ -43,6 +43,37 @@ To use the reviewed new installer from a checkout:
 ./install.sh --version v0.4.0
 ```
 
+Manual FUSE2 library references (verified 2026-10-08; you run these yourself,
+the installer never installs packages):
+
+| Release | Package (repository) | Manual command | Reference |
+| --- | --- | --- | --- |
+| Ubuntu 22.04 | `libfuse2` (universe) | `sudo apt install libfuse2` | https://packages.ubuntu.com/jammy/libfuse2 |
+| Ubuntu 24.04 | `libfuse2t64` (universe) | `sudo apt install libfuse2t64` | https://packages.ubuntu.com/noble/libfuse2t64 |
+| Arch (rolling) | `fuse2` (extra) | `sudo pacman -S fuse2` | https://archlinux.org/packages/extra/x86_64/fuse2/ |
+| Fedora 44 | `fuse-libs` | `sudo dnf install fuse-libs` | https://packages.fedoraproject.org/pkgs/fuse/fuse-libs/fedora-44.html |
+
+Only these four package references are verified; they are package names, not
+a claim of complete prerequisites, AppImage launch, install, or hardware
+support. The Fedora 44 package provides `libfuse.so.2()(64bit)` as version
+`2.9.9-25.fc44` on x86_64. Arch is rolling, so no snapshot validation is
+claimed. Enable `universe` manually if your Ubuntu setup needs it; the
+installer never configures repositories. Other releases and derivatives need
+their official native package context for the exact release; release branding
+or `ID_LIKE` alone never selects a package. Debian 13 and openSUSE names are
+deliberately not listed here.
+
+The installer separately requires the actual capabilities at install time: an
+x86_64 `libfuse.so.2` in the `ldconfig` cache, a usable `/dev/fuse`
+character device, kernel FUSE support, and a normal user systemd/session
+D-Bus desktop session. FUSE 3 alone does not satisfy the FUSE 2 library
+check, and installing the library alone does not guarantee `/dev/fuse` works.
+
+The approved portable build target is Ubuntu 22.04 (glibc 2.35) on x86_64,
+but that is a build target, not evidence about the published v0.4.0 artifact:
+its library floor remains UNVERIFIED, and this table makes no Ubuntu 22.04
+support claim for it.
+
 The ordinary install is **app-only**: it never offers, downloads, installs, or
 replaces OpenRazer, and never changes its group or daemon. On experimental
 Arch/pacman hosts, explicitly append `--install-openrazer` to the **same bash
@@ -72,11 +103,30 @@ Other distributions
 need a manual matching-source native build, not Arch packages; this is not a
 promise of support for all Arch derivatives or for Debian/Fedora.
 
-Uninstall:
+Uninstall (checkout remover; needs no AppImage and no host Python):
 
 ```bash
 ./scripts/uninstall.sh --yes
 ```
+
+It reuses the same stable per-user install lock, checks owners and symlinks,
+and removes only known installer-owned files; quit the GUI and release held
+controls first. Unsafe or unverifiable service state refuses with files
+retained for manual recovery instead of blind deletion. Profiles stay unless
+`--purge-config` is passed; OpenRazer packages, group membership, and daemon
+stay; udev rule removal still asks for consent. See
+[upgrades and recovery](docs/troubleshooting.md#installer-upgrades-and-rollback).
+
+Optional checkout-only distro advice (read-only, offline; never an install
+check or consent):
+
+```bash
+bash scripts/distro_report.sh
+```
+
+Only the Ubuntu 22.04, Ubuntu 24.04, and Arch rows are reviewed; the Fedora
+44 entry above is a README reference, not a reporter row. The report does not
+certify a distro, check prerequisite presence, or allow installation.
 
 The new installer verifies the exact release's canonical `.sha256` sidecar and
 AppImage bytes **before execution, replacement, service stop or sudo**. Reused

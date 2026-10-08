@@ -93,16 +93,17 @@ def test_device_groups_and_only_selected_plate_selector(qapp: QApplication) -> N
     assert {group.title() for group in page.findChildren(QGroupBox)} == {
         "Connection and Battery",
         "Power",
-        "Profiles",
+        "Software profiles",
         "Updates",
     }
-    assert page.findChildren(QComboBox) == [page.profiles.plate_box]
+    assert page.findChildren(QComboBox) == [page.profiles.profiles_box, page.profiles.plate_box]
     assert not hasattr(page.overview, "profiles_box")
+    assert not hasattr(page.profiles, "list_widget")
     assert page.power.header_widget.isHidden()
     assert not page.power.profile_label.isVisible()
     assert page.power.apply_button.text() == "Apply power"
-    assert page.profiles.list_widget.maximumHeight() == 220
-    assert page.profiles.list_widget.height() <= 220
+    assert page.profiles.active_label.text().startswith("Active:")
+    assert page.profiles.activate_button.text() == "Activate"
     assert not page.is_stacked
 
     page.resize(640, 1000)
@@ -168,7 +169,7 @@ def test_summary_keeps_errors_visible_while_diagnostics_collapse(qapp: QApplicat
     qapp.processEvents()
 
     assert page.connection_label.text() == "online"
-    assert page.status_label.text() == "available"
+    assert page.status_label.text() == "Off (calibration passthrough)"
     assert page.transport_label.text() == "hyperspeed"
     assert page.observed_dpi_label.text() == "1600x1800 (stage 2)"
     assert page.poll_rate_label.text() == "500 Hz"
@@ -230,8 +231,9 @@ def test_overview_shows_firmware_mode_without_claiming_software_mapping(
         )
     )
     qapp.processEvents()
-    assert page.status_label.text() == "firmware (software mapping off)"
-    assert page.mode_label.text() == "firmware (desired firmware)"
+    assert page.status_label.text() == "Off (onboard mode verified)"
+    assert page.requested_mode_label.text() == "Onboard / firmware"
+    assert page.mode_label.text() == "Onboard / firmware"
     assert not page.calibrate_button.isEnabled()
 
     model.apply_snapshot(
@@ -246,9 +248,42 @@ def test_overview_shows_firmware_mode_without_claiming_software_mapping(
         )
     )
     qapp.processEvents()
-    assert page.mode_label.text() == "software (desired firmware)"
+    assert page.mode_label.text() == "Software / driver"
+    assert page.requested_mode_label.text() == "Onboard / firmware"
+    assert page.status_label.text() == "Not ready (mode error)"
     assert page.mode_error_label.text() == "driver reasserted"
     page.close()
+
+
+@pytest.mark.parametrize("mode", ["software", "firmware"])
+def test_summary_mode_is_unknown_offline_without_changing_unrelated_telemetry(
+    qapp: QApplication, mode: str
+) -> None:
+    presenter, model, client = make_presenter("")
+    page = OverviewPage(presenter, model, sync_run)
+    model.apply_snapshot(
+        ServiceSnapshotView(
+            "available",
+            1,
+            "wired",
+            None,
+            desired_mode=mode,
+            observed_mode=mode,
+            mode_ready=True,
+            mode_error="previous error",
+            observed=ObservedView(battery_percent=80),
+        )
+    )
+    qapp.processEvents()
+    model.mark_unreachable("disconnected")
+    qapp.processEvents()
+    assert "last known; offline" in page.requested_mode_label.text()
+    assert page.mode_label.text() == "Unknown (service offline)"
+    assert page.status_label.text() == "Unknown (service offline)"
+    assert page.mode_error_label.text() == "Last known (offline): previous error"
+    assert page.battery_label.text() == "80%"
+    assert "service-wide" in page.mode_label.toolTip()
+    assert not client.applied
 
 
 def test_diagnostics_actions_still_dispatch_through_presenter(

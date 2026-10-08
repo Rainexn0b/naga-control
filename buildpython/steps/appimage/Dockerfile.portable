@@ -1,0 +1,57 @@
+# Naga Control portable toolchain floor.
+# Ubuntu 22.04 x86_64 with a controlled CPython 3.12.15 build.
+# Candidate recipe only; finished-artifact checks land separately.
+# Build inputs follow https://docs.python.org/3.12/using/configure.html#build-requirements
+# which documents C11 and OpenSSL 1.1.1 or newer for CPython 3.12.
+# Base is the Ubuntu 22.04 amd64 manifest, last pushed 2026-10-02. See
+# https://hub.docker.com/v2/repositories/library/ubuntu/tags/22.04
+# for tag metadata. Build and run only with --platform linux/amd64.
+FROM ubuntu:22.04@sha256:08ea48a03a3e78ebc7cd526e6a275053223aadd88bfc09cc49b06d5281525fde
+
+ENV LD_LIBRARY_PATH=/opt/naga-python/lib
+ENV PATH=/opt/naga-python/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV PYTHON_BIN=/opt/naga-python/bin/python3.12
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+  binutils \
+  build-essential \
+  ca-certificates \
+  curl \
+  libarchive-tools \
+  libbz2-dev \
+  libdbus-1-3 \
+  libdbus-1-dev \
+  libegl1 \
+  libffi-dev \
+  libfontconfig1 \
+  libgdbm-dev \
+  libgl1 \
+  libglib2.0-0 \
+  libglib2.0-dev \
+  liblzma-dev \
+  libncursesw5-dev \
+  libreadline-dev \
+  libsqlite3-dev \
+  libssl-dev \
+  libudev1 \
+  libxkbcommon0 \
+  pkg-config \
+  squashfs-tools \
+  util-linux \
+  zlib1g-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu; \
+ curl -fsSL https://www.python.org/ftp/python/3.12.15/Python-3.12.15.tar.xz -o /tmp/Python-3.12.15.tar.xz; \
+ echo "c2c4321961fab0fb999d66e0cecf521c2ab3994c7992873ea99e306c1094fd5a  /tmp/Python-3.12.15.tar.xz" | sha256sum -c -; \
+ tar -xf /tmp/Python-3.12.15.tar.xz -C /tmp; \
+ cd /tmp/Python-3.12.15; \
+ ./configure --prefix=/opt/naga-python --enable-shared --without-static-libpython; \
+ make -j"$(nproc)"; \
+ make install; \
+ cd /; \
+ rm -rf /tmp/Python-3.12.15 /tmp/Python-3.12.15.tar.xz; \
+ /opt/naga-python/bin/python3.12 --version
+
+CMD ["/opt/naga-python/bin/python3.12", "--version"]
