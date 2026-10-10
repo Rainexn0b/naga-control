@@ -14,50 +14,55 @@ The release body is the matching
 `## [0.5.0]` section in [changelog.md](../changelog.md),
 extracted by `scripts/prepare_release.py`. This overview is not the release
 body, and the checkout installer notes below are not retroactive to already
-published tags. v0.5.0 is currently untagged/unpublished; latest published
-stays v0.4.0, whose artifact library floor remains UNVERIFIED. By user decision
-the current codebase state is the new v0.5.0 canonical snapshot and further
-development pauses until the image is published; this supersedes the earlier
-choice that excluded keyboard, chord, README, and future work.
+published tags. See
+[GitHub releases](https://github.com/Rainexn0b/naga-control/releases) for
+current publication status. By user decision
+the current codebase state is the new v0.5.0 canonical snapshot (`4f14ed3`,
+includes key/chord, README, artwork, and all approved runtime fixes) and
+further feature code is FROZEN until the image is published.
 
-Last completed CI before the canonical freeze is on source `7e59003`: source
-run `38044500620` SUCCESS; validation-only run `38044500744`
+Validation-only receipt (canonical `4f14ed3`, 2026-10-10 UTC): source run `38050625614`
+SUCCESS and validation-only run `38050625832`
+(https://github.com/Rainexn0b/naga-control/actions/runs/38050625832) SUCCESS.
+Metadata, OpenRazer build/metadata/cohort/imports/hashes, and full-profile
+source checks passed; controlled Ubuntu 22.04 build plus static gate plus
+22.04 baseline passed 12:12:17-12:15:50Z, 24.04 smoke passed 12:15:50-12:16:18Z,
+one-image checksum staging passed 12:16:18Z, then upload passed. Publisher was
+SKIPPED by dispatch design as of this run, so this receipt is not published;
+the tag-only pipeline will validate/publish afterward under user auth. Finished
+artifact `Naga-Control-0.5.0-x86_64.AppImage` is 123202040 bytes, squashFS
+offset 944632, sha256
+`57e4fa76520c5a75b08d98969d2ce4700f2d85ef51edb875f0adc53126febddf`; static gate
+checked 208, providers checked, errors empty, baseline Ubuntu 22.04 / glibc
+2.35 / x86_64. Baseline markers are `runtime-imports-ok`, `qt-offscreen-ok`,
+`integration-payload-ok`, and `portable artifact verified`; 24.04 smoke covers
+the same imports, version 0.5 metadata, offscreen QApplication plus GUI app
+import only, CLI service/capture/integration `--help`, and temporary
+integration assets, with no live hardware, root GUI/service, or device access.
+Smoke staging uses same-uid owned 0700 paths. The validation receipt SHA is
+not the published identity: a tagged rebuild may differ, so do not treat it as
+published until the publisher and GitHub verify it. This overview claims no
+full install, desktop, sudo, udev, service, or hardware validation, and no
+support certification. A tagged build still runs the same pipeline CI.
+
+### Historical run receipts (labelled history)
+
+On source `7e59003`: source run `38044500620` SUCCESS; validation-only run
+`38044500744`
 (https://github.com/Rainexn0b/naga-control/actions/runs/38044500744) passed the
 controlled Ubuntu 22.04 build plus the finished-artifact static gate (208
-native objects audited, providers checked, no missing-provider errors) and the
-22.04 baseline userspace checks (bundled runtime imports, offscreen
-QApplication, CLI help, temporary integration payload), then FAILED at the
-Ubuntu 24.04 smoke step after apt and pull succeeded. The confirmed diagnostic
-is `runuser: failed to execute /work/squashfs-root/AppRun: Permission denied`:
-root extraction under a private owned directory denies uid 10001. The delivered
-smoke-identity fix stages an owned 0700 private work directory and image, then
-the same uid extracts and runs all AppRun checks; it is not a root app run and
-does not recursively widen permissions. That fix is UNRUN in CI, so no new
-24.04 pass is claimed. Staging and upload were unreached and publication was
+objects) and the 22.04 baseline userspace checks, then FAILED at the Ubuntu
+24.04 smoke step with `runuser: failed to execute /work/squashfs-root/AppRun:
+Permission denied`. Staging and upload were unreached and publication was
 skipped by dispatch design.
 
-Earlier on source `8bf093c`: source run `38043242149` SUCCESS; validation-only
-run `38043242656`
-(https://github.com/Rainexn0b/naga-control/actions/runs/38043242656) also
-observed the first real static pass plus 22.04 baseline pass. Its 24.04 step
-failed without a recorded detail; the later `7e59003` diagnostic rerun exposed
-the cause as the same permission-denied AppRun execution failure. The first
-passed artifact on `8bf093c` is `Naga-Control-0.5.0-x86_64.AppImage`, 123202040
-bytes, squashFS offset 944632, sha256
-`6a7d9b9743e261750add63ebd0f16fc97160c9bcf93ce25511cf9577e7a264e1`; real report
-`/tmp/opencode/naga-portability/desktop-artifact-gate.json` with raw
-`desktop-appimage.raw.log`. The `7e59003` finished-artifact gate is
-`/tmp/opencode/naga-portability/smoke-diagnostic-artifact-gate.json`: PASS, 208
-checked, errors[], providers true, artifact 123202040 bytes, squashFS offset
-944632, sha256 `7dfb3462f1c110eee4a0ba6c4782c99a648ebbb22236938c22a5598e5f1a35c4`.
-The two prior static passes and 22.04 successes
-were on a pre-canonical snapshot and do not certify the new canonical
-key/chord/artwork payload, which still awaits its full source CI plus real
-static, 22.04, and 24.04 validation. This overview claims no full Ubuntu
-install, desktop, sudo, udev, service, or hardware validation, and no support
-certification. The last gate remains the 24.04 smoke step.
-
-### Historical run receipt (labelled history, unchanged)
+On source `8bf093c`: source run `38043242149` SUCCESS and validation-only run
+`38043242656`
+(https://github.com/Rainexn0b/naga-control/actions/runs/38043242656) observed
+the first real static pass plus 22.04 baseline pass, with 24.04 FAILED without
+recorded diagnostic output; the later `7e59003` rerun exposed the
+permission-denied cause. Those pre-canonical passes do not certify the
+canonical payload.
 
 On committed `7661eb4`, validation-only run `38040471477`
 (https://github.com/Rainexn0b/naga-control/actions/runs/38040471477)
@@ -65,8 +70,9 @@ passed AppImage assembly but the static finished-artifact gate FAILED after
 auditing 208 objects with 70 missing normal desktop runtime dependency
 errors; the 22.04 baseline and 24.04 smoke checks, staging, and upload were
 not reached, and publication was skipped by dispatch design. The bounded
-validation-image plus trusted-baseline fix is reviewed and awaits real CI
-validation; publication remains blocked.
+validation-image plus trusted-baseline fix was reviewed at that time; later
+canonical validation passed the static gate plus 22.04 baseline and 24.04
+smoke on `4f14ed3`.
 
 ### Changes in 0.5.0
 
@@ -95,8 +101,8 @@ validation; publication remains blocked.
   no ABI floor raise, pin change, or gate skip is claimed. AppImage staging
   trims unused Qt QML/SQL/WebEngine/tools and known static SDK files in AppDir
   staging only (589 native objects and 269670904 bytes in the earlier untrimmed
-  real run against 208 objects and 123202040 bytes in the trimmed real run);
-  the new canonical payload object count is unknown until its own real build.
+  real run against 208 objects and 123202040 bytes in the trimmed real run,
+  including the canonical `4f14ed3` validation); a tagged rebuild may differ.
   The stable gate keeps the singular GNU `contains 1 entry` parse fix, trusts
   libm and libresolv baseline entries as PRIVATE only while bundled payload
   entries still reject, and treats safe `$ORIGIN` separators as-is.
@@ -132,9 +138,11 @@ validation; publication remains blocked.
   pass is claimed. The read-only `bwrap --unshare-all /usr/bin/true` presence
   probe (exit 0) is not installer acceptance, and a throwaway HOME alone is
   unsafe without isolated HOME, user units, bus, sudo, and udev context.
-- The new canonical payload still awaits its full source CI plus real static,
-  22.04, and 24.04 validation; staging and upload remain unreached and the last
-  gate remains the 24.04 smoke step.
+- The static gate plus Ubuntu 22.04 baseline and 24.04 userspace launch checks
+  are verified; the validation-only run staged/uploaded candidate assets. See
+  [GitHub releases](https://github.com/Rainexn0b/naga-control/releases) for
+  publication status. No full install, desktop, sudo, udev, service, or
+  hardware pass is claimed.
 - Safety pins and the exact-pin OpenRazer cohort are unchanged; see the
   matching changelog section for the full prerequisite and limitation list.
 
@@ -144,9 +152,9 @@ The current checkout installer adds exact-tag AppImage checksum verification,
 read-only desktop/FUSE/tool preflight, a stable per-user install lock, private
 staging and atomic replacement, consent-based Naga-only upgrades, and verified
 image/tag rollback pairs. These changes are **not retroactive** to installer
-scripts at already published tags. The README keeps v0.4.0 as its existing
-published example with matched script/ref/version selection, not a claim that
-it contains these new protections or that a future tag has been published.
+scripts at already published tags. The README points to GitHub releases for
+current publication status with matched script/ref/version selection, not a
+claim that a future tag has been published.
 
 The new installer rejects older releases missing the canonical AppImage
 `.sha256` sidecar; it never falls back to unverified bytes. HTTPS sidecars are

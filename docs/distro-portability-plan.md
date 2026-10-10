@@ -1,20 +1,62 @@
 # Distro Portability Execution Tracker
 
-Status (2026-10-10 UTC, last completed CI before canonical freeze on source `7e59003`): **source CI `38044500620` SUCCESS,
-validation-only Release `38044500744` FAILED at the Ubuntu 24.04 smoke step after the controlled
-Ubuntu 22.04 build plus finished-artifact static FIRST pass (208 native objects, providers checked,
-no missing-provider errors) and the 22.04 baseline userspace pass; v0.5.0 untagged/unpublished, latest
-published stays v0.4.0 (artifact floor UNVERIFIED)**.
+Status (2026-10-10 UTC, canonical `4f14ed3`): **source CI `38050625614` SUCCESS,
+validation-only Release `38050625832` SUCCESS (controlled Ubuntu 22.04 build
+plus finished-artifact static gate plus 22.04 baseline plus 24.04 smoke plus
+one-image checksum staging plus upload; publisher skipped by dispatch design,
+tag-only publication pending)**. Ready for final notes commit, tag-only
+rebuild/publish, then six-asset verification plus safely isolated installer or
+precise blocker; source feature code FROZEN, canonical includes all user work
+with no exclusions. Runtime source hash is unchanged for this docs-only
+commit.
 The user approved [Distro Portability Plan (Revised)](distro-portability-plan-revised.md)
 with "then follow the revised plan. please continue". That read-only plan controls
 the sequence and scope; it supersedes this file's former execution waves.
 This is its compact evidence/register tracker, not another plan or support promise.
-By user decision ALL completed current codebase is canonical v0.5.0 (local `81dfa9b` is remote
-`7e59003` plus `1daa514` key/chord, `5d91ec9` README quickstart, `81dfa9b` artwork) and further
-development pauses until the image is published; this supersedes the earlier exclusion of README
-and keyboard/chord work. No new hardware acceptance is claimed.
+By user decision ALL completed current codebase is canonical v0.5.0
+(`4f14ed3` includes `1daa514` key/chord, `5d91ec9` README quickstart, `81dfa9b`
+artwork, plus ratchet config/tests/debt docs, safe 24 smoke identity, and all
+past approved runtime fixes) and further feature code is FROZEN until the
+image is published. No new hardware acceptance is claimed. See
+[GitHub releases](https://github.com/Rainexn0b/naga-control/releases) for
+current publication status.
 
-- Current before freeze (source `7e59003`, validation-only `38044500744`
+- CURRENT (canonical `4f14ed3`, validation-only `38050625832`
+  https://github.com/Rainexn0b/naga-control/actions/runs/38050625832): source
+  `38050625614` SUCCESS and validation `38050625832` SUCCESS. Metadata,
+  OpenRazer build/metadata/cohort/imports/hashes, and full-profile source
+  checks passed; controlled Ubuntu 22.04 / glibc 2.35 / x86_64 plus CPython
+  3.12.15 build plus finished-artifact static gate passed (208 objects,
+  providers_checked true, errors[]) 12:12:17-12:15:50Z, 22.04 baseline
+  userspace passed (`runtime-imports-ok`, `qt-offscreen-ok`,
+  `integration-payload-ok`, `portable artifact verified`), 24.04 smoke passed
+  12:15:50-12:16:18Z (same imports, version 0.5 metadata, offscreen
+  QApplication plus GUI app import only, CLI service/capture/integration
+  `--help`, temporary integration assets; no live hardware, root GUI/service,
+  or device access), one-image checksum staging passed 12:16:18Z, then upload
+  passed. Publisher SKIPPED by dispatch design, so tag-only publication is
+  pending. Finished artifact `Naga-Control-0.5.0-x86_64.AppImage` is 123202040
+  bytes, squashFS offset 944632, sha256
+  `57e4fa76520c5a75b08d98969d2ce4700f2d85ef51edb875f0adc53126febddf`; the
+  validation receipt SHA is not the published identity (tagged rebuild may
+  differ). Real reports: `canonical-artifact-gate.json` plus
+  `canonical-appimage.raw.log`, `canonical-release.full.log`, and
+  `canonical-release.jobs.json`. Smoke staging uses same-uid owned 0700 paths.
+- Candidate asset receipt (run `38050625832`, independently downloaded): six
+  candidate assets PASS both AppImage/packages checksum sidecars;
+  `scripts/validate_release_assets.py` PASS for the complete pin cohort, and
+  image bytes match the gate sha256
+  `57e4fa76520c5a75b08d98969d2ce4700f2d85ef51edb875f0adc53126febddf`. This
+  validation candidate is NOT a public release. Isolated environment probe only
+  (`isolated-installer-environment.log`/`.status`, `env -i bwrap --unshare-all`
+  with private etc/udev/home/run/tmp/proc/minimal dev) returned UID 1000;
+  `systemctl --user show` failed with `Failed to connect to user scope bus via
+  local transport: No such file or directory` (exit 1). Probe only checked the
+  environment, not an installer attempt; no host services, udev, FUSE, or
+  device nodes were touched. Missing private bus is the precise blocker; actual
+  tag installer smoke runs parent post-pub, otherwise report blocker. No full
+  pass or new hardware claim.
+- HISTORICAL before freeze (source `7e59003`, validation-only `38044500744`
   https://github.com/Rainexn0b/naga-control/actions/runs/38044500744): controlled
   Ubuntu 22.04 / glibc 2.35 / x86_64 plus CPython 3.12.15 build passed, finished-artifact
   static gate passed (208 native objects, providers_checked true, errors[]), and 22.04 baseline
@@ -23,22 +65,22 @@ and keyboard/chord work. No new hardware acceptance is claimed.
   after apt/pull success with `runuser: failed to execute /work/squashfs-root/AppRun: Permission denied`:
   root extraction under a private owned directory denies uid 10001. The delivered smoke-identity fix
   stages an owned 0700 private work directory and image, then the same uid extracts and runs all AppRun
-  checks; it is not a root app run and does not recursively widen permissions. That fix is UNRUN in CI,
-  so no new 24.04 pass is claimed. Staging and upload were unreached; publication skipped by dispatch design.
+  checks; it is not a root app run and does not recursively widen permissions. At that time the fix was UNRUN in CI.
+  Staging and upload were unreached; publication skipped by dispatch design.
   Real reports: `desktop-artifact-gate.json` plus `desktop-appimage.raw.log` for the earlier `8bf093c`
   artifact, and the finished-artifact gate `smoke-diagnostic-artifact-gate.json` for `7e59003`. Earlier on source `8bf093c`: source `38043242149` SUCCESS and validation-only
   `38043242656` https://github.com/Rainexn0b/naga-control/actions/runs/38043242656 also observed the
-  first real static pass plus 22.04 baseline pass, with 24.04 gated by the same diagnostic until the
-  `7e59003` wrapper. First passed artifact on `8bf093c` is 123202040 bytes, squashFS offset 944632, sha256
-  `6a7d9b9743e261750add63ebd0f16fc97160c9bcf93ce25511cf9577e7a264e1`. The two prior static passes and
-  22.04 successes were on a pre-canonical snapshot and do not certify the new canonical key/chord/artwork
-  payload, which still awaits its full source CI plus real static, 22.04, and 24.04 validation.
+  first real static pass plus 22.04 baseline pass, with 24.04 FAILED without
+  recorded diagnostic output; the later `7e59003` rerun exposed the
+  permission-denied cause. First passed artifact on `8bf093c` is 123202040 bytes, squashFS offset 944632, sha256
+  `6a7d9b9743e261750add63ebd0f16fc97160c9bcf93ce25511cf9577e7a264e1`. Those
+  pre-canonical passes do not certify the canonical payload.
 - Local acceptance (current tree, not CI): supervisor full buildpython run with existing tools path
   passed all 11 steps in 306.7s; full pytest 3586 passed, 0 skipped, 8 warnings; Ruff 429 formatted,
   Pyright 0, LOC none over 400. Reports under `canonical-check-reports`
   (`canonical-standard-full.log`, `canonical-product-manifest.json`). Prior focused consumer 215 passed
-  plus source-limits 409 passed also held. Source CI plus real static, 22.04, and 24.04 validation
-  for the canonical tree remain pending.
+  plus source-limits 409 passed also held. Canonical source CI plus real static, 22.04, and 24.04 validation
+  are now GREEN on `4f14ed3` as recorded above.
 - Historical (2026-10-10, `7661eb4` = `f48b3a4` plus approved 12-path checker/Qt-payload
   trim, committed/pushed): source CI `38040471530` SUCCESS on `7661eb4`;
   validation-only Release `38040471477`
@@ -92,8 +134,8 @@ and keyboard/chord work. No new hardware acceptance is claimed.
 - Historical: validation-only `37840267274` on `84d77df` FAILED at extraction
   staging before payload inspection (pre-created destination); prior
   `37834701338` stays UNKNOWN (unprinted log, cause not inferred).
-- Next (canonical freeze): the desktop-prerequisite plus smoke-identity fixes above are delivered but the
-  smoke-identity rerun is still UNRUN. Historical bounded-fix note (kept, labelled history): the fix
+- HISTORICAL next note before canonical validation (kept labelled history): the desktop-prerequisite plus smoke-identity fixes above were delivered but at that time the
+  smoke-identity rerun was still UNRUN. Historical bounded-fix note (kept, labelled history): the fix
   adds normal Qt Wayland/XCB, GTK, CUPS runtime prerequisites to the existing
   22/24 CI validation images ONLY (no host installers, bundling, provisioner,
   target, format, or pin change), plus a trusted EXACT `libresolv`
@@ -105,13 +147,15 @@ and keyboard/chord work. No new hardware acceptance is claimed.
   219.69s, exit 0; focused 266 passed in 1.86s (original 164 plus release
   consumers, not summed with 3510). Logs
   `desktop-standard-{ruff,format,pyright,pytest}.log`, manifest
-  `desktop-accepted-manifest.json`. Local main is `81dfa9b`, remote main is `7e59003`, still no
-  tag. Last completed CI before the freeze stays source `38044500620` SUCCESS and validation
+  `desktop-accepted-manifest.json`. HISTORICAL at that time: local main was `81dfa9b`, remote main was `7e59003`, still no
+  tag. Last completed CI before canonical validation was source `38044500620` SUCCESS and validation
   `38044500744` FAILED at the 24.04 smoke step after the real static plus 22.04 baseline passes;
-  the new canonical payload still awaits its full source CI plus real static, 22.04, and 24.04 validation.
-  Next: parent handles commit, push, CI, and publication; this receipt
-  freezes at the last completed run. Publication remains BLOCKED; do not claim
-  PASS for unrun work. Local Docker/Podman/unsquashfs still missing; read-only
+  the new canonical payload awaited its own validation then. CURRENT canonical
+  `4f14ed3` validation `38050625832` is now GREEN as recorded above; tag-only
+  publication pending, status unknown pending real tag watch.
+  Next: parent handles these final notes commit, push, CI, and publication; this receipt
+  is updated to the GREEN validation run. Tag-only publication still pending; do not treat
+  the validation receipt SHA as published. Local Docker/Podman/unsquashfs still missing; read-only
   `bwrap --unshare-all /usr/bin/true` presence probe exit 0
   (`installer-smoke-isolation-probe.log`/`.status`) is NOT private
   systemd-user/session-D-Bus/FUSE/sudo/udev installer validation. Throwaway
@@ -135,13 +179,19 @@ and keyboard/chord work. No new hardware acceptance is claimed.
 - Historical snapshot after the hexadecimal version-index parser fix: one Qt6Core ELF metadata
   parse reported maximum required `GLIBC_2.34`. This is **one-object static parsing**,
   not ABI/provider closure, a finished-artifact audit, or launch acceptance.
-- Canonical-freeze artifact evidence (2026-10-10, `7e59003`/`8bf093c`): real finished-artifact
+- CURRENT canonical artifact evidence (2026-10-10, `4f14ed3`): real finished-artifact
+  inspection RAN and PASSED the static gate (208 bundled objects, providers_checked true,
+  errors[]), followed by the 22.04 baseline userspace pass (bundled runtime imports,
+  offscreen QApplication, CLI help, temporary integration payload) and the 24.04
+  userspace smoke pass, then one-image checksum staging and upload. Publisher
+  skipped by dispatch design; tag-only publication pending. Scope is userspace
+  launch only; no ABI, install, desktop, or hardware certification is claimed.
+- HISTORICAL pre-canonical artifact evidence (2026-10-10, `7e59003`/`8bf093c`): real finished-artifact
   inspection RAN and PASSED the static gate on both runs (208 bundled objects, providers_checked true,
   errors[]), followed by the 22.04 baseline userspace pass (bundled runtime imports,
-  offscreen QApplication, CLI help, temporary integration payload). Both runs then FAILED at the
-  24.04 smoke step with the permission-denied diagnostic above; staging, upload, and publication were
-  never reached. The new canonical key/chord/artwork payload still awaits its own full source CI plus
-  real static, 22.04, and 24.04 validation. No ABI, install, desktop, or launch pass is claimed for it.
+  offscreen QApplication, CLI help, temporary integration payload). Both runs FAILED at the
+  24.04 smoke step; the permission-denied diagnostic was recorded only on the
+  later `7e59003` rerun. Staging, upload, and publication were never reached.
 - Historical artifact evidence (2026-10-10, `7661eb4`, kept labelled history): real finished-artifact
   inspection RAN and FAILED, superseding the older zero-objects staging note.
   Validation-only `38040471477` audited 208 bundled objects
@@ -155,11 +205,14 @@ and keyboard/chord work. No new hardware acceptance is claimed.
   x86_64 DYN, static, no DT_NEEDED/GLIBC needs. Inner SquashFS/payload uninspected;
   this establishes neither a complete artifact ABI floor/identity nor launch acceptance.
 - Local `.venv` is still host Python 3.14.7. Docker, Podman, and unsquashfs remain
-  unavailable locally; readelf, objdump, and ShellCheck are available.
-  No LOCAL 22.04 build/container execution and no accepted static-gate, smoke,
-  install, desktop, or hardware result exists; the successful CI assemblies
-  above are real build evidence, not an ABI pass. The read-only
-  `bwrap --unshare-all` presence probe is not installer validation (see header).
+  unavailable locally; readelf, objdump, and ShellCheck are available. Runner
+  Docker succeeded for the canonical build/smoke above; no LOCAL 22.04
+  build/container execution exists. CI static gate plus 22.04 baseline and 24.04
+  userspace launch checks are GREEN with limited scope; no install, desktop, or
+  hardware pass is claimed. The read-only `bwrap --unshare-all` presence probe
+  (exit 0) is not installer validation; installer smoke needs isolated HOME,
+  user units, bus, FUSE, sudo, and udev context, so a throwaway HOME alone is
+  unsafe and smoke cannot run against the real host.
 - Managed installs still require x86_64/glibc, FUSE2, user systemd, session D-Bus,
   existing tools and scoped permissions. Extraction remains manual launch-only;
   no automatic missing-package setup or managed FUSEless fallback is delivered.
@@ -316,9 +369,9 @@ include those reviewed fixes. Acceptance is fake-only.
 | A4 | New [distro_report.sh](../scripts/distro_report.sh) parses `ID`, `ID_LIKE`, `VERSION_ID` as Bash data; own release strings and UNKNOWN/CONDITIONAL statuses remain explicit. Its reviewed rows remain only Ubuntu 22.04/24.04 and Arch, not the newer Fedora reference below. | 172 fake checks approved; no installer integration or runtime proof. `ID_LIKE` is a hint, never package/version/validation inheritance. |
 | A5 | Prerequisite guidance landed with capability-first errors and exact per-release manual references. No broad native-package provisioning need is confirmed; representative versions/snapshots beyond the build floor remain TBD. | FAKE-ACCEPTED (183 focused tests); add only a demonstrated small branch, never guessed packages or a provider framework. |
 | A6 | App-only install never fetches the optional helper; [release prerequisites](release-notes.md#required-openrazer) restrict explicit opt-in to experimental Arch/pacman and the exact matching cohort. | CONFIRMED; preserve consent, deferred activation and rollback. No wider helper cohort. |
-| A7 | `runtime.py`:104-146 copies complete selected-host stdlib/extensions. Historical math/cmath needed 2.44; floor 2.35. Real finished-artifact inspection has now RUN and FAILED (not zero objects): `37847748826` inspected 589 objects then FAILED with 2196 errors; `38040471477` on trimmed `7661eb4` audited 208 objects with 70 missing normal desktop runtime prerequisite errors. | Real artifact gate REACHED but FAILED; pinned 22.04/CPython 3.12 rebuild inputs fixed, ABI/provider closure still FAILING. Fix validation-image prerequisites and trusted-baseline handling, not the launcher. |
+| A7 | `runtime.py`:104-146 copies complete selected-host stdlib/extensions. Historical math/cmath needed 2.44; floor 2.35. HISTORICAL: `37847748826` inspected 589 objects then FAILED with 2196 errors; `38040471477` on trimmed `7661eb4` audited 208 objects with 70 missing-prerequisite errors. CURRENT canonical `4f14ed3` validation `38050625832` PASSED the finished-artifact static gate (208 objects, providers checked, errors empty) plus 22.04 baseline and 24.04 userspace launch checks with limited scope. | Static gate GREEN with limited scope; pinned 22.04/CPython 3.12 inputs fixed, gate keeps singular GNU fix, baseline PRIVATE-only trust, and safe `$ORIGIN` handling. No install/desktop/hardware certification. |
 | A8 | Manual extraction changes root-folder/stable launcher, service, update and backup layout; HEAD `install_user.sh`:343-354 backs up image/tag pairs, not extracted trees. | INVESTIGATED contract risk; small reversible managed fallback unproven. DEFER implementation; keep FUSE required, no safety weakening. |
-| A9 | [Existing release workflow](../.github/workflows/release.yml) validates source on ubuntu-latest, then runs a controlled Ubuntu 22.04 CPython 3.12 build/static gate/baseline check plus 24.04 userspace smoke; OpenRazer builds in an Arch container. [smoke.py](../buildpython/steps/appimage/smoke.py) defaults to 24.04/apt/extracted userspace; local Docker/Podman/unsquashfs absent. | Current runs reach the controlled 22.04 build and static gate, then FAIL there: `38040471477` assembled in 31.2s and FAILED with 70 errors; 22.04 baseline and 24.04 smoke, staging, upload UNREACHED. Local execution remains BLOCKED; bwrap presence probe is not installer validation. No full install/desktop or 22.04/Fedora matrix pass. |
+| A9 | [Existing release workflow](../.github/workflows/release.yml) validates source on ubuntu-latest, then runs a controlled Ubuntu 22.04 CPython 3.12 build/static gate/baseline check plus 24.04 userspace smoke; OpenRazer builds in an Arch container. [smoke.py](../buildpython/steps/appimage/smoke.py) defaults to 24.04/apt/extracted userspace; local Docker/Podman/unsquashfs absent but runner Docker succeeded. | CURRENT `38050625832` on `4f14ed3` PASSED controlled build, static gate, 22.04 baseline, 24.04 smoke, one-image staging, and upload; publisher skipped by dispatch design. HISTORICAL `38040471477` FAILED with 70 errors before baseline. Local execution remains BLOCKED; bwrap presence probe (exit 0) is not installer validation. No full install/desktop or 22.04/Fedora matrix pass. |
 | A10 | [Prior hardware results](hardware-validation.md#existing-baseline-evidence) and CachyOS first-slice passes are separate from [current fix2 evidence](integration-findings.md#openrazer-baseline). Exact-pin natural wake acceptance remains open. | CONFIRMED separation: install/launch is not hardware support. Operator-only existing checks; no extra device/firmware campaign. |
 
 Reporter package references (supervisor official-web inspection, 2026-10-08):
@@ -343,15 +396,15 @@ behavior. Historical facts are scoped, not a fresh AppDir audit or finished-arti
 | Missing/uncallable installed image; no host Python/module | Baseline fake exited 0/claimed uninstall complete while 7/7 user integration assets remained. | Direct known-manifest Bash cleanup, independent of image/wrapper/Python; retain default profiles, unknown backups and OpenRazer. | FAKE-reproduced/fix independently accepted in 109 scoped tests; no live cleanup/device/remap pass. |
 | Uninstall during install, or failed unit stop | Baseline source lacked install lock/suppressed stop failure; fake overlap and unsafe/failure cases now covered. | Same stable nonblocking install-lock inode, private owner/non-symlink paths; stop/disable/unknown unsafe state failures retain files/profiles/backups before cleanup. | FAKE-ACCEPTED in same 109-test run; partial filesystem/reload failures nonzero, no false completion. Real not-found-unit behavior pending. |
 | Desktop PATH omits sbin | Parent's stripped-PATH baseline fixture failed exit 1 without mutations despite available ldconfig. | Prefer PATH executable, then `/usr/sbin/ldconfig`, then `/sbin/ldconfig`; C-locale `-p` only, query failure rejects valid partial stdout. | FAKE-reproduced/fix independently accepted in 179 scoped tests; NOT a real-distro install pass. |
-| Host-built image on old glibc target; trimmed 22.04/CPython 3.12 artifact | Historical math/cmath needed `GLIBC_2.44`; floor 2.35. Real gates now inspect the finished artifact and FAIL: 589 objects/2196 errors on `f48b3a4`, 208 objects/70 missing-prerequisite errors on trimmed `7661eb4` (no floor violation reported in the latest run, not an ABI pass). | Rebuild inputs pinned; minimal finished-artifact static gate in existing workflow REACHED but FAILING. | Reviewed fix (awaits real CI validation): add normal desktop runtime prerequisites to existing 22/24 CI validation images plus EXACT libresolv PRIVATE-baseline allowance; publication BLOCKED. |
+| Host-built image on old glibc target; trimmed 22.04/CPython 3.12 artifact | Historical math/cmath needed `GLIBC_2.44`; floor 2.35. HISTORICAL gates inspected the finished artifact and FAILED: 589 objects/2196 errors on `f48b3a4`, 208 objects/70 missing-prerequisite errors on trimmed `7661eb4` (no floor violation reported in the latest run, not an ABI pass). CURRENT canonical `4f14ed3` static gate PASSED (208 objects, errors empty) plus 22.04 baseline and 24.04 userspace launch checks with limited scope. | Rebuild inputs pinned; minimal finished-artifact static gate in existing workflow now GREEN with limited scope. | Reviewed fix validated in CI: normal desktop runtime prerequisites in existing 22/24 CI validation images plus EXACT libresolv PRIVATE-baseline allowance; tag-only publication pending. |
 | Missing FUSE2; extraction only manual | Installer requires FUSE; extracted tree lacks proven managed update/rollback/removal contract. | Verified version-appropriate package instructions; preserve FUSE requirement. | Guidance FAKE-ACCEPTED (183); no automatic fallback/setup implemented or runtime pass. |
-| Local container/extraction-tool gap | Docker/Podman/unsquashfs unavailable; existing smoke recipe is apt/extracted userspace only. | Existing authorized runner/VM, not daemon installation or a new test platform. | Environment blocker confirmed; portable build/matrix acceptance absent. |
+| Local container/extraction-tool gap | Docker/Podman/unsquashfs unavailable locally; existing smoke recipe is apt/extracted userspace only; runner Docker succeeded for canonical validation. | Existing authorized runner/VM, not daemon installation or a new test platform. | Local blocker remains; CI portable build plus 22.04/24.04 userspace launch checks GREEN with limited scope; full matrix acceptance absent. |
 
 ## Representative validation snapshot
 
 | Family | Concrete target / snapshot | Install / launch / upgrade / remove evidence |
 | --- | --- | --- | --- |
-| Ubuntu | 22.04 approved build floor; existing selected smoke is Ubuntu 24.04 | Controlled build REACHED, static artifact gate FAILED (208 objects, 70 missing-prerequisite errors on `7661eb4`); 22.04 baseline and 24.04 smoke UNREACHED |
+| Ubuntu | 22.04 approved build floor; selected smokes are 22.04 baseline and 24.04 userspace | CURRENT `4f14ed3`/`38050625832` GREEN: controlled build, static gate (208 objects, errors empty), 22.04 baseline and 24.04 smoke userspace launch PASS only; install/upgrade/remove NOT TESTED |
 | Debian | Current supported version TBD | NOT TESTED; package lookup pending |
 | Fedora | 44 package-only candidate; actual runner target pending | NOT TESTED; package reference only, no launch/runtime guarantee |
 | Arch | Current immutable rolling snapshot TBD | NOT TESTED for new artifact; prior CachyOS hardware evidence separate |
@@ -384,26 +437,26 @@ cover userspace only, not FUSE desktop, permissions, DKMS, session services, or 
    checks to an attentive operator. Known hardware gates (exact-pin wake,
    held-output handoff, wired alternate plates) remain open; no new device campaign
    and no hardware evidence newly accepted here.
-6. Git/CI/release: `f48b3a4` (16 paths) and `7661eb4` (12-path trim) are
-   committed and pushed; the desktop-prerequisite (`8bf093c`) and smoke-diagnostic-wrapper (`7e59003`)
-   fixes are committed and pushed, and the new canonical `1daa514` key/chord set, `5d91ec9` README
-   quickstart, and `81dfa9b` artwork are committed locally as canonical v0.5.0. Last completed CI before
-   the freeze is source `38044500620` SUCCESS and validation-only `38044500744` FAILED at the 24.04
-   smoke step after the real static plus 22.04 baseline passes as recorded above. Next is parent commit,
-   push, CI rerun, and publication under existing auth. Only when
-   green: record final evidence notes, tag/publish v0.5.0 with 6 assets, verify
-   checksums, run a safe isolated installer test or name the blocker.
-   Latest published stays v0.4.0 until then. The canonical key/chord/README/artwork paths are
-   included by user decision, not listed separately as excluded.
-   Release body comes from the root changelog extractor, not older skill body text;
-   [release notes](release-notes.md) and [changelog](../changelog.md) match 0.5.0 metadata.
+6. Git/CI/release: canonical `4f14ed3` is committed/pushed (includes `1daa514`
+   key/chord, `5d91ec9` README, `81dfa9b` artwork, plus ratchets and safe smoke
+   identity). Source `38050625614` SUCCESS and validation-only `38050625832`
+   SUCCESS as recorded above. Next is parent handling of these final notes
+   commit, push, source CI, then tag-only rebuild/publish under existing auth.
+   Only when green: verify six assets (AppImage plus sha256 plus three Arch
+   packages plus sidecar), then run a safely isolated installer test or name
+   the precise blocker. Publication status unknown pending real tag watch. See
+   [GitHub releases](https://github.com/Rainexn0b/naga-control/releases) for
+   current status. Release body comes from the root changelog extractor, not
+   older skill body text; [release notes](release-notes.md) and
+   [changelog](../changelog.md) match 0.5.0 metadata.
 
 ## Checks and unchanged boundaries
 
 Use focused fakes then the exact standard commands above, hardware excluded; changed scripts
 need Bash/ShellCheck. Guidance/builder/gate/workflow are historical FAKE-ACCEPTED local
-receipts; real CI now reaches the controlled build plus static gate and 22.04 baseline and PASSES
-there, then FAILS at the 24.04 smoke step (header evidence); never sum scoped runs.
+receipts; real CI on `4f14ed3` PASSED controlled build plus static gate plus 22.04 baseline
+plus 24.04 smoke plus one-image staging plus upload (header evidence), with publisher
+skipped by dispatch design; never sum scoped runs.
 Doc-only checks for this edit: ASCII, local links/anchors, read-only `git diff --check` and
 diff review. No Python suite is run for this docs change.
 Keep all Python files <=400 physical lines and follow milestone/first-slice gates.

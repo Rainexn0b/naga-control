@@ -125,16 +125,17 @@ character device, kernel FUSE support, and a normal user systemd/session
 D-Bus desktop session. FUSE 3 alone does not satisfy the FUSE 2 library
 check, and installing the library alone does not guarantee `/dev/fuse` works.
 
-The approved portable build target is Ubuntu 22.04 (glibc 2.35) on x86_64,
-but that is a build target, not evidence about the published release artifact:
-its library floor remains UNVERIFIED, and this table makes no Ubuntu 22.04
-support claim for it. The published latest release stays v0.4.0. Prior
-pre-canonical snapshots observed a real finished-artifact static audit (208
-objects, no missing providers) plus Ubuntu 22.04 baseline userspace checks on
-the same controlled build; the new v0.5.0 canonical tree still awaits its full
-source CI plus real static, 22.04, and 24.04 validation, so no install,
-desktop, sudo, udev, service, or hardware claim is made here. Staging and
-upload remain unreached and the last gate remains the 24.04 smoke step.
+The approved portable build target is Ubuntu 22.04 (glibc 2.35) on x86_64.
+Canonical `4f14ed3` passed the controlled build plus finished-artifact static
+gate (208 objects, providers checked, no missing-provider errors) and Ubuntu
+22.04 baseline plus 24.04 userspace smoke checks; see the [portability
+tracker](docs/distro-portability-plan.md) and validation run `38050625832`.
+Scope is bundled runtime imports, offscreen QApplication, CLI `--help`, and
+temporary integration payload only; no full install, upgrade, remove, FUSE,
+user units, D-Bus, sudo, udev, desktop, service, or hardware certification is
+claimed. See [GitHub releases](https://github.com/Rainexn0b/naga-control/releases)
+for current publication status. With no `--version`, the installer resolves
+the latest published release and never installs unreleased `main` source.
 
 The installer verifies the exact release's canonical `.sha256` sidecar and
 AppImage bytes before execution, replacement, service stop, or sudo, using

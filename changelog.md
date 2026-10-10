@@ -12,7 +12,7 @@ installing or upgrading.
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-10-08
+## [0.5.0] - 2026-10-10
 
 This release improves installer portability, GUI profile/mode clarity,
 button key handling and mapping artwork clarity, and release-pipeline safety.
@@ -48,7 +48,9 @@ button key handling and mapping artwork clarity, and release-pipeline safety.
   audit of the AppImage outer runtime and extracted bundled ELF/provider
   closure (inspection only, nothing executed). The static gate runs before any
   bundled execution or staging and keeps the private parent directory with
-  fail-closed checks; this establishes no new real ABI until CI validates it.
+  fail-closed checks; the gate plus Ubuntu 22.04 baseline and 24.04 userspace
+  checks are verified, which does not certify installer, distro, desktop, or
+  hardware support.
 - Interpreter-free safe uninstaller `scripts/uninstall.sh` needs no AppImage
   and no host Python. It reuses the stable per-user install lock, verifies HOME
   ownership and symlink safety, removes only known installer-owned files,
@@ -81,7 +83,13 @@ button key handling and mapping artwork clarity, and release-pipeline safety.
 - The project license changes from MIT to GPL-2.0-only to match OpenRazer,
   which the project uses for all hardware operations.
 - AppImage staging trims unused Qt QML/SQL/WebEngine/tools and known static
-  SDK files in AppDir staging only; sources and the local venv are unchanged.
+  SDK files in AppDir staging only; required platforms, image, TLS/ICU, NumPy
+  runtime, and metadata/licenses are retained. The gate keeps the singular GNU
+  `contains 1 entry` parse fix, trusts only the limited baseline
+  libc/loader/libm/libresolv identities as PRIVATE while bundled payload
+  PRIVATE entries still reject, treats safe `$ORIGIN` separators
+  as-is, and stages 24.04 smoke extraction under same-uid owned 0700 paths;
+  sources and the local venv are unchanged.
 - Checkout installer safety: exact-tag AppImage checksum verification before
   execution, replacement, service stop, or sudo; read-only desktop/FUSE/tool
   preflight; stable per-user install lock; private staging with atomic
@@ -155,9 +163,10 @@ button key handling and mapping artwork clarity, and release-pipeline safety.
 - Wired 6- and 2-button plate signatures remain uncaptured and are not enabled.
 - Manual AppImage extraction remains launch-only; it is not a managed FUSEless
   installation.
-- Representative distro install, launch, upgrade, and uninstall checks are not
-  yet verified; the controlled build and static outer-runtime and bundled
-  ELF/provider-closure audit do not imply real ABI or distro acceptance.
+- Representative distro install, upgrade, and uninstall checks are not
+  verified; the static gate plus Ubuntu 22.04 baseline and 24.04 userspace
+  launch checks are verified but do not certify installer, distro, desktop,
+  or hardware support.
 
 ## [0.4.0] - 2026-10-05
 
