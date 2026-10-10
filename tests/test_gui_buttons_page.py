@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from gui_buttons_fakes import FakeClient, opened, sync_run
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtGui import QKeyEvent, QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -274,6 +274,14 @@ def test_mapping_map_click_selects_the_binding_row(qapp: QApplication) -> None:
 
     selected = _row(page, "dpi_up")
     assert "rgba(68, 255, 136" in selected.root.styleSheet()
+
+
+def test_mapping_map_renders_artwork_smoothly(qapp: QApplication) -> None:
+    page, _client = _page(qapp)
+
+    view = page.mapping_map
+    assert view.pixmap_item.transformationMode() == Qt.TransformationMode.SmoothTransformation
+    assert bool(view.renderHints() & QPainter.RenderHint.SmoothPixmapTransform)
 
 
 def test_mapping_map_shows_current_bindings(qapp: QApplication) -> None:

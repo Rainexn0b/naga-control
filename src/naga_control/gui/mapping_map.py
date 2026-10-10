@@ -87,9 +87,15 @@ class MappingMapView(QGraphicsView):
         super().__init__()
         self.setScene(QGraphicsScene(self))
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        # Bilinear-filter the bitmap when fitInView downscales it; Antialiasing
+        # alone only smooths vector overlays, not pixmap resampling.
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.pixmap_item = QGraphicsPixmapItem(QPixmap(str(mapping_image_path())))
+        # The item default is FastTransformation (nearest-neighbor), which
+        # aliases when fitInView downscales the 1448px artwork; use bilinear.
+        self.pixmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
         self.scene().addItem(self.pixmap_item)
         self._actions_cache: dict[str, Action | None] = {}
         self.zone_items: list[_ZoneItem] = []
