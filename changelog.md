@@ -21,6 +21,12 @@ installing or upgrading.
 
 ### Fixed
 
+- Missing OpenRazer now reports an explicit prerequisite error instead of a
+  generic mode error. The Device tab shows a setup notice and installation-guide
+  button, distinguishes missing clients from broken or incompatible imports,
+  and explains that the AppImage does not install OpenRazer. No automatic
+  installation or new hardware acceptance is implied.
+
 - Main bootstrap and checkout installer upgrades now replace an unverified
   previous image with the strictly verified new image instead of failing
   the old verification gate, holding the old bytes as a private

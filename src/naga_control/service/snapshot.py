@@ -28,6 +28,7 @@ def snapshot_document(
         "generation": state.generation if state is not None else 0,
         "transport": state.transport if state is not None else None,
         "error": state.error.message if state is not None and state.error is not None else None,
+        "error_code": state.error.code if state is not None and state.error is not None else None,
         "settings_failures": [f"{failure.setting}: {failure.message}" for failure in failures],
         "calibrating": calibrating,
         "desired_mode": configuration.mode if configuration is not None else None,

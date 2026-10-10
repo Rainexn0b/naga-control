@@ -36,6 +36,7 @@ class ServiceSnapshotView:
     observed_mode: str | None = None
     mode_ready: bool = False
     mode_error: str | None = None
+    error_code: str | None = None
 
 
 def parse_snapshot(document: str) -> ServiceSnapshotView:
@@ -64,6 +65,7 @@ def parse_snapshot(document: str) -> ServiceSnapshotView:
         observed_mode=_optional_str(payload.get("observed_mode")),
         mode_ready=payload.get("mode_ready") is True,
         mode_error=_optional_str(payload.get("mode_error")),
+        error_code=_optional_str(payload.get("error_code")),
     )
 
 

@@ -124,6 +124,7 @@ async def test_device_action_state_updates_the_service_snapshot() -> None:
         "generation": 2,
         "transport": "wired",
         "error": None,
+        "error_code": None,
         "settings_failures": [],
         "calibrating": False,
         "desired_mode": "software",

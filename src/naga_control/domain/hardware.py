@@ -17,6 +17,7 @@ type HardwareIssueCode = Literal[
     "transport_conflict",
     "multiple_device_conflict",
     "prerequisite_unavailable",
+    "openrazer_not_installed",
     "backend_unavailable",
     "device_unavailable",
     "unsupported_capability",

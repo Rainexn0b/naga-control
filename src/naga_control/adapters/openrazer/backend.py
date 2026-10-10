@@ -1,7 +1,5 @@
 """OpenRazer implementation of the Naga hardware port."""
 
-from collections.abc import Callable, Iterable
-from importlib import import_module
 from typing import Protocol, cast
 
 from naga_control.adapters.openrazer import mode as device_mode
@@ -12,6 +10,11 @@ from naga_control.adapters.openrazer.capabilities import (
     read_dpi_stages,
     read_hardware_state,
     read_scroll_modes,
+)
+from naga_control.adapters.openrazer.client_factory import (
+    ManagerFactory,
+    OpenRazerPrerequisiteError,
+    default_manager_factory,
 )
 from naga_control.adapters.openrazer.settings import apply_steps
 from naga_control.domain.hardware import (
@@ -32,28 +35,16 @@ _VENDOR_ID = 0x1532
 _PRODUCT_IDS: dict[HardwareTransport, int] = {"wired": 0x00E7, "hyperspeed": 0x00E8}
 
 
-class _ManagerSnapshot(Protocol):
-    @property
-    def devices(self) -> Iterable[object]: ...
-
-
-type ManagerFactory = Callable[[], _ManagerSnapshot]
-
-
 class _MutableClient(Protocol):
     dpi_stages: object
     scroll_mode: object
-
-
-class _PrerequisiteError(Exception):
-    pass
 
 
 class OpenRazerBackend:
     """Select and operate one fresh OpenRazer client for the active transport."""
 
     def __init__(self, manager_factory: ManagerFactory | None = None) -> None:
-        self._manager_factory = manager_factory or _default_manager_factory
+        self._manager_factory = manager_factory or default_manager_factory
         self._client: object | None = None
         self._connections: tuple[NagaTopology, ...] = ()
         self._state = HardwareState(status="absent", generation=0)
@@ -110,15 +101,12 @@ class OpenRazerBackend:
         try:
             manager = self._manager_factory()
             matches = [device for device in manager.devices if _matches(device, expected_product)]
-        except _PrerequisiteError:
+        except OpenRazerPrerequisiteError as exc:
             return self._set_clear(
                 "unavailable",
                 generation,
                 transport=connection.transport,
-                error=_issue(
-                    "prerequisite_unavailable",
-                    "Compatible openrazer.client support is unavailable.",
-                ),
+                error=exc.issue,
             )
         except Exception:
             return self._set_clear(
@@ -349,17 +337,6 @@ class OpenRazerBackend:
             error=error,
         )
         return self._state
-
-
-def _default_manager_factory() -> _ManagerSnapshot:
-    try:
-        module = import_module("openrazer.client")
-        manager_class = module.DeviceManager
-    except (ImportError, AttributeError) as exc:
-        raise _PrerequisiteError from exc
-    if not callable(manager_class):
-        raise _PrerequisiteError
-    return cast(_ManagerSnapshot, manager_class())
 
 
 def _matches(device: object, expected_product: int) -> bool:

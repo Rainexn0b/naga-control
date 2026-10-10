@@ -10,6 +10,15 @@ def test_parse_snapshot_reads_all_fields() -> None:
     assert view.generation == 4
     assert view.transport == "hyperspeed"
     assert view.error is None
+    assert view.error_code is None
+
+
+def test_parse_snapshot_reads_optional_hardware_error_code() -> None:
+    view = parse_snapshot(
+        '{"status":"unavailable","generation":2,"error":"Python client missing",'
+        '"error_code":"openrazer_not_installed"}'
+    )
+    assert view.error_code == "openrazer_not_installed"
 
 
 def test_parse_snapshot_accepts_error_and_missing_transport() -> None:

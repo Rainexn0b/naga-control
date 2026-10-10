@@ -177,6 +177,17 @@ held-ALT down/up checks with one transport and the precautions in
 
 ## Service says `absent` or mappings do nothing
 
+If the mouse is detected but the OpenRazer Python client is missing, the Device
+tab shows **OpenRazer not installed** with an installation-guide button. This
+means the service cannot find `openrazer.client`, not that the mouse is unplugged.
+The AppImage includes Naga Control only; install the compatible OpenRazer
+driver, daemon and Python client separately. A broken dependency or incompatible
+client instead shows **OpenRazer client needs repair**. Neither notice installs
+packages automatically. Follow [required OpenRazer](release-notes.md#required-openrazer)
+for the experimental Arch opt-in or matching-source native packages on other
+distributions, then reboot/re-login and verify runtime readiness. Older services
+without the optional snapshot `error_code` retain their existing error display.
+
 1. Check the receiver/cable: `busctl --user call org.nagacontrol.Service1
    /org/nagacontrol/Service1 org.nagacontrol.Service1 GetSnapshot` - `status`
    must be `available`.
