@@ -45,6 +45,16 @@ published until the publisher and GitHub verify it. This overview claims no
 full install, desktop, sudo, udev, service, or hardware validation, and no
 support certification. A tagged build still runs the same pipeline CI.
 
+Tag-run receipt (2026-10-10 UTC, `9789f54`, run `38054026464`): build, static gate
+(208 objects), 22.04 baseline, 24.04 smoke, staging, and upload PASS; publisher
+FAILED on draft tag lookup. Empty draft `408962506` has no assets and no published
+binaries; tag endpoint 404s while ID lookup works. User-approved recovery is retag
+of ONLY the unpublished tag after the ID fix and green CI, then rerun all CI via
+the tag; feature code stays frozen and the v0.5.0 body from the root changelog stays
+unchanged. See [GitHub releases](https://github.com/Rainexn0b/naga-control/releases)
+for status; v0.4 remains latest public. Env probe blocker (UID 1000, missing private
+bus, exit 1) is not an installer pass; hardware gates stay open with tray disabled.
+
 ### Historical run receipts (labelled history)
 
 On source `7e59003`: source run `38044500620` SUCCESS; validation-only run

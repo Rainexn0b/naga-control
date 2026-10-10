@@ -180,3 +180,157 @@ def test_publisher_preserves_latest_and_prerelease_promotion_policy(
     edit = next(command for command in fake.commands if command[:2] == ["release", "edit"])
     assert f"--latest={str(latest).lower()}" in edit
     assert f"--prerelease={str(prerelease).lower()}" in edit
+
+
+def test_draft_resolution_uses_release_id_not_tag_endpoint(
+    prepared: tuple[Path, Path, Path],
+) -> None:
+    for state in (None, True):
+        fake = FakeGh("v0.4.0", state)
+        publish(prepared, fake)
+        assert any(
+            command[0] == "api" and len(command) == 2 and "/releases/408962506" in command[1]
+            for command in fake.commands
+        )
+        assert not any("/releases/tags/" in " ".join(command) for command in fake.commands)
+
+
+def test_fake_tag_endpoint_404_and_unknown_id_rejected() -> None:
+    fake = FakeGh("v0.4.0", True)
+    with pytest.raises(subprocess.CalledProcessError):
+        fake(["api", "repos/Rainexn0b/naga-control/releases/tags/v0.4.0"])
+    with pytest.raises(subprocess.CalledProcessError):
+        fake(["api", "repos/Rainexn0b/naga-control/releases/999999999"])
+
+
+@pytest.mark.parametrize("bad", ["missing", "bool", "str", "zero", "negative", "wrongtag"])
+def test_fresh_listing_with_invalid_id_refuses_upload(
+    prepared: tuple[Path, Path, Path], bad: str
+) -> None:
+    fake = FakeGh("v0.4.0", None)
+    fake.fresh_bad = bad
+    with pytest.raises(ValueError, match=r"identifier|mismatch|lookup|Fresh"):
+        publish(prepared, fake)
+    assert all(command[:2] != ["release", "upload"] for command in fake.commands)
+    assert all(command[:2] != ["release", "edit"] for command in fake.commands)
+    assert not any(command[:3] == ["api", "--method", "DELETE"] for command in fake.commands)
+
+
+@pytest.mark.parametrize("bad", ["missing", "bool", "str", "zero", "negative"])
+def test_existing_draft_with_invalid_id_refuses_mutation(
+    prepared: tuple[Path, Path, Path], bad: str
+) -> None:
+    fake = FakeGh("v0.4.0", True)
+    assert fake.release is not None
+    if bad == "missing":
+        del fake.release["id"]
+    elif bad == "bool":
+        fake.release["id"] = True
+    elif bad == "str":
+        fake.release["id"] = "408962506"
+    elif bad == "zero":
+        fake.release["id"] = 0
+    else:
+        fake.release["id"] = -7
+    with pytest.raises(ValueError, match=r"identifier|mismatch"):
+        publish(prepared, fake)
+    assert fake.mutations() == []
+
+
+def test_fresh_relist_failure_refuses_upload(prepared: tuple[Path, Path, Path]) -> None:
+    fake = FakeGh("v0.4.0", None)
+    fake.fail_relist = True
+    with pytest.raises(subprocess.CalledProcessError):
+        publish(prepared, fake)
+    assert all(command[:2] != ["release", "upload"] for command in fake.commands)
+    assert all(command[:2] != ["release", "edit"] for command in fake.commands)
+
+
+def test_id_fetch_failure_refuses_upload(prepared: tuple[Path, Path, Path]) -> None:
+    fake = FakeGh("v0.4.0", True)
+    fake.fail_fetch = True
+    with pytest.raises(subprocess.CalledProcessError):
+        publish(prepared, fake)
+    assert all(command[:2] != ["release", "upload"] for command in fake.commands)
+    assert all(command[:2] != ["release", "edit"] for command in fake.commands)
+
+
+def test_ambiguous_fresh_listing_refuses_unknown_release(
+    prepared: tuple[Path, Path, Path],
+) -> None:
+    fake = FakeGh("v0.4.0", None)
+    fake.duplicate_after_create = True
+    with pytest.raises(ValueError, match="Ambiguous"):
+        publish(prepared, fake)
+    assert [command[1] for command in fake.mutations()] == ["create"]
+
+
+def test_public_race_before_first_delete_refuses_mutation(
+    prepared: tuple[Path, Path, Path],
+) -> None:
+    remote = {"old-version.pkg.tar.zst": b"old", "unknown.txt": b"old"}
+    first_asset = next(iter(copy_assets(prepared[1])))
+    remote[first_asset] = b"previous partial upload"
+    expected = set(remote)
+    fake = FakeGh("v0.4.0", True, remote)
+    fake.public_on_fetch = 2
+    with pytest.raises(ValueError, match=r"no longer a draft|became public"):
+        publish(prepared, fake)
+    assert not any(command[:3] == ["api", "--method", "DELETE"] for command in fake.commands)
+    assert all(command[:2] != ["release", "upload"] for command in fake.commands)
+    assert all(command[:2] != ["release", "edit"] for command in fake.commands)
+    assert set(fake.remote) == expected
+
+
+def test_public_race_before_upload_refuses_upload(
+    prepared: tuple[Path, Path, Path],
+) -> None:
+    fake = FakeGh("v0.4.0", True)
+    fake.public_on_fetch = 2
+    with pytest.raises(ValueError, match=r"no longer a draft|became public"):
+        publish(prepared, fake)
+    assert all(command[:2] != ["release", "upload"] for command in fake.commands)
+    assert all(command[:2] != ["release", "edit"] for command in fake.commands)
+
+
+def test_public_race_after_upload_refuses_publication(
+    prepared: tuple[Path, Path, Path],
+) -> None:
+    fake = FakeGh("v0.4.0", True)
+    fake.public_on_fetch = 3
+    with pytest.raises(ValueError, match="must remain a draft"):
+        publish(prepared, fake)
+    assert any(command[:2] == ["release", "upload"] for command in fake.commands)
+    assert all(command[:2] != ["release", "edit"] for command in fake.commands)
+
+
+@pytest.mark.parametrize("bad", ["missing_id", "bool_id", "str_id", "wrong_id", "wrongtag"])
+def test_checked_fetch_mismatch_refuses_mutation(
+    prepared: tuple[Path, Path, Path], bad: str
+) -> None:
+    fake = FakeGh("v0.4.0", True)
+    fake.fetch_bad = bad
+    with pytest.raises(ValueError, match=r"identifier|mismatch"):
+        publish(prepared, fake)
+    assert fake.mutations() == []
+
+
+@pytest.mark.parametrize("bad", ["draft_1", "draft_true", "draft_false", "draft_none"])
+def test_nonbool_draft_fetch_refuses_mutation(prepared: tuple[Path, Path, Path], bad: str) -> None:
+    fake = FakeGh("v0.4.0", True)
+    fake.fetch_bad = bad
+    with pytest.raises(ValueError, match=r"no longer a draft|became public"):
+        publish(prepared, fake)
+    assert fake.mutations() == []
+
+
+def test_public_race_at_final_fetch_refuses_edit(
+    prepared: tuple[Path, Path, Path],
+) -> None:
+    fake = FakeGh("v0.4.0", True)
+    fake.public_on_fetch = 4
+    with pytest.raises(ValueError, match=r"became public"):
+        publish(prepared, fake)
+    assert any(command[:2] == ["release", "upload"] for command in fake.commands)
+    assert any(command[:2] == ["release", "download"] for command in fake.commands)
+    assert all(command[:2] != ["release", "edit"] for command in fake.commands)

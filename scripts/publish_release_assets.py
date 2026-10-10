@@ -12,7 +12,6 @@ import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -36,6 +35,34 @@ def release_assets(release: dict[str, Any]) -> dict[str, int]:
             raise ValueError("Invalid or duplicate remote asset metadata")
         assets[name] = identifier
     return assets
+
+
+def list_releases(call: Gh, repository: str) -> list[dict[str, Any]]:
+    pages = json.loads(call(["api", "--paginate", "--slurp", f"repos/{repository}/releases"]))
+    return [release for page in pages for release in page]
+
+
+def draft_release_id(release: dict[str, Any], tag: str) -> int:
+    identifier = release.get("id")
+    if isinstance(identifier, bool) or not isinstance(identifier, int) or identifier <= 0:
+        raise ValueError("Release metadata is missing a valid release identifier")
+    if release.get("tag_name") != tag:
+        raise ValueError("Release metadata tag mismatch")
+    return identifier
+
+
+def fetch_release(call: Gh, repository: str, identifier: int) -> dict[str, Any]:
+    return json.loads(call(["api", f"repos/{repository}/releases/{identifier}"]))
+
+
+def checked_fetch(call: Gh, repository: str, identifier: int, tag: str) -> dict[str, Any]:
+    current = fetch_release(call, repository, identifier)
+    fetched = current.get("id")
+    if isinstance(fetched, bool) or not isinstance(fetched, int) or fetched != identifier:
+        raise ValueError("Release identifier lookup mismatch")
+    if current.get("tag_name") != tag:
+        raise ValueError("Release identifier lookup mismatch")
+    return current
 
 
 def verify_remote(tag: str, assets: tuple[Path, ...], call: Gh) -> None:
@@ -84,9 +111,11 @@ def publish(
         directory, project_root / "buildpython/openrazer_packages/pin.conf"
     )
     # A failed read is not treated as 'absent'. List drafts too, and paginate fully.
-    pages = json.loads(call(["api", "--paginate", "--slurp", f"repos/{repository}/releases"]))
-    releases = [release for page in pages for release in page]
-    matches = [release for release in releases if release["tag_name"] == tag]
+    # GET /releases/tags/{tag} only returns published releases, so drafts resolve
+    # by stable release ID from the listing, then GET /releases/{id}.
+    # GitHub offers no atomic compare-and-swap; rechecks narrow the public race.
+    releases = list_releases(call, repository)
+    matches = [release for release in releases if release.get("tag_name") == tag]
     if len(matches) > 1:
         raise ValueError("Ambiguous release metadata")
     prerelease, latest = promotion(
@@ -98,18 +127,17 @@ def publish(
         ],
     )
     existing = matches[0] if matches else None
-    if existing is not None and not existing["draft"]:
+    if existing is not None and existing.get("draft") is False:
         if set(release_assets(existing)) != {path.name for path in assets}:
             raise ValueError("Published release is immutable; use a new tag for divergent assets")
         try:
             verify_remote(tag, assets, call)
         except ValueError as error:
             raise ValueError("Published binaries are immutable; use a new tag") from error
-        if existing["prerelease"] != prerelease:
+        if existing.get("prerelease") != prerelease:
             raise ValueError("Published classification differs; use a new tag")
         return "Identical completed release verified; no changes made"
 
-    endpoint = f"repos/{repository}/releases/tags/{quote(tag, safe='')}"
     if existing is None:
         call(
             [
@@ -124,20 +152,36 @@ def publish(
                 str(notes_file),
             ]
         )
-        existing = json.loads(call(["api", endpoint]))
-    if not existing["draft"]:
+        releases = list_releases(call, repository)
+        matches = [release for release in releases if release.get("tag_name") == tag]
+        if len(matches) > 1:
+            raise ValueError("Ambiguous release metadata")
+        if not matches:
+            raise ValueError("Fresh release lookup failed; refusing asset mutation")
+        existing = matches[0]
+    identifier = draft_release_id(existing, tag)
+    current = checked_fetch(call, repository, identifier, tag)
+    if current.get("draft") is not True:
         raise ValueError("Refusing to reconcile a release that is no longer a draft")
     # Draft reruns discard ALL stale/partial assets, not just matching basenames.
-    for identifier in release_assets(existing).values():
-        current = json.loads(call(["api", endpoint]))
-        if not current["draft"]:
+    for asset_id in release_assets(current).values():
+        fresh = checked_fetch(call, repository, identifier, tag)
+        if fresh.get("draft") is not True:
             raise ValueError("Release became public; refusing asset mutation")
-        call(["api", "--method", "DELETE", f"repos/{repository}/releases/assets/{identifier}"])
+        call(["api", "--method", "DELETE", f"repos/{repository}/releases/assets/{asset_id}"])
+    pre_upload = checked_fetch(call, repository, identifier, tag)
+    if pre_upload.get("draft") is not True:
+        raise ValueError("Release became public; refusing asset mutation")
     call(["release", "upload", tag, *[str(path) for path in assets]])
-    current = json.loads(call(["api", endpoint]))
-    if not current["draft"] or set(release_assets(current)) != {path.name for path in assets}:
+    current = checked_fetch(call, repository, identifier, tag)
+    if current.get("draft") is not True or set(release_assets(current)) != {
+        path.name for path in assets
+    }:
         raise ValueError("Uploaded release must remain a draft with exactly the complete asset set")
     verify_remote(tag, assets, call)
+    final = checked_fetch(call, repository, identifier, tag)
+    if final.get("draft") is not True:
+        raise ValueError("Release became public; refusing asset mutation")
     call(
         [
             "release",

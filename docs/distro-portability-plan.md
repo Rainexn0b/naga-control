@@ -56,6 +56,15 @@ current publication status.
   device nodes were touched. Missing private bus is the precise blocker; actual
   tag installer smoke runs parent post-pub, otherwise report blocker. No full
   pass or new hardware claim.
+- Tag run (2026-10-10 UTC, `9789f54`, run `38054026464`): controlled build, static
+  gate (208 objects, errors empty), 22.04 baseline, 24.04 userspace, staging, and
+  upload PASS; publisher FAILED on draft tag lookup. Empty draft `408962506` for
+  `v0.5.0` stays draft with no assets and no published binaries; tag endpoint 404s
+  per API contract while ID lookup works. User-approved recovery is retag of ONLY
+  the unpublished tag after the ID fix and green CI, then rerun all CI via the tag;
+  feature payload stays frozen. See
+  [GitHub releases](https://github.com/Rainexn0b/naga-control/releases) for status;
+  v0.4 remains latest public.
 - HISTORICAL before freeze (source `7e59003`, validation-only `38044500744`
   https://github.com/Rainexn0b/naga-control/actions/runs/38044500744): controlled
   Ubuntu 22.04 / glibc 2.35 / x86_64 plus CPython 3.12.15 build passed, finished-artifact
