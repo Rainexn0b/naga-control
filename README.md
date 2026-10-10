@@ -42,8 +42,12 @@ installs only the fixed `Naga-Control-x86_64.AppImage` plus its `.sha256`
 sidecar. The dispatcher accepts `--ref <git-ref>`; the app installer accepts
 `--version <tag>`, `--install-openrazer`, and `--restart-service`.
 
-For a reproducible install, pin both the bootstrap and the artifact to a
-published tag: `bash install.sh --ref <tag> --version <tag>`. From a
+For a reproducible install, first download the outer bootstrap from the same
+published tag, then pin both the bootstrap and the artifact: `curl -fsSL
+https://raw.githubusercontent.com/Rainexn0b/naga-control/<tag>/install.sh -o
+install.sh && bash install.sh --ref <tag> --version <tag>`. Running only
+`bash install.sh --ref <tag> --version <tag>` on a file downloaded from `main`
+is not a pinned bootstrap. From a
 checkout, run `./install.sh` (same latest-published default).
 
 Notes:
@@ -124,7 +128,13 @@ check, and installing the library alone does not guarantee `/dev/fuse` works.
 The approved portable build target is Ubuntu 22.04 (glibc 2.35) on x86_64,
 but that is a build target, not evidence about the published release artifact:
 its library floor remains UNVERIFIED, and this table makes no Ubuntu 22.04
-support claim for it.
+support claim for it. The published latest release stays v0.4.0. Prior
+pre-canonical snapshots observed a real finished-artifact static audit (208
+objects, no missing providers) plus Ubuntu 22.04 baseline userspace checks on
+the same controlled build; the new v0.5.0 canonical tree still awaits its full
+source CI plus real static, 22.04, and 24.04 validation, so no install,
+desktop, sudo, udev, service, or hardware claim is made here. Staging and
+upload remain unreached and the last gate remains the 24.04 smoke step.
 
 The installer verifies the exact release's canonical `.sha256` sidecar and
 AppImage bytes before execution, replacement, service stop, or sudo, using
@@ -275,12 +285,19 @@ delivery plan is in [implementation plan](docs/implementation-plan.md).
 ## Prerequisites
 
 - Linux with uinput enabled
-- Python 3.12 or newer
-- Qt 6 and PySide6
 - OpenRazer kernel module, daemon, and Python client from a build that supports
   both target product IDs
 - Membership in the group required by the OpenRazer package
 - Read access to the Naga event nodes and write access to `/dev/uinput`
+
+No separate host Python/PySide6 installation is needed for the AppImage itself,
+which bundles its own CPython runtime, PySide6/Qt, and Python dependencies.
+OpenRazer retains its own host Python/daemon/client dependencies: the installed
+OpenRazer Python client with matching host modules and daemon is a required
+system integration. Host Python 3.12 or newer with Qt 6 and PySide6 is a
+source-development and native-build requirement only (a native builder may bundle
+its own CPython 3.14; the portable release toolchain is CPython 3.12.15); the
+kernel module, daemon, and client must come from the same compatible build.
 
 `openrazer.client` is a system integration dependency and is deliberately not
 declared as a PyPI dependency. The OpenRazer kernel module, daemon, and client

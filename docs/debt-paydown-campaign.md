@@ -9,7 +9,7 @@ scores look better. This campaign does not add product features or replace the
 [architecture](architecture.md), [implementation plan](implementation-plan.md),
 or [hardware validation](hardware-validation.md) contracts.
 
-Campaign status: **started; DEBT-01/02/11/04/03/05/14/13/15/12/06 complete; DEBT-09 ShellCheck subset complete (whole item blocked on Docker), DEBT-07 in progress (types committed `643d791`; campaign acceptance blocked: active shared build-report ownership prevents full/extended/package gate start; focused 477 plus Ruff/format/Pyright pass; no completion claimed); DEBT-08/10 queued**.
+Campaign status: **started; all unblocked items complete (DEBT-01/02/11/04/03/05/14/13/15/12/06/07/08/10); DEBT-09 ShellCheck subset complete (whole item blocked on Docker); DEBT-09 Docker remains blocked**.
 Baseline commit: `4baf4e8` (`Build: consolidate AppImage packaging and validation`).
 Baseline date: 2026-10-05.
 
@@ -56,10 +56,15 @@ Its run ID was `7a15fa98-2a0b-4233-a74c-91632ec85a04`.
 | TODO/FIXME/HACK | 0 markers | Absence of markers is not absence of debt |
 | Structural candidates | 0 delegation, middle-man, or unreferenced-file candidates | No cleanup queue justified by these scanners currently |
 
-Debt budgets in `buildpython/config/debt_baselines.json` are unset. Therefore,
+At the campaign baseline, debt budgets in `buildpython/config/debt_baselines.json` were unset. Therefore,
 "no regressions" does not establish a ratchet against these starting counts.
 Penalty-based health scores, including saturated 0% scores, are not a calibrated
 measure of application correctness or a campaign target.
+
+Note dated 2026-10-10: the paragraph above records the pre-DEBT-10 baseline
+state. The adopted DEBT-10 budgets in the DEBT-10 progress record below
+supersede that empty state for current runs. Historical rows stay unchanged;
+this note does not rewrite history.
 
 Generated evidence lives under `buildlog/naga-control/`: `debt-index.md`,
 `build-summary.md`, `coverage-summary.md`, `code-hygiene.md`,
@@ -104,10 +109,10 @@ a reason and an explicit decision, not a skipped check disguised as completion.
 | DEBT-04 | P1 | OpenRazer backend failure/recovery coverage | complete | Verified 2026-10-05; backend 92.68%, capabilities 100% |
 | DEBT-05 | P2 | IPC, service CLI, and uinput boundary coverage | complete | Verified 2026-10-06; all four target files exceed 85% |
 | DEBT-06 | P2 | Source and test file headroom | complete | Verified 2026-10-07; closure decision below; 3 reviewed retained exceptions plus 1 concurrent externally owned file |
-| DEBT-07 | P3 | Concrete Qt event/future annotations | in progress (campaign acceptance blocked) | Types committed `643d791`; active shared build-report ownership prevents full/extended/package gate start; focused 477 plus Ruff/format/Pyright pass; dated 2026-10-08 external uninstaller lint/type failure records retained below; no completion or new measurements claimed |
-| DEBT-08 | P3 | Structure and dead-code disposition | queued | DEBT-02 scanner review; DEBT-06 |
-| DEBT-09 | P1 | Docker and ShellCheck verification gaps | blocked (ShellCheck subset complete; Docker pending) | ShellCheck now available and passing; Docker still unavailable per DEBT-15 package check and 2026-10-06 packaging check |
-| DEBT-10 | P2 | Reviewed, reproducible debt ratchets | queued | DEBT-02 through DEBT-08 reviewed |
+| DEBT-07 | P3 | Concrete Qt event/future annotations | complete | Verified 2026-10-10; types `643d791`; extended run `3433dc91-8a35-4b08-a900-ee4889da0be1` ALL 17 pass (3559 tests); scoped 6-type acceptance plus std/extended/host-build checks; DEBT-09 Docker still blocked |
+| DEBT-08 | P3 | Structure and dead-code disposition | complete | Verified 2026-10-10; review record below; KEEP all 9 Vulture / 6 critical imports / 9 flat dirs; no deletion |
+| DEBT-09 | P1 | Docker and ShellCheck verification gaps | blocked (ShellCheck subset complete; Docker pending) | ShellCheck now available and passing; Docker still unavailable per latest 2026-10-10 packaging run `54726ec2-30fc-46ad-a7a5-2f835b51d5df` missing Docker exit 2; whole item remains BLOCKED with ShellCheck subset complete |
+| DEBT-10 | P2 | Reviewed, reproducible debt ratchets | complete | Verified 2026-10-10; DEBT-02 through DEBT-08 reviewed; completion record below |
 | DEBT-11 | P1 | Interrupted lifecycle startup ownership | complete | Verified 2026-10-05; delivery record below |
 | DEBT-12 | P2 | Presenter error-propagation characterization | complete | DEBT-02 identified missing direct failure tests; verified 2026-10-06; delivery record below |
 | DEBT-13 | P2 | Capture error-text privacy review | complete | Verified 2026-10-06; CLI/stdout/JSON error payloads excluded with both metadata modes |
@@ -264,8 +269,10 @@ acceptable merely to establish a green gate.
   diagnostic/structure categories; preserve the existing hard architecture/LOC gates.
 - Demonstrate that a synthetic regression fails and legitimate boundary handling
   remains allowed. Avoid absolute paths and machine-specific budgets.
-- Acceptance: selected budgets and rationale are documented, default/relevant
-  profiles enforce them as intended, and baseline-exceeding fixtures fail.
+- Acceptance: selected budgets and rationale are documented, relevant explicit
+  invocations enforce the adopted gates (static-debt profile for Hygiene;
+  explicit fresh Pytest then Coverage for Coverage), standard pytest checks
+  the budget contract, and baseline-exceeding fixtures fail.
 - A changing coverage denominator or scanner definition requires an explicit
   baseline update, never a silent reset of campaign history.
 
@@ -392,6 +399,8 @@ with its blocker or approval. Do not mark implementation complete on intent.
 | 2026-10-07 | DEBT-06 cohort5 uncommitted work on `bb32ac9` (historical baseline `4baf4e8`); run `f6601f24-1814-4e25-8407-b785f56f3ee4` | 17 passed, 0 failed, 0 skipped; 2,218 tests passed | 94.29%; 6,213 / 6,589 statements, 92 files | 0 / 7 | Exception-transparency/debt-index tooling splits verified; whole DEBT-06 not complete |
 | 2026-10-07 | DEBT-06 cohort6 uncommitted work on `bb32ac9` (historical baseline `4baf4e8`); run `f0e5ccb8-bd76-4232-ae00-f1bda1f02e7c` | 17 passed, 0 failed, 0 skipped; 2,469 tests passed | 94.29%; 6,213 / 6,589 statements, 92 files | 0 / 5 | Architecture rule-loading/call-findings tooling splits verified; whole DEBT-06 not complete |
 | 2026-10-07 | DEBT-06 cohort7 uncommitted work on `bb32ac9` (historical baseline `4baf4e8`); run `682d0254-4e2a-4101-b98a-fad1ec89792a` | 17 passed, 0 failed, 0 skipped; 2,562 tests passed | 94.31%; 6,227 / 6,603 statements, 94 files | 0 / 4 | GUI ownership splits verified; whole DEBT-06 not complete |
+| 2026-10-10 | HEAD `1daa514`; extended run `3433dc91-8a35-4b08-a900-ee4889da0be1` | 17 passed, 0 failed, 0 skipped; 3,559 tests passed | 94.37%; 6,553 / 6,944 statements, 98 files | 0 / 14 | DEBT-07 types complete; standard/extended/host-build gates recorded; DEBT-09 Docker still blocked |
+| 2026-10-10 | HEAD `81dfa9b`; extended run `5edb5956-260f-4104-88d7-cd8fa9a4df22` | 17 passed, 0 failed, 0 skipped, 0 not run; 3,586 tests passed | 94.37%; 6,555 / 6,946 statements, 98 files | 0 / 14 | DEBT-10 ratchets complete; all 8 per-file floors plus silent 0 PASS with no regressions; DEBT-09 Docker still blocked |
 
 Preserve the starting row and append measurements rather than overwriting it.
 
@@ -1576,6 +1585,210 @@ QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q tests/test_source_limits.py tests/
 - Docs-worker checks: ASCII, local link targets, header/queue consistency,
   and `git diff --check` only (EXIT 0); no product workloads run here.
 
+### DEBT-07 Standard-Restored Checkpoint (docs-only, 2026-10-10)
+
+- Status: DEBT-07 IN PROGRESS, STANDARD RESTORED, PENDING EXTENDED/PACKAGE. No completion claimed; no new coverage/ratchet measurements. DEBT-06 complete unchanged; DEBT-08/10 queued unchanged; DEBT-09 ShellCheck subset complete with Docker blocked unchanged. Prior lock-block cause is cleared; current pending validation only.
+- Scope: this fresh docs-only executor changed ONLY `docs/debt-paydown-campaign.md`. No product/test/code changes this turn. Old campaign source-limit fixes are committed before current HEAD, not current dirty; they are not claimed as new here.
+- Tree: HEAD `1daa514` (concurrent external key-coverage commit; window initial `7e59003`). Current dirty/new paths preserved without attribution or edits: `README.md`, `buildpython/steps/appimage/smoke.py`, `tests/test_installer_bootstrap.py`, new `tests/test_appimage_smoke_identity.py`. Global count growth since `7e59003` is concurrent churn during check runs, not ours; full concurrent diff is not duplicated here.
+- Types: committed `643d791` stands. Six baseline `Any` remain concrete (`Future[object]`, `QCloseEvent`, 2 hover, mouse-press, resize; worker `CoroFactory` contract). Read-only source check found no remaining baseline `Any` replacements.
+- Supervisor focused gate (advisory, not an executor run): `QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q tests/test_gui_log_failure.py tests/test_gui_worker.py tests/test_gui_app.py tests/test_gui_mapping_map.py tests/test_gui_update_shutdown.py tests/test_gui_version_panel.py` gave 51 passed, 8 warnings, 4.81s, exit 0.
+- Supervisor default gates: initial `.venv/bin/python -m buildpython` (300s timeout) run `e9d74bf7-15f8-4597-9349-5dae154151fc` UTC 2026-10-10T10:32:41.796Z incomplete (Compile/Ruff/Format/Pyright passed, Pytest unfinished; no final FAIL/PASS, remaining gates not run; parent end confirmed no lock tamper). Retried default in own background (900s timeout) run `e9c75223-7d77-4c12-bad1-99e7b5313f22` UTC 2026-10-10T10:38:13.397Z PASS ALL 9: 3549 tests, 2 optional coverage skips, 8 warnings, 299.3s total (pytest 291.1s). Architecture: 3 rules, 85 files, 0 errors, 0 warnings; 0 files above 400; largest `tests/test_appimage_artifact_extraction.py` 400 (external file; zero hard-limit headroom); LOC reported 14 monitor findings, a separate count from the 350-400 File Size watchlist, which has not yet been measured in this run. Tools: temporary Coverage 7.16.2, Vulture 2.16, `/usr/bin/shellcheck`; docker was not found on PATH; no daemon operation attempted; no installer/tool changes.
+- Pending: supervisor is now RUNNING the exact extended 17-step campaign command with `PYTHONPATH=/tmp/opencode/naga-build-analysis-tools`; its report root is owned by that background command, so partial new reports were not read and no new coverage is claimed here. No final extended measurement row until finished. AppImage/host package build not done this turn (package pending; Docker known blocked, separate). No root, GUI/service run, bus/device/sysfs/raw-HID, package install, network, Git mutation/stage/release, credentials, or pins in this wave.
+- Next: async extended output may let a same-scope correction complete 07 evidence once passing; no new worker/code authorized here. Then DEBT-08/10 after 07 acceptance.
+- Docs-worker checks: ASCII, local link targets, header/queue consistency, and `git diff --check` only; no Python product workloads run here.
+
+### DEBT-07 Completion Record (docs-only, 2026-10-10)
+
+- Status: DEBT-07 COMPLETE on 2026-10-10 by parent decision (scoped 6-type acceptance plus standard/extended/host-build checks). DEBT-06 stays complete; DEBT-08 next (queued); DEBT-10 queued; DEBT-09 remains BLOCKED (ShellCheck subset complete; Docker pending). This is not a release-system completion and does not claim temporary dependencies installed globally. Historical blocked records above remain UNCHANGED.
+- Scope: this docs-only turn changed ONLY `docs/debt-paydown-campaign.md` via manual patch. No product/test/code edits. HEAD `1daa514` (concurrent external key-coverage commit; window initial `7e59003`) is reserved/unowned concurrent state. External dirty/new paths preserved without attribution or edits: `README.md`, `buildpython/steps/appimage/smoke.py`, `tests/test_installer_bootstrap.py`, new `tests/test_appimage_smoke_identity.py`. The current docs-modified path is only ours this turn.
+- Types: six baseline `Any` corrected under `643d791` (strict Pyright pass; focused 51 passed recorded prior). Remaining legitimate worker `Coro` `Any` yield/send unaffected; no ignores weakened. Standard 9-pass/3549-test restore was recorded prior and stands.
+- Extended (supervisor-run, fresh): run `3433dc91-8a35-4b08-a900-ee4889da0be1` UTC 2026-10-10T10:43:24.634Z ALL 17 PASS, 0 failed, 0 skipped; 3559 tests, 8 warnings, 315.1s. Prior default 9 PASS had 3549 tests plus 2 optional skips; the +10 EXT-vs-DEFAULT delta includes the 2 optional tests plus concurrent external new cases, not ours; no global delta is attributed to this campaign turn.
+- Fresh measurements (extended capture): product 94.37% (6,553 / 6,944 statements, 98 files) versus cohort7 94.31% (6,227 / 6,603, 94 files); the denominator changed with product source growth. New tests affect covered statements, not the product denominator. Files above 400: 0. File Size watchlist (350-400): 14. Imports: 30 warning / 6 critical; flat directories 9 with 188 direct test files. Hygiene 49 = 12 logged + 37 fallback with ZERO silent. Broad 97 / BaseException 23 / local-unlogged 55. Traceback 3; valid annotations 0. Vulture 9, ALL test-only / 0 actionable, including `conftest.py:63` hook-arg new candidate. Structural 0 delegation/middle-man/unreferenced-file candidates.
+- Packaging (supervisor-run, required): `.venv/bin/python -m buildpython --run-steps "AppImage,AppImage Smoke" --continue-on-error` built PASS `dist/Naga-Control-0.5.0-x86_64.AppImage` in 60.5s; Docker smoke FAILED exit 2 ("Docker is required for AppImage smoke checks"), run `54726ec2-30fc-46ad-a7a5-2f835b51d5df` UTC 2026-10-10T10:49:31.611Z, status FAIL 1 pass / 1 fail (not a passing release profile). DEBT-09 stays BLOCKED on Docker; this is not 07 acceptance debt and no Docker pass is claimed.
+- Host smoke (supervisor actual, exit 0, all 4 commands, env `XDG_CACHE_HOME=/tmp/opencode TMPDIR=/tmp/opencode QT_QPA_PLATFORM=offscreen`): first image `--appimage-extract-and-run python -c` imported dbus/dbus_next/evdev/pyudev/tomli_w/packaging/numpy, `QApplication/QCloseEvent/QResizeEvent/QGraphicsSceneHoverEvent/MouseEvent`, `from naga_control.gui import app,main_window,mapping_map,worker`, version `naga-control==0.5.0`, `app.MainWindow is main_window.MainWindow`, `main_window.__file__` inside `APPDIR`, offscreen `QApplication([])` with no real GUI, stdout `packaged-types-imports-and-qt-offscreen-ok`; then same-env `service --help`, `capture --help`, `integration --help` all printed usage with NO hardware ownership/manager/bus/root/live-service/install. Image was built from uncommitted workspace with external dirty `smoke.py` but source commit `1daa514`; not installed, not a release. Host smoke does not substitute for container pass.
+- Next: DEBT-08 dispositions/matrix belong to a next fresh worker; DEBT-09 Docker stays blocked; DEBT-10 stays queued behind 08. No Git staging/commit/branch changes in this turn (no time/user authorization claimed or used).
+- Docs-worker checks: ASCII, local link paths, header/queue/status consistency, and `git diff --check` only; no tests/build runs here.
+
+### DEBT-08 Delivery Record (docs-only, 2026-10-10)
+
+- Status: DEBT-08 COMPLETE on 2026-10-10 by disposition review. DEBT-07 stays COMPLETE; DEBT-09 remains BLOCKED (ShellCheck subset complete; Docker pending, unchanged); DEBT-10 next (QUEUED, not started here). This keeps a single next item without claiming DEBT-10 work. Historical blocked/complete records above remain UNCHANGED.
+- Scope: this docs-only turn changed ONLY `docs/debt-paydown-campaign.md` via manual patch. No product, test, tooling, or other-docs edits. HEAD `1daa514` (concurrent external key-coverage commit) is reserved concurrent state. External dirty/new paths preserved without attribution or edits: `README.md`, `buildpython/steps/appimage/smoke.py`, `tests/test_installer_bootstrap.py`, new `tests/test_appimage_smoke_identity.py`. No Git staging, commit, push, branch, restore, reset, clean, stash, or history edit. No credentials, installs, root, live GUI/service, device nodes, hardware, network, deployment, model pins, or delegation.
+- Dates: started and completed 2026-10-10. Delivery is uncommitted tracker text only; no autocommits.
+- Reused evidence (no new measurements): this record reuses the single fresh extended capture already recorded for DEBT-07, run `3433dc91-8a35-4b08-a900-ee4889da0be1` UTC 2026-10-10T10:43:24.634Z, ALL 17 PASS, 0 failed, 0 skipped, 3559 tests, 8 warnings, product 94.37% (6,553 / 6,944 statements, 98 files). No rerun was needed for DOCSONLY disposition work, so no duplicate snapshot measurement row is added; the fresh row above stands. Packaging reuse: build PASS `dist/Naga-Control-0.5.0-x86_64.AppImage` plus host import/identity/offscreen-Qt/service/capture/integration help PASS; Docker smoke exit 2 missing Docker, run `54726ec2-30fc-46ad-a7a5-2f835b51d5df`, is separate DEBT-09 BLOCKED evidence, not a passing release profile. No code changes in this turn, so no new coverage/debt/ratchet numbers are claimed.
+- Candidate sources read: completed snapshot `buildlog/naga-control/file-size-analysis.md` and `buildlog/naga-control/dead-code-vulture.md` (not overwritten by the later packaging-only run) plus the actual candidate source files listed below. Fresh matrix reused verbatim: File Size 14 at 350-400 with 0 over 400-limit; Imports 30 warning plus 6 critical; Flat dirs 9; Vulture 9 ALL test-only with 0 actionable; Delegation 0, Middle-man 0, Unreferenced-file 0; waivers/budgets 0. Acceptance for this item is dispositions-can-close DOCSONLY with no scanner cosmetic cleanup.
+- Vulture disposition: KEEP all 9, no deletion, no product unused-symbol deletion. Test `.py` line numbers below are dated refs to the fresh snapshot; later edits may shift them. Specific safety per group (not a generic policy claim from `0 actionable`):
+  - Hook-arg contract (1): `tests/conftest.py:63` `unused variable 'exitstatus'` in `def pytest_sessionfinish(session: object, exitstatus: object)`. KEEP. The name is the pytest hook contract and the body performs the Qt session drain (`current_app`, `cleanup_all_top_levels`) while `QApplication` is still valid. Renaming blindly to silence the scanner risks breaking hook recognition; not every unused-looking test arg is safe to rename.
+  - Fail-fast async-generator sentinel (1): `tests/test_capture_cli_behavior.py:69` `unreachable code after 'raise'` (`raise AssertionError("CLI capture must use the injected frame reader")` followed by `yield`). KEEP. The trailing `yield` is what makes `async_read_loop` an async generator matching the `AsyncIterator` fixture contract; the raise proves CLI capture cannot bypass the injected frame reader. Deleting the yield changes the coroutine interface. This entry belongs ONLY in this yields group; it is not a duplicate second-raise.
+  - Unsatisfiable-`if` async-iterator shape (2): `tests/test_evdev_source_adapter.py:89` and `tests/test_first_slice_session.py:181`, each `if False: yield ...`. KEEP. Each preserves the `AsyncIterator` shape of a stub `async_read_loop` without emitting events. Removing the branch turns the stub into a plain coroutine and breaks the source/session type contract.
+  - Duplicate second-raise redundancy (5): `tests/gui_buttons_fakes.py:36`, `tests/gui_support.py:37`, `tests/test_gui_app.py:60`, `tests/test_gui_dpi_page.py:44`, `tests/test_gui_presenter.py:108`, each an extra `raise NotImplementedError` after a Null-calls method that already raises. KEEP. Proven redundancy only; removal is optional but chosen KEEP to avoid churn. No facade or fake-framework consolidation is introduced to move this redundancy elsewhere.
+- Critical import disposition: KEEP all 6 individually with owner reasons verified in source; no barrel import, facade, or cosmetic split. Line/length refs below are the fresh snapshot import-block lengths:
+  - `src/naga_control/gui/lighting_page.py:36` (36 lines, 14 statements). KEEP. Lighting Qt widgets plus domain zone contracts: `QComboBox`/`QDialog`/`QFormLayout`/`QHBoxLayout`/`QLineEdit`/`QPushButton`/`QSpinBox`, `QColor`/`QIcon`/`QPixmap`, domain `LightingEffect`/`LightingSettings`/`LightingZone`/`Profile`, plus `color_wheel`, `editors.set_lighting`, `models`, `presenter`, `settings_page`, `settings_view` zone/effect helpers, and `worker.Runner`. Each import is used by the three-zone page; shortening by facade would hide the zone contract.
+  - `src/naga_control/gui/profiles_page.py:33` (33 lines, 13 statements). KEEP. Profile draft/widget contracts: Qt `Qt`/`Signal` plus combo/form/box/label/message/button/layout widgets, `parse_toml`, domain errors/profiles, `editors` duplicate/remove/rename/plate helpers, `models`/`presenter` outcome contract, `profile_controls.activation_gate`, `profile_mode_view` help/labels, `profile_plate_drafts.PlateDrafts`, and `worker.Runner`. At 400 physical lines this file has zero headroom; future growth requires owner extraction, not import churn.
+  - `tests/hardware/test_ui06_guided.py:32` (32 lines, 30 statements). KEEP. Physical-procedure explicit imports retained under the static gate; this opt-in file is never run by default and no hardware was run here. The long list (asyncio/logging/os/subprocess/sys, dataclass/importlib/pathlib/time/typing, pytest, config/storage, evdev discovery/source, OpenRazer backend/lifecycle, uinput keyboard/mouse/proxy/readiness, remapping/service-factory, domain actions/hardware/intents/profiles, device-action executor/hardware worker) is the documented interactive procedure surface.
+  - `src/naga_control/gui/buttons_page.py:32` (32 lines, 16 statements). KEEP. Binding/domain/recording/page contracts: Qt `Qt`/`Signal` plus box/label/button/scroll/splitter/layout widgets, `parse_toml`, domain `Action`/`KeyAction`/`KeyComboAction` and errors/profiles, `actions_view` control/action helpers, `buttons_rows` row builder, `editors.set_bindings`, `mapping_map`/`mapping_zones`, `models`/`presenter`, and `worker.Runner`. Regrowth to 358 lines since the DEBT-06 split is external chord/button work, not new churn from this wave.
+  - `src/naga_control/config/toml.py:32` (32 lines, 7 statements). KEEP. Serialization/validation domain shape: `tomllib`, `collections.abc.Mapping`, `typing.Literal`/`cast`, domain actions/errors/hardware/profiles field lists. The width comes from explicit domain shape imports, not navigation bloat.
+  - `tests/test_capture_error_privacy.py:30` (30 lines, 14 statements). KEEP. Fakes/privacy assertions: argparse/asyncio/builtins/json/sys, `AsyncIterator`/`Callable`, dataclass `dataclass`/`replace`, `Path`, `cast`, pytest, `test_capture_cli_behavior` boundary fakes plus `boundary` fixture, `capture_cli`, and `capture` result/frame/metadata records. The length is the DEBT-13 privacy contract surface.
+- Warning import remainder: 30 WARNING paths recorded grouped, not removed. Groups are existing tool AST/report/testing-fakes plus GUI/ports-contract navigation signals, not facade candidates. Exact paths (length/statements from the fresh snapshot; dated refs):
+  - GUI/product navigation: `src/naga_control/gui/main_window.py` 28/17, `src/naga_control/gui/version_panel.py` 27/11, `src/naga_control/adapters/openrazer/backend.py` 27/9, `src/naga_control/domain/__init__.py` 24/5, `src/naga_control/application/remapping.py` 23/18, `src/naga_control/gui/tray_icon.py` 22/14, `src/naga_control/diagnostics/capture_cli.py` 22/12, `src/naga_control/gui/editors.py` 21/6.
+  - Test fakes and boundary coverage: `tests/test_gui_editors.py` 27/9, `tests/test_service_session_lifecycle.py` 24/17, `tests/test_source_cleanup_failures.py` 24/17, `tests/hardware/test_ui06_sleep.py` 24/14, `tests/test_buildpython_analysis.py` 23/20, `tests/test_session_ownership.py` 23/12, `tests/test_buildpython_quality_exceptions.py` 23/9, `tests/test_appimage_portable_build.py` 23/4, `tests/test_source_frame_consumer.py` 22/11, `tests/hardware/test_first_slice.py` 21/19, `tests/hardware/test_mode_handoff.py` 21/19, `tests/test_diagnostic_capture.py` 21/6, `tests/test_gui_releases.py` 20/11, `tests/test_appimage_artifact_extraction.py` 20/10, `tests/test_release_assets.py` 20/9, `tests/test_installer_upgrade.py` 20/7.
+  - Tooling AST/report/runner: `buildpython/steps/file_size_analysis/report_content/json_payload.py` 23/4, `buildpython/steps/appimage/artifact.py` 21/19, `buildpython/steps/_architecture_validation_load.py` 21/7, `buildpython/core/runner.py` 20/18, `buildpython/steps/appimage/build.py` 20/11, `buildpython/steps/appimage/elf.py` 20/11.
+  - This is not a claim that all warnings are test-only; the 6 critical entries above include 3 product GUI plus 1 product config plus 2 test/hardware paths.
+- Flat-directory disposition: KEEP nearest owners, no directory churn. Exact fresh list with direct-file/subdir counts from the snapshot report plus per-dir reason (subdirs noted where the report counts them):
+  - `tests` 188/2. KEEP. Flat `tests/test_*.py` placement is the existing convention; the count grew with campaign boundary tests. No new layout is invented.
+  - `src/naga_control/gui` 34/1. KEEP. Existing PySide6 owner; feature widgets stay under `gui/` (not a parallel `ui/` tree).
+  - `src/naga_control/service` 16/0. KEEP. Background runtime/state-authority owner; serialized workers stay together.
+  - `buildpython/steps/appimage` 14/0. KEEP. Packaging owner; assembly/payload/smoke helpers stay together.
+  - `buildpython/steps/code_hygiene` 9/0. KEEP. Hygiene-scanner owner; detectors/models stay together.
+  - `buildpython/steps/exception_transparency` 8/0. KEEP. Transparency-scanner owner from the DEBT-06 cohort5 split; handler-identity/diagnostic-signals stay together.
+  - `buildpython/steps/coverage_step` 8/1. KEEP. Coverage owner; models/payload/runner stay together.
+  - `buildpython/steps` 24/6. KEEP. Step registry owner; the 6 subdirs are the step packages counted above, not duplication.
+  - `buildpython/steps/file_size_analysis` 8/3. KEEP. File-size owner; scanning/reporting/constants stay together.
+- File-size watchlist: 14 at 350-400, 0 over the 400 hard limit. Exact fresh list: `src/naga_control/gui/profiles_page.py` 400, `tests/test_appimage_artifact_extraction.py` 400, `tests/hardware/test_ui06_guided.py` 397, `tests/test_appimage_artifact_dependencies.py` 395, `buildpython/steps/appimage/artifact.py` 387, `src/naga_control/adapters/openrazer/backend.py` 382, `tests/test_appimage_runtime_payload.py` 378, `buildpython/steps/appimage/payload.py` 377, `src/naga_control/service/runtime.py` 377, `tests/test_gui_tray_profiles.py` 365, `tests/appimage_artifact_fakes.py` 364, `tests/test_gui_profiles_page.py` 364, `src/naga_control/gui/buttons_page.py` 358, `tests/test_release_preparation.py` 354. The 2 at 400 have zero hard-limit headroom; future growth in those files requires owner extraction first. DEBT-06 COMPLETE retentions are preserved and dated: `service/runtime.py` 377 (23 below max), `adapters/openrazer/backend.py` 382 (18 below max), `tests/hardware/test_ui06_guided.py` 397 (3 below max, deferred interactive gate, do not run/edit), plus concurrent external `tests/test_release_preparation.py` 354. Growth since then is from EXTERNAL committed GUI/packaging work and regrowth in chord/buttons, not new churn from this wave. No claim is made that all files are under 350; no waiver, exclusion, budget, or 400-limit loosening is introduced.
+- Acceptance: every Vulture candidate has a KEEP disposition with source-verified rationale; every critical import block has an individual owner rationale; all 30 warning paths are exactly listed by group; all 9 flat dirs are exactly listed with per-dir reasons; the 14 watchlist paths are exactly listed with headroom rule. No scanner cosmetic cleanup, facade, fake-framework, barrel import, directory churn, waiver, or budget change was made.
+- Docs-worker checks: ASCII-only, local Markdown link targets, header/queue/status consistency, shared-tree `git status --short`, and `git diff --check` only (EXIT 0). No Python workloads, checks, hardware, GUI/service runs, network, installs, deployments, Git mutations, credentials, model pins, or delegation in this docs wave.
+- Limitations: test line numbers are dated snapshot refs; future edits may shift them without changing dispositions. `git diff --check` proves whitespace only, not Markdown correctness; link/header/status checks are manual. Reused extended/package/host evidence is parent-run and advisory here; this wave adds no independent test/build proof. Unexplained counts: none; the +10 EXT-vs-DEFAULT test delta and coverage-denominator growth are already attributed to concurrent external cases plus optional-coverage availability in the DEBT-07 record, not to this wave.
+- Next: DEBT-10 reviewed ratchets as a separate bounded wave after this completion; DEBT-09 Docker stays blocked. No DEBT-10 start is claimed here.
+
+### DEBT-10 Progress Record (in progress, pending acceptance, 2026-10-10)
+
+- Status: DEBT-10 COMPLETE on 2026-10-10 by parent acceptance of actual default
+  plus explicit extended enforcement, synthetic failures, and independent
+  review. All unblocked campaign items are complete; DEBT-09 stays BLOCKED
+  (ShellCheck subset complete; Docker pending, separate). Phase and
+  supervisor-check notes below stay dated history; the completion record
+  carries final evidence.
+- Phase note 2026-10-10: standard default run `93117422-8398-43f7-b4fc-9e595124eeaa`
+  UTC 2026-10-10T11:19:14.840Z ALL 9 PASS, 3584 tests, 2 optional coverage
+  SKIPs, 8 warnings, 312.7s (supervisor-run). Extended campaign still RUNNING
+  parent-owned; DEBT-10 stays IN PROGRESS pending extended.
+- Scope: this same-scope correction worker (first round) changes ONLY
+  `docs/debt-paydown-campaign.md` via manual patch. No product, scanner,
+  profile, or other-docs edits here. Substantive DOC boundary only; fresh
+  worker with no forwarded wrapper. HEAD `81dfa9b` (external mapping-artwork
+  commit); initial `1daa514` (external key-coverage commit) is source outside
+  the campaign and is preserved without attribution or edits. No commit, stage, push,
+  branch, restore, reset, clean, stash, or history edit. No credentials,
+  installs, root, live GUI/service, device nodes, hardware runs, package
+  install/deploy, network, deployment, model pins, paid calls, or delegation.
+- Owned implementation state (two DISJOINT executors, already landed, not by
+  this docs wave): `buildpython/config/debt_baselines.json` (27 lines),
+  `tests/test_buildpython_analysis.py` (186 lines, updated contract test),
+  new `tests/test_debt_hygiene_ratchet.py` (209 lines),
+  new `tests/test_debt_coverage_ratchet.py` (348 lines), plus 07/08 docs in
+  this tracker. Root code, scanners, and profiles are unchanged. EXTERNAL
+  dirty/new paths preserved untouched without attribution:
+  `buildpython/steps/appimage/smoke.py` and new
+  `tests/test_appimage_smoke_identity.py`.
+- Adopted budgets in `buildpython/config/debt_baselines.json`:
+  hygiene `counts {"silent_broad_except": 0}`,
+  `gated_categories ["silent_broad_except"]` ONLY, `path_budgets {}`.
+  Coverage `minimum_total_percent null`, `tracked_prefixes {}`,
+  `minimum_watch_file_percent 0`, `watch_files []`, with exactly eight
+  per-file floors under full `src/naga_control/` paths. See the
+  [Exception Boundary Inventory](debt-exception-inventory.md) for retained
+  propagation/fallback/cleanup dispositions.
+- Per-file floors adopted (floor is a minimum, not a freeze):
+
+  | Path | Pre-adoption measured (fresh run `3433dc91-8a35-4b08-a900-ee4889da0be1` UTC 2026-10-10T10:43:24.634Z) | Adopted floor | Slack rationale |
+  | --- | --- | --- | --- |
+  | `src/naga_control/adapters/openrazer/lifecycle_monitor.py` | 156/161 96.8944099% | 95 | small refactor headroom, not raw freeze |
+  | `src/naga_control/adapters/openrazer/backend.py` | 190/205 92.6829268% | 90 | deliberate lower floor allows coherent extraction growth |
+  | `src/naga_control/adapters/openrazer/capabilities.py` | 98/98 100% | 95 | headroom for new optional getters |
+  | `src/naga_control/diagnostics/capture_cli.py` | 122/123 99.1869919% | 95 | headroom for CLI/error-text growth |
+  | `src/naga_control/diagnostics/capture_sources.py` | 51/52 98.0769231% | 95 | headroom for source-ownership growth |
+  | `src/naga_control/ipc/server.py` | 28/28 100% | 95 | headroom for IPC/factory growth |
+  | `src/naga_control/service/service_cli.py` | 116/119 97.4789916% | 95 | headroom for startup/cleanup growth |
+  | `src/naga_control/adapters/uinput/mouse.py` | 83/83 100% | 95 | headroom for output-boundary growth |
+
+- Floor interpretation: the 95/90 floors sit a few points below the measured
+  values to allow coherent refactor growth versus a raw freeze. Critical
+  assertions still require behavior tests; floors do not prove all
+  branch/safety behavior. Keyboard is EXCLUDED because of actively external
+  key-coverage work. No global 94.37 total floor is adopted because the
+  denominator drifts with product growth; the prior 07 snapshot 94.37% from
+  run `3433dc91-8a35-4b08-a900-ee4889da0be1` is referenced as pre-adoption
+  evidence only.
+- Hygiene gate meaning: pre-adoption ZERO silent from the same fresh run
+  (logs 12, fallback 37, both ungated and informational). Exception raw
+  counts from that run stay informational only: broad 97, BaseException 23,
+  unlogged 55. Scanner floors are narrow by design with stated limits
+  (alias/tuple/local-AST heuristics, no global no-silent claim); report-gate
+  coverage-optional behavior is out of acceptance where tools are missing.
+- Profile enforcement (explicit): the relevant static-debt profile includes
+  Code Hygiene; Coverage is enforced by explicit ordered Pytest + Coverage
+  selection (fresh capture followed by evaluation), or by the full 17-step
+  campaign. Coverage alone fails without fresh capture. Default full/CI profiles are UNCHANGED
+  and include NO Code Hygiene or Coverage step. Do NOT describe the new
+  ratchets as enforced by default. The standard pytest suite enforces the
+  exact adopted contract through the configured floor tests.
+- Regression tests: 24 scoped behavior cases, 10 hygiene plus 14 coverage.
+  Hygiene asserts actual runner EXIT 1 for a gated silent pass, and EXIT 0
+  for cleanup/rethrow BaseException plus ordinary cleanup and for
+  logged/fallback allowed cases. Coverage asserts payload missing and
+  payload below-floor regressions through runner calls with EXIT 1 even with
+  an excellent total, missing-capture runner EXIT 1, and at/above-floor
+  runner EXIT 0; pure payload tests assert report rows and regressions
+  without EXIT unless a runner call is made, plus loader filtering/defaults
+  and profile selection. Raw-percent handling is statement precision only; the existing 2-decimal
+  payload precision is unchanged (the integer-rounding test documents that
+  concern without changing precision). Missing coverage capture fails EXIT 1;
+  missing tools produce an explicit SKIP, which is unverified and excluded
+  from acceptance. Budget-scanner schema is unchanged; test fixtures and tmp
+  paths use confined tmp roots with no real reports, subprocess, or hardware
+  and no product modification; no exclusion or waiver. Scoped
+  test-only `reportPrivateUsage=false` follows the existing test pattern and
+  is not a product ignore. New-test arithmetic is +24 behavior cases plus 2
+  physical-file limit params if measured; concurrent external counts are not
+  attributed here.
+- Review correction (already parent-reviewed): the FIRST wave-B draft mocked
+  only `coverage_step.buildlog_dir` while runtime cleanup still used the real
+  reports directory, which deleted real `coverage-summary.json/md/csv`. The
+  worker corrected in same scope by pairing both
+  `coverage_step.buildlog_dir` plus `coverage_runtime.buildlog_dir` to a
+  private `tmp_path/reports` fixture, adding actual stale-dummy cleanup plus
+  an outside-sentinel guard regression and a below-floor runner EXIT 1 case.
+  The parent correction added 2 path assertions using `Path.is_relative_to`
+  (assertion corrections, not 2 new cases) in test-only scope with no product
+  cleanup change. Prior fresh
+  `3433` metric evidence was captured by the parent BEFORE the deletion, and
+  coverage-raw counts remain pre-adoption data. NO current fresh capture from
+  the deleted summary is claimed here; the upcoming full extended remeasure
+  stands. The parent independent read-only audit is NOW completed with no
+  blocking findings; it verified test-cleanup autouse paired controls with
+  source unchanged, and the coverage 2-decimal limitation persists. The older
+  queued/concurrent audit note is outdated because docs work is already in
+  progress.
+- Supervisor checks (advisory, supervisor-run, not executor runs):
+  focused `.venv/bin/pytest -q tests/test_debt_hygiene_ratchet.py tests/test_debt_coverage_ratchet.py tests/test_buildpython_analysis.py tests/test_buildpython_quality_exceptions.py tests/test_buildpython_exception_transparency.py tests/test_buildpython_safety.py tests/test_debt_index.py`
+  gave 176 PASSED plus 2 optional coverage SKIPs in 0.90 seconds, exit 0.
+  `.venv/bin/ruff check .` PASS with All checks passed;
+  `.venv/bin/ruff format --check .` PASS over 429 files;
+  `.venv/bin/pyright` PASS with 0 errors/warnings/infos;
+  `git diff --check` PASS. Collect-only on the 2 new modules gave 24
+  collected (10 plus 14), exit 0. Supervisor standard
+  `.venv/bin/python -m buildpython` is RUNNING in background with a 900s
+  timeout and parent-owned report root; NO standard final status, new run ID,
+  report, or coverage counts for DEBT-10 are claimed yet. The extended
+  17-step run with temp Coverage/Vulture still runs AFTER the default pass.
+  No new build is required for these config/test-only changes; hardware was
+  NOT RUN. Gate-coverage-optional cases that SKIP for missing tools must be
+  excluded from acceptance because they are unverified, not passing gates.
+- Docs-worker checks: ASCII, local Markdown link targets, header/queue
+  consistency, shared-tree status, and `git diff --check` only. No Python
+  workloads, tests, builds, hardware, installs, paid calls, or physics here.
+
+### DEBT-10 Completion Record (2026-10-10)
+
+- Status: DEBT-10 COMPLETE on 2026-10-10 by parent acceptance of actual default plus explicit extended enforcement, synthetic failures, and independent review. All unblocked items complete; DEBT-09 Docker remains blocked. No release, install, or hardware claim.
+- Default (supervisor-run): run `93117422-8398-43f7-b4fc-9e595124eeaa` UTC 2026-10-10T11:19:14.840Z PASS 9/9, 3584 tests, 2 optional coverage SKIPs, 8 warnings, 312.7s.
+- Extended (supervisor-run, already recorded exact 17-step invocation with `PYTHONPATH=/tmp/opencode/naga-build-analysis-tools`): run `5edb5956-260f-4104-88d7-cd8fa9a4df22` UTC 2026-10-10T11:26:21.109Z PASS 17/17, 0 failed/skipped/not run, 3586 tests, 8 warnings, 309.3s. The default 2 SKIPs are default-only; extended had 0 skips.
+- Fresh product coverage 94.37% (6,555 / 6,946 statements, 98 files); coverage-summary eight rows all OK, identical covered/statements to the pre-adoption table, NO regressions. Hygiene silent 0 vs threshold 0 (OK); logged 12, fallback 37 INFO; active 49, suppressed 0.
+- Denominator +2 covered/+2 statements vs `3433` pre-adoption is EXTERNAL `mapping_map.py` smooth pixmap hint/transformation methods in concurrent commit `81dfa9b` (parent git-show verified +2 executable lines), NOT ratchet-test coverage. Own scope is exactly 24 behavior cases plus 2 physical-file params; remaining test-count delta is concurrent external tests, unattributed here.
+- Enforcement by reference to the recorded invocation: static-debt profile for Hygiene; explicit ordered Pytest then Coverage for Coverage (not profile debt/default). Synthetic missing/below-floor/missing-capture failures, paired runtime/step fixture, 2 `Path.is_relative_to` assertions, and read-only audit with no blocking findings stand as recorded.
+- Owned paths, all UNSTAGED/uncommitted at HEAD `81dfa9b`: `buildpython/config/debt_baselines.json` (27), `tests/test_buildpython_analysis.py` (186), `tests/test_debt_coverage_ratchet.py` (348), `tests/test_debt_hygiene_ratchet.py` (209), `docs/debt-paydown-campaign.md`. No product/scanner/profile code changes; no commit. EXTERNAL `buildpython/steps/appimage/smoke.py` and new `tests/test_appimage_smoke_identity.py` preserved untouched. No new AppImage build for this config/test-only item (07 packaging recorded at previous HEAD `1daa514`; `81dfa9b` not claimed packaged).
+- FileSize 14 at 350-400 with 0 above 400; imports 30 warn/6 crit; flat 9 with 190 direct tests; Vulture 9 test-only/0 actionable; exception 97/unlogged 55/traceback 3/annotations 0; Arch 3 rules/85 files/0 errors/warnings; ShellCheck PASS. 09 run `54726ec2-30fc-46ad-a7a5-2f835b51d5df` UTC 2026-10-10T10:49:31.611Z still Docker exit 2; no reinstall attempted.
+- Final next queue: ONLY DEBT-09 Docker in a suitable authorized environment; no queued code/ratchet/07/08 work remains. Physical-only checks stay separate opt-in; prior headroom and hardware deferrals stand.
+
 ## Exit Criteria
 
 - The confirmed silent lifecycle-rescan gap is resolved and regression-tested.
@@ -1586,6 +1799,8 @@ QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q tests/test_source_limits.py tests/
 - Changed files have sustainable headroom, with no violation of the 400-line limit
   or loss of input safety, hardware ownership, or architecture boundaries.
 - Any adopted ratchet is justified and tested; raw metric decreases are explained.
-- Standard gates pass. Docker/ShellCheck gaps are verified or remain explicitly
+- Standard gates and the explicit extended campaign checks pass, with
+  optional-tool skips reported as unverified rather than passing gates.
+  Docker/ShellCheck gaps are verified or remain explicitly
   blocked/deferred; unresolved hardware checks are not represented as complete.
 - This document contains final measurements, delivery commits, and the next queue.

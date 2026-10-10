@@ -14,8 +14,8 @@ installing or upgrading.
 
 ## [0.5.0] - 2026-10-08
 
-This release improves installer portability, GUI profile/mode clarity, and
-release-pipeline safety.
+This release improves installer portability, GUI profile/mode clarity,
+button key handling and mapping artwork clarity, and release-pipeline safety.
 
 ### Added
 
@@ -42,13 +42,13 @@ release-pipeline safety.
   manual FUSE2 rows only for Ubuntu 22.04, Ubuntu 24.04, and Arch, and stays a
   diagnostic: it is not installer integration, eligibility, or a support
   certificate, and it never checks prerequisite presence.
-- Controlled portable-build candidate: `buildpython/steps/appimage/` pins an
+- Controlled portable build: `buildpython/steps/appimage/` pins an
   Ubuntu 22.04 (glibc 2.35) x86_64 toolchain with CPython 3.12.15
   (`Dockerfile.portable` plus `portable-build.sh`), alongside a finished static
   audit of the AppImage outer runtime and extracted bundled ELF/provider
-  closure (inspection only, nothing executed). This is a build candidate and
-  static gate only; it does not establish real ABI, distro install, or launch
-  acceptance.
+  closure (inspection only, nothing executed). The static gate runs before any
+  bundled execution or staging and keeps the private parent directory with
+  fail-closed checks; this establishes no new real ABI until CI validates it.
 - Interpreter-free safe uninstaller `scripts/uninstall.sh` needs no AppImage
   and no host Python. It reuses the stable per-user install lock, verifies HOME
   ownership and symlink safety, removes only known installer-owned files,
@@ -80,6 +80,8 @@ release-pipeline safety.
   **Software / driver** and **Onboard / firmware**, separately from scroll mode.
 - The project license changes from MIT to GPL-2.0-only to match OpenRazer,
   which the project uses for all hardware operations.
+- AppImage staging trims unused Qt QML/SQL/WebEngine/tools and known static
+  SDK files in AppDir staging only; sources and the local venv are unchanged.
 - Checkout installer safety: exact-tag AppImage checksum verification before
   execution, replacement, service stop, or sudo; read-only desktop/FUSE/tool
   preflight; stable per-user install lock; private staging with atomic
@@ -92,6 +94,15 @@ release-pipeline safety.
 
 ### Fixed
 
+- Buttons key handling now agrees across recorder, editor, and virtual-keyboard
+  output: Shift+Tab records as `tab`, bracket keys record as `left_brace` and
+  `right_brace`, literal `[`, `]`, `=`, `-` normalize to token names, a complete
+  modifier chord typed under `key` becomes `key_combo` with the selector kept in
+  sync, and rejected input reports the row, value, and accepted syntax.
+  Unemittable tokens are rejected at save and load time instead of failing the
+  remapping session on first press.
+- Buttons mapping artwork downscales with smooth filtering instead of aliased
+  nearest-neighbor sampling.
 - The user service now signals the main process first during graceful shutdown,
   keeping the AppImage's FUSE filesystem alive until Python exits. Previously,
   stopping the whole control group could remove image-backed library pages
@@ -124,8 +135,7 @@ release-pipeline safety.
   AppImage assembly no longer fails with `file command is missing`. The
   finished-artifact static gate leaves the extraction staging child absent for
   the trusted extractor while keeping the private parent directory and
-  fail-closed checks. These are build-pipeline fixes only and establish no
-  real ABI, distro install, or launch acceptance.
+  fail-closed checks.
 
 ### Known Limitations
 
@@ -146,9 +156,8 @@ release-pipeline safety.
 - Manual AppImage extraction remains launch-only; it is not a managed FUSEless
   installation.
 - Representative distro install, launch, upgrade, and uninstall checks are not
-  yet verified; the controlled build candidate and static outer-runtime and
-  bundled ELF/provider-closure audit do not imply real ABI or distro
-  acceptance.
+  yet verified; the controlled build and static outer-runtime and bundled
+  ELF/provider-closure audit do not imply real ABI or distro acceptance.
 
 ## [0.4.0] - 2026-10-05
 

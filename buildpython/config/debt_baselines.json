@@ -1,10 +1,23 @@
 {
-  "code_hygiene": {"counts": {}, "gated_categories": [], "path_budgets": {}},
+  "code_hygiene": {
+    "counts": {"silent_broad_except": 0},
+    "gated_categories": ["silent_broad_except"],
+    "path_budgets": {}
+  },
   "coverage": {
     "minimum_total_percent": null,
     "tracked_prefixes": {},
     "minimum_watch_file_percent": 0,
-    "per_file_minimums": {},
+    "per_file_minimums": {
+      "src/naga_control/adapters/openrazer/lifecycle_monitor.py": 95,
+      "src/naga_control/adapters/openrazer/backend.py": 90,
+      "src/naga_control/adapters/openrazer/capabilities.py": 95,
+      "src/naga_control/diagnostics/capture_cli.py": 95,
+      "src/naga_control/diagnostics/capture_sources.py": 95,
+      "src/naga_control/ipc/server.py": 95,
+      "src/naga_control/service/service_cli.py": 95,
+      "src/naga_control/adapters/uinput/mouse.py": 95
+    },
     "watch_files": []
   },
   "exception_transparency": {"counts": {}, "gated_categories": []},

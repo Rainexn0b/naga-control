@@ -23,9 +23,10 @@ def smoke_script(artifact: str, version: str) -> str:
             "libxcb-render-util0 libxcb-render0 libxcb-shape0 libxcb-util1 libxcb-xkb1 "
             "libxkbcommon-x11-0 libgtk-3-0t64 libcups2t64 >/dev/null",
             "useradd --create-home --uid 10001 naga-smoke",
-            f"cp {shlex.quote('/dist/' + artifact)} /work/naga.AppImage",
-            "chmod +x /work/naga.AppImage",
-            "./naga.AppImage --appimage-extract >/dev/null",
+            "install -d -m 0700 -o naga-smoke -g naga-smoke /home/naga-smoke/work",
+            f"install -m 0700 -o naga-smoke -g naga-smoke {shlex.quote('/dist/' + artifact)} /home/naga-smoke/work/naga.AppImage",
+            "cd /home/naga-smoke/work",
+            "runuser -u naga-smoke -- ./naga.AppImage --appimage-extract >/dev/null",
             'export APPDIR="$PWD/squashfs-root"',
             "export QT_QPA_PLATFORM=offscreen",
             'APP=(runuser -u naga-smoke -- "$APPDIR/AppRun")',

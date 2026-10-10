@@ -14,17 +14,59 @@ The release body is the matching
 `## [0.5.0]` section in [changelog.md](../changelog.md),
 extracted by `scripts/prepare_release.py`. This overview is not the release
 body, and the checkout installer notes below are not retroactive to already
-published tags. v0.5.0 is currently untagged/unpublished work pending final
-validation; latest published stays v0.4.0. On committed `7661eb4`,
-validation-only run `38040471477`
+published tags. v0.5.0 is currently untagged/unpublished; latest published
+stays v0.4.0, whose artifact library floor remains UNVERIFIED. By user decision
+the current codebase state is the new v0.5.0 canonical snapshot and further
+development pauses until the image is published; this supersedes the earlier
+choice that excluded keyboard, chord, README, and future work.
+
+Last completed CI before the canonical freeze is on source `7e59003`: source
+run `38044500620` SUCCESS; validation-only run `38044500744`
+(https://github.com/Rainexn0b/naga-control/actions/runs/38044500744) passed the
+controlled Ubuntu 22.04 build plus the finished-artifact static gate (208
+native objects audited, providers checked, no missing-provider errors) and the
+22.04 baseline userspace checks (bundled runtime imports, offscreen
+QApplication, CLI help, temporary integration payload), then FAILED at the
+Ubuntu 24.04 smoke step after apt and pull succeeded. The confirmed diagnostic
+is `runuser: failed to execute /work/squashfs-root/AppRun: Permission denied`:
+root extraction under a private owned directory denies uid 10001. The delivered
+smoke-identity fix stages an owned 0700 private work directory and image, then
+the same uid extracts and runs all AppRun checks; it is not a root app run and
+does not recursively widen permissions. That fix is UNRUN in CI, so no new
+24.04 pass is claimed. Staging and upload were unreached and publication was
+skipped by dispatch design.
+
+Earlier on source `8bf093c`: source run `38043242149` SUCCESS; validation-only
+run `38043242656`
+(https://github.com/Rainexn0b/naga-control/actions/runs/38043242656) also
+observed the first real static pass plus 22.04 baseline pass. Its 24.04 step
+failed without a recorded detail; the later `7e59003` diagnostic rerun exposed
+the cause as the same permission-denied AppRun execution failure. The first
+passed artifact on `8bf093c` is `Naga-Control-0.5.0-x86_64.AppImage`, 123202040
+bytes, squashFS offset 944632, sha256
+`6a7d9b9743e261750add63ebd0f16fc97160c9bcf93ce25511cf9577e7a264e1`; real report
+`/tmp/opencode/naga-portability/desktop-artifact-gate.json` with raw
+`desktop-appimage.raw.log`. The `7e59003` finished-artifact gate is
+`/tmp/opencode/naga-portability/smoke-diagnostic-artifact-gate.json`: PASS, 208
+checked, errors[], providers true, artifact 123202040 bytes, squashFS offset
+944632, sha256 `7dfb3462f1c110eee4a0ba6c4782c99a648ebbb22236938c22a5598e5f1a35c4`.
+The two prior static passes and 22.04 successes
+were on a pre-canonical snapshot and do not certify the new canonical
+key/chord/artwork payload, which still awaits its full source CI plus real
+static, 22.04, and 24.04 validation. This overview claims no full Ubuntu
+install, desktop, sudo, udev, service, or hardware validation, and no support
+certification. The last gate remains the 24.04 smoke step.
+
+### Historical run receipt (labelled history, unchanged)
+
+On committed `7661eb4`, validation-only run `38040471477`
 (https://github.com/Rainexn0b/naga-control/actions/runs/38040471477)
 passed AppImage assembly but the static finished-artifact gate FAILED after
 auditing 208 objects with 70 missing normal desktop runtime dependency
 errors; the 22.04 baseline and 24.04 smoke checks, staging, and upload were
 not reached, and publication was skipped by dispatch design. The bounded
 validation-image plus trusted-baseline fix is reviewed and awaits real CI
-validation; publication remains blocked. This overview claims no real ABI, distro
-install, or launch acceptance, and no support certification.
+validation; publication remains blocked.
 
 ### Changes in 0.5.0
 
@@ -48,15 +90,25 @@ install, or launch acceptance, and no support certification.
   activation. Ordinary installs stay app-only; the experimental OpenRazer path
   stays a separate exact-pin Arch-only opt-in cohort at
   `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` (`3.12.1.pr2904.fix2-1`).
-- Portability candidate: controlled Ubuntu 22.04 / glibc 2.35 / x86_64 plus
-  CPython 3.12 build candidate with a finished static audit of the AppImage
-  outer runtime and extracted bundled ELF/provider closure (inspection only,
-  nothing executed). No real ABI, distro install, launch, or support
-  certification is claimed; on `7661eb4` assembly passed but the static gate
-  audited 208 objects with 70 missing normal desktop runtime prerequisite
-  errors (minimal-image Wayland/XCB, xkb, GTK3, CUPS, plus trusted-baseline
-  libresolv handling), smokes/staging/upload unreached, and the bounded fix
-  awaits a real CI rerun; representative-environment checks are pending.
+- Portability target and staging: strict gate floor stays Ubuntu 22.04 /
+  glibc 2.35 on x86_64 with CPython 3.12.15 and unpinned PySide6 `>=6.8,<7`;
+  no ABI floor raise, pin change, or gate skip is claimed. AppImage staging
+  trims unused Qt QML/SQL/WebEngine/tools and known static SDK files in AppDir
+  staging only (589 native objects and 269670904 bytes in the earlier untrimmed
+  real run against 208 objects and 123202040 bytes in the trimmed real run);
+  the new canonical payload object count is unknown until its own real build.
+  The stable gate keeps the singular GNU `contains 1 entry` parse fix, trusts
+  libm and libresolv baseline entries as PRIVATE only while bundled payload
+  entries still reject, and treats safe `$ORIGIN` separators as-is.
+- Button key handling (canonical): recorder maps Shift+Tab to `tab` and bracket
+  keys to `left_brace`/`right_brace` with modifiers preserved; the editor
+  normalizes literal `[`, `]`, `=`, `-` to token names, infers `key_combo` when
+  a complete modifier chord is completed under `key`, keeps the action selector
+  in sync, and reports the offending row, value, and accepted syntax; the
+  domain owns the single output vocabulary and rejects unemittable tokens at
+  save and load time; the virtual keyboard emits the same tokens.
+- Buttons mapping artwork (canonical): the 1448px preview downscales with
+  smooth pixmap filtering instead of aliased nearest-neighbor sampling.
 - Runtime robustness: teardown retains ownership and joins through cancellation
   and close failures, held-output cleanup attempts each release independently,
   provisional input/capture and OpenRazer/D-Bus acquisitions roll back, the
@@ -74,7 +126,15 @@ install, or launch acceptance, and no support certification.
 - Exact-pin natural idle/wake, held-output handoff, and interactive mode-switch
   tests are unverified; wired 6- and 2-button signatures remain uncaptured.
 - Manual extraction is launch-only, not managed FUSEless installation.
-- Representative distro install and launch are not yet verified.
+- Representative Debian, Fedora, Arch, openSUSE, and derivative install,
+  upgrade, and remove paths are unverified despite fake successes and package
+  references; no full Ubuntu install, desktop, sudo, udev, service, or hardware
+  pass is claimed. The read-only `bwrap --unshare-all /usr/bin/true` presence
+  probe (exit 0) is not installer acceptance, and a throwaway HOME alone is
+  unsafe without isolated HOME, user units, bus, sudo, and udev context.
+- The new canonical payload still awaits its full source CI plus real static,
+  22.04, and 24.04 validation; staging and upload remain unreached and the last
+  gate remains the 24.04 smoke step.
 - Safety pins and the exact-pin OpenRazer cohort are unchanged; see the
   matching changelog section for the full prerequisite and limitation list.
 

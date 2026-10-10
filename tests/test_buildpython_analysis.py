@@ -83,15 +83,38 @@ def test_line_limit_cannot_be_waived(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert rows[0]["path"] == "tests/test_large.py"
 
 
-def test_copied_baselines_are_empty_and_heuristics_are_informational() -> None:
-    assert not _load_hygiene_baseline(ROOT).counts
-    assert not _resolved_category_thresholds(ROOT)
+def test_reviewed_debt_ratchets_are_narrow_and_unreviewed_baselines_stay_unset() -> None:
+    hygiene = _load_hygiene_baseline(ROOT)
+    assert hygiene.counts == {"silent_broad_except": 0}
+    assert hygiene.gated_categories == {"silent_broad_except"}
+    assert hygiene.path_budgets == {}
+    assert _resolved_category_thresholds(ROOT) == {"silent_broad_except": 0}
+    coverage = _load_coverage_baseline(ROOT)
+    assert coverage.minimum_total_percent is None
+    assert coverage.tracked_prefixes == {}
+    assert coverage.watch_files == ()
+    assert coverage.minimum_watch_file_percent == 0
+    assert coverage.per_file_minimums == {
+        "src/naga_control/adapters/openrazer/lifecycle_monitor.py": 95,
+        "src/naga_control/adapters/openrazer/backend.py": 90,
+        "src/naga_control/adapters/openrazer/capabilities.py": 95,
+        "src/naga_control/diagnostics/capture_cli.py": 95,
+        "src/naga_control/diagnostics/capture_sources.py": 95,
+        "src/naga_control/ipc/server.py": 95,
+        "src/naga_control/service/service_cli.py": 95,
+        "src/naga_control/adapters/uinput/mouse.py": 95,
+    }
     assert not load_baseline(ROOT).counts
+    assert not load_baseline(ROOT).gated_categories
     assert not load_marker_baseline(ROOT).counts
-    assert _load_coverage_baseline(ROOT).minimum_total_percent is None
+    assert not load_marker_baseline(ROOT).gated_markers
     payload = json.loads((ROOT / "buildpython/config/debt_baselines.json").read_text())
     assert not payload["flat_directories"]["allowed"]
     assert not payload["file_size_analysis"]["counts"]
+    assert payload["coverage"]["minimum_total_percent"] is None
+    assert payload["coverage"]["tracked_prefixes"] == {}
+    assert payload["coverage"]["watch_files"] == []
+    assert payload["code_hygiene"]["counts"] == {"silent_broad_except": 0}
 
 
 def test_scanners_visit_all_naga_roots_without_importing(tmp_path: Path) -> None:
