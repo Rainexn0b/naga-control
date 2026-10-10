@@ -19,6 +19,13 @@ from naga_control.domain.profiles import Binding, Bindings, LogicalControlId
 
 ACTION_KINDS = ("passthrough", "disabled", "key", "key_combo", "mouse_button", "device")
 
+_LITERAL_KEY_TOKENS: dict[str, str] = {
+    "[": "left_brace",
+    "]": "right_brace",
+    "=": "equal",
+    "-": "minus",
+}
+
 _CONTROL_LABELS: dict[str, str] = {
     "dpi_up": "DPI up",
     "dpi_down": "DPI down",
@@ -75,7 +82,22 @@ def parse_action(kind: str, detail: str) -> Action:
         return DisabledAction()
     if kind == "key":
         _require(text, "key")
-        return KeyAction(key=text)
+        if "+" in text:
+            tokens = [token.strip() for token in text.split("+")]
+            if len(tokens) >= 2:
+                head = tokens[:-1]
+                last_raw = tokens[-1]
+                last = _LITERAL_KEY_TOKENS.get(last_raw, last_raw)
+                if (
+                    last
+                    and last not in MODIFIER_KEYS
+                    and all(token in MODIFIER_KEYS for token in head)
+                ):
+                    return KeyComboAction(
+                        modifiers=tuple(head),
+                        key=last,
+                    )
+        return KeyAction(key=_LITERAL_KEY_TOKENS.get(text, text))
     if kind == "key_combo":
         _require(text, "key combo")
         tokens = [token.strip() for token in text.split("+")]
@@ -86,7 +108,10 @@ def parse_action(kind: str, detail: str) -> Action:
             raise ConfigValidationError(
                 "key_combo", f"unsupported modifier tokens: {', '.join(unknown)}"
             )
-        return KeyComboAction(modifiers=tuple(tokens[:-1]), key=tokens[-1])
+        return KeyComboAction(
+            modifiers=tuple(tokens[:-1]),
+            key=_LITERAL_KEY_TOKENS.get(tokens[-1], tokens[-1]),
+        )
     if kind == "mouse_button":
         if text not in MOUSE_BUTTONS:
             raise ConfigValidationError(

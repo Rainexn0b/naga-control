@@ -105,3 +105,107 @@ def test_altgr_shortcut_does_not_invent_left_control(qapp: QApplication) -> None
     _key(qapp, recorder, QEvent.Type.KeyPress, Qt.Key.Key_T, modifiers)
 
     assert recorded == [("key_combo", "right_alt+t")]
+
+
+def test_plain_tab_records_tab_key(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Tab,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+    assert recorded == [("key", "tab")]
+
+
+def test_shift_tab_records_shift_tab_combo(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Backtab,
+        Qt.KeyboardModifier.ShiftModifier,
+    )
+
+    assert recorded == [("key_combo", "left_shift+tab")]
+
+
+def test_ctrl_shift_tab_records_ctrl_shift_tab_combo(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    modifiers = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
+    _key(qapp, recorder, QEvent.Type.KeyPress, Qt.Key.Key_Backtab, modifiers)
+
+    assert recorded == [("key_combo", "left_ctrl+left_shift+tab")]
+
+
+def test_plain_left_bracket_records_left_brace(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_BracketLeft,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+    assert recorded == [("key", "left_brace")]
+
+
+def test_plain_right_bracket_records_right_brace(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_BracketRight,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+    assert recorded == [("key", "right_brace")]
+
+
+def test_ctrl_right_bracket_records_ctrl_right_brace_combo(
+    qapp: QApplication,
+) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_BracketRight,
+        Qt.KeyboardModifier.ControlModifier,
+    )
+
+    assert recorded == [("key_combo", "left_ctrl+right_brace")]
+
+
+def test_shift_left_brace_records_shift_left_brace_combo(
+    qapp: QApplication,
+) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_BraceLeft,
+        Qt.KeyboardModifier.ShiftModifier,
+    )
+
+    assert recorded == [("key_combo", "left_shift+left_brace")]

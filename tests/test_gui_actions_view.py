@@ -20,7 +20,7 @@ from naga_control.gui.actions_view import (
 def test_kind_and_detail_round_trip_every_action_shape() -> None:
     actions = [
         DisabledAction(),
-        KeyAction(key="f13"),
+        KeyAction(key="f12"),
         KeyComboAction(modifiers=("left_ctrl", "left_shift"), key="t"),
         MouseButtonAction(button="back"),
         DeviceAction(action="dpi_stage_up"),
@@ -59,3 +59,59 @@ def test_controls_for_layout_lists_common_then_plate() -> None:
     assert len(controls) == 7 + 6
     assert "side_6_6" in controls
     assert "side_12_1" not in controls
+
+
+def test_parse_action_normalizes_bracket_literals() -> None:
+    assert parse_action("key", "[") == KeyAction(key="left_brace")
+    assert parse_action("key", "]") == KeyAction(key="right_brace")
+    assert parse_action("key_combo", "left_ctrl+]") == KeyComboAction(
+        modifiers=("left_ctrl",), key="right_brace"
+    )
+
+
+def test_parse_action_rejects_unsupported_literal() -> None:
+    with pytest.raises(ConfigValidationError):
+        parse_action("key", "$")
+
+
+def test_parse_key_normalizes_equal_and_minus_literals() -> None:
+    assert parse_action("key", "=") == KeyAction(key="equal")
+    assert parse_action("key", "-") == KeyAction(key="minus")
+    assert action_kind(parse_action("key", "=")) == "key"
+
+
+def test_parse_key_infers_complete_modifier_chord() -> None:
+    assert parse_action("key", "left_ctrl+left_shift+8") == KeyComboAction(
+        modifiers=("left_ctrl", "left_shift"), key="8"
+    )
+    assert parse_action("key", "left_ctrl+left_shift+tab") == KeyComboAction(
+        modifiers=("left_ctrl", "left_shift"), key="tab"
+    )
+    assert parse_action("key", "left_ctrl+t") == KeyComboAction(modifiers=("left_ctrl",), key="t")
+
+
+def test_parse_key_infers_literal_final_token() -> None:
+    assert parse_action("key", "left_ctrl+=") == KeyComboAction(
+        modifiers=("left_ctrl",), key="equal"
+    )
+    assert parse_action("key", "left_ctrl+-") == KeyComboAction(
+        modifiers=("left_ctrl",), key="minus"
+    )
+    assert parse_action("key", "left_ctrl+]") == KeyComboAction(
+        modifiers=("left_ctrl",), key="right_brace"
+    )
+
+
+def test_parse_key_does_not_infer_incomplete_or_invalid_chord() -> None:
+    for detail in (
+        "left_ctrl+left_shift",
+        "left_ctrl+",
+        "left_ctrl+ ",
+        "not_a_modifier+t",
+        "left_ctrl+$",
+    ):
+        with pytest.raises(ConfigValidationError):
+            parse_action("key", detail)
+    # A bare modifier pair must not silently become a combo.
+    with pytest.raises(ConfigValidationError):
+        parse_action("key", "left_ctrl+left_shift")

@@ -6,6 +6,7 @@ import pytest
 
 from naga_control.adapters.uinput import keyboard
 from naga_control.adapters.uinput.keyboard import VirtualKeyboard
+from naga_control.domain.actions import OUTPUT_KEY_TOKENS
 from naga_control.domain.intents import KeyOutputIntent
 
 
@@ -56,6 +57,32 @@ def test_f12_binding_uses_linux_f12_code() -> None:
         (1, 88, 1),
         "syn",
         (1, 88, 0),
+        "syn",
+    ]
+
+
+def test_brace_bindings_use_linux_brace_codes() -> None:
+    assert "left_brace" in keyboard.KEY_TOKENS
+    assert "right_brace" in keyboard.KEY_TOKENS
+    codes = keyboard.resolve_key_codes(import_module("evdev.ecodes"))
+    assert codes["left_brace"] == 26
+    assert codes["right_brace"] == 27
+    device = FakeUInput()
+    output = VirtualKeyboard(device, event_type=1, key_codes=codes)
+
+    output.emit(KeyOutputIntent("left_brace", 1))
+    output.emit(KeyOutputIntent("left_brace", 0))
+    output.emit(KeyOutputIntent("right_brace", 1))
+    output.emit(KeyOutputIntent("right_brace", 0))
+
+    assert device.events == [
+        (1, 26, 1),
+        "syn",
+        (1, 26, 0),
+        "syn",
+        (1, 27, 1),
+        "syn",
+        (1, 27, 0),
         "syn",
     ]
 
@@ -144,12 +171,17 @@ def test_key_tokens_cover_default_bindings_and_modifiers() -> None:
     assert {"left_alt", "left_ctrl", "left_super"} <= set(keyboard.KEY_TOKENS)
 
 
+def test_key_tokens_match_the_domain_vocabulary_without_drift() -> None:
+    assert set(keyboard.KEY_TOKENS) == OUTPUT_KEY_TOKENS
+    assert len(keyboard.KEY_TOKENS) == len(set(keyboard.KEY_TOKENS)) == 75
+
+
 def test_resolve_key_codes_fails_closed_for_a_missing_ecode() -> None:
     class EmptyEcodes:
         EV_KEY = 1
         BUS_VIRTUAL = 6
 
-    with pytest.raises(RuntimeError, match="KEY_LEFTALT"):
+    with pytest.raises(RuntimeError, match="KEY_0"):
         keyboard.resolve_key_codes(EmptyEcodes())
 
 

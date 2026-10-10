@@ -1,5 +1,6 @@
 """Buttons page: edit control bindings of the active profile and apply them."""
 
+from functools import partial
 from typing import cast
 
 from PySide6.QtCore import Qt, Signal
@@ -14,12 +15,13 @@ from PySide6.QtWidgets import (
 )
 
 from naga_control.config import parse_toml
-from naga_control.domain.actions import Action
+from naga_control.domain.actions import Action, KeyAction, KeyComboAction
 from naga_control.domain.errors import ConfigValidationError
 from naga_control.domain.profiles import Configuration, LogicalControlId
 from naga_control.gui.actions_view import (
     action_for_control,
     action_kind,
+    control_display_name,
     format_action_detail,
     parse_action,
 )
@@ -203,6 +205,9 @@ class ButtonsPage(QWidget):
                 on_detail_changed=self._detail_changed,
                 on_recorded=self._recorded,
             )
+            line_edit = row.detail_edit.lineEdit()
+            if line_edit is not None:
+                line_edit.editingFinished.connect(partial(self._on_detail_finished, row))
             self.rows.append(row)
             self.rows_layout.addWidget(row.root)
         self.mapping_map.set_actions(self._loaded_actions)
@@ -226,6 +231,23 @@ class ButtonsPage(QWidget):
     def _recorded(self, row: ButtonRow, kind: str, detail: str) -> None:
         row.kind_box.setCurrentText(kind)
         row.detail_edit.setCurrentText(detail)
+
+    def _on_detail_finished(self, row: ButtonRow) -> None:
+        if row.selected_kind() != "key":
+            return
+        text = row.selected_detail()
+        try:
+            action = parse_action("key", text)
+        except (ConfigValidationError, KeyError):
+            return
+        if isinstance(action, KeyComboAction):
+            canonical = format_action_detail(action)
+            row.kind_box.setCurrentText("key_combo")
+            row.detail_edit.setCurrentText(canonical)
+        elif isinstance(action, KeyAction):
+            canonical = format_action_detail(action)
+            if canonical != text:
+                row.detail_edit.setCurrentText(canonical)
 
     def _kind_changed(self, row: ButtonRow, text: str) -> None:
         row.record_button.cancel()
@@ -281,6 +303,22 @@ class ButtonsPage(QWidget):
             )
         return replacements
 
+    def _invalid_row(self) -> tuple[str, str, str, Exception] | None:
+        for row in self.rows:
+            kind = row.selected_kind()
+            detail = row.selected_detail()
+            loaded = self._loaded_actions.get(row.control_id)
+            loaded_kind = action_kind(loaded) if loaded is not None else "passthrough"
+            if kind == loaded_kind and (loaded is None or detail == format_action_detail(loaded)):
+                continue
+            if kind == "passthrough":
+                continue
+            try:
+                parse_action(kind, detail)
+            except (ConfigValidationError, KeyError) as exc:
+                return (row.control_id, kind, detail, exc)
+        return None
+
     def _apply(self) -> None:
         document = self.model.configuration_document
         if document is None:
@@ -289,7 +327,18 @@ class ButtonsPage(QWidget):
         try:
             updated = set_bindings(document, self.profile_id, self._replacements())
         except (ConfigValidationError, KeyError) as exc:
-            self.model.set_apply_status(f"rejected: {exc}")
+            invalid = self._invalid_row()
+            if invalid is not None:
+                control, _kind, detail, row_exc = invalid
+                display = control_display_name(control)
+                self.model.set_apply_status(
+                    f"rejected: {display} ({control}): invalid value {detail!r}: "
+                    f"{row_exc} — use lowercase key tokens like 'a', 'equal', "
+                    "or modifiers plus one key like 'left_ctrl+t'"
+                )
+                self.select_control(control)
+            else:
+                self.model.set_apply_status(f"rejected: {exc}")
             return
         self._pending_document = updated
         self.setEnabled(False)

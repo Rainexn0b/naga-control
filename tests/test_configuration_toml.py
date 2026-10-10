@@ -229,6 +229,20 @@ def test_thumb_grid_wave_is_rejected() -> None:
     assert error.value.field_path == "profiles.default.lighting.thumb_grid.effect"
 
 
+def test_unsupported_key_token_reports_the_key_field() -> None:
+    data = to_toml_data(default_configuration())
+    common = cast(
+        dict[str, object], cast(dict[str, object], _profile_data(data)["bindings"])["common"]
+    )
+    common["ring_finger"] = {"type": "key", "key": "f13"}
+
+    with pytest.raises(ConfigValidationError) as error:
+        parse_toml(tomli_w.dumps(data))
+
+    assert error.value.field_path == "profiles.default.bindings.common.ring_finger.key"
+    assert "f13" in error.value.message
+
+
 def test_configuration_copies_mutable_constructor_inputs() -> None:
     configuration = default_configuration()
     profiles = [*configuration.profiles]

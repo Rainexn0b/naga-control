@@ -7,8 +7,13 @@ from PySide6.QtWidgets import QPushButton
 _KEYS: dict[int, str] = {
     Qt.Key.Key_Minus: "minus",
     Qt.Key.Key_Equal: "equal",
+    Qt.Key.Key_BracketLeft: "left_brace",
+    Qt.Key.Key_BraceLeft: "left_brace",
+    Qt.Key.Key_BracketRight: "right_brace",
+    Qt.Key.Key_BraceRight: "right_brace",
     Qt.Key.Key_Space: "space",
     Qt.Key.Key_Tab: "tab",
+    Qt.Key.Key_Backtab: "tab",
     Qt.Key.Key_Backspace: "backspace",
     Qt.Key.Key_Return: "enter",
     Qt.Key.Key_Enter: "enter",

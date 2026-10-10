@@ -97,7 +97,7 @@ def test_set_bindings_replaces_common_and_plate_actions() -> None:
             dict[LogicalControlId, Action],
             {
                 "dpi_up": MouseButtonAction(button="back"),
-                "side_12_1": KeyAction(key="f17"),
+                "side_12_1": KeyAction(key="f12"),
                 "ring_finger": DeviceAction(action="scroll_free_spin"),
             },
         ),
@@ -108,7 +108,7 @@ def test_set_bindings_replaces_common_and_plate_actions() -> None:
     assert profile.bindings.action_for("dpi_up", profile.plate_layout) == MouseButtonAction(
         button="back"
     )
-    assert profile.bindings.action_for("side_12_1", profile.plate_layout) == KeyAction(key="f17")
+    assert profile.bindings.action_for("side_12_1", profile.plate_layout) == KeyAction(key="f12")
     assert profile.bindings.action_for("ring_finger", profile.plate_layout) == DeviceAction(
         action="scroll_free_spin"
     )
@@ -123,7 +123,7 @@ def test_set_bindings_rejects_unknown_controls() -> None:
         set_bindings(
             document,
             profile_id,
-            cast(dict[LogicalControlId, Action], {"side_99_1": KeyAction(key="f13")}),
+            cast(dict[LogicalControlId, Action], {"side_99_1": KeyAction(key="f5")}),
         )
 
 

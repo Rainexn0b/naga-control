@@ -98,10 +98,12 @@ def test_fixed_key_aliases_and_capabilities_use_linux_constants(
         "escape": 1,
         "page_up": 104,
         "page_down": 109,
+        "left_brace": 26,
+        "right_brace": 27,
         "f12": 88,
     }
     assert {token: codes[token] for token in expected} == expected
-    assert len(codes) == len(set(codes.values())) == 73
+    assert len(codes) == len(set(codes.values())) == 75
     output = keyboard.create_virtual_keyboard()
     assert factory.calls[0]["events"] == {1: tuple(sorted(codes.values()))}
     assert factory.calls[0]["bustype"] == 6

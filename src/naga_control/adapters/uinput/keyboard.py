@@ -5,6 +5,7 @@ from contextlib import suppress
 from importlib import import_module
 from typing import Protocol, cast
 
+from naga_control.domain.actions import OUTPUT_KEY_TOKENS
 from naga_control.domain.intents import KeyOutputIntent
 from naga_control.ports.output import KeyboardOutput
 
@@ -28,37 +29,8 @@ class _Ecodes(Protocol):
     BUS_VIRTUAL: int
 
 
-KEY_TOKENS = (
-    "left_alt",
-    "right_alt",
-    "left_ctrl",
-    "right_ctrl",
-    "left_shift",
-    "right_shift",
-    "left_super",
-    "right_super",
-    *(str(digit) for digit in range(1, 10)),
-    "0",
-    "minus",
-    "equal",
-    *(chr(letter) for letter in range(ord("a"), ord("z") + 1)),
-    "space",
-    "tab",
-    "backspace",
-    "enter",
-    "escape",
-    "delete",
-    "insert",
-    "up",
-    "down",
-    "left",
-    "right",
-    "home",
-    "end",
-    "page_up",
-    "page_down",
-    *(f"f{number}" for number in range(1, 13)),
-)
+# The domain owns the output key vocabulary; this adapter only resolves it to codes.
+KEY_TOKENS = tuple(sorted(OUTPUT_KEY_TOKENS))
 
 _ECODES_ALIASES = {
     "left_alt": "KEY_LEFTALT",
@@ -72,6 +44,8 @@ _ECODES_ALIASES = {
     "escape": "KEY_ESC",
     "page_up": "KEY_PAGEUP",
     "page_down": "KEY_PAGEDOWN",
+    "left_brace": "KEY_LEFTBRACE",
+    "right_brace": "KEY_RIGHTBRACE",
 }
 
 

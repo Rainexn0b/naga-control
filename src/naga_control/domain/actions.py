@@ -39,6 +39,33 @@ MODIFIER_KEYS = frozenset(
         "right_super",
     }
 )
+OUTPUT_KEY_TOKENS: frozenset[str] = MODIFIER_KEYS | frozenset(
+    {
+        *(str(digit) for digit in range(1, 10)),
+        "0",
+        "minus",
+        "equal",
+        "left_brace",
+        "right_brace",
+        *(chr(letter) for letter in range(ord("a"), ord("z") + 1)),
+        "space",
+        "tab",
+        "backspace",
+        "enter",
+        "escape",
+        "delete",
+        "insert",
+        "up",
+        "down",
+        "left",
+        "right",
+        "home",
+        "end",
+        "page_up",
+        "page_down",
+        *(f"f{number}" for number in range(1, 13)),
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +79,7 @@ class KeyAction:
     kind: Literal["key"] = field(default="key", init=False)
 
     def __post_init__(self) -> None:
-        _validate_token(self.key, "key")
+        _validate_output_token(self.key, "key")
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +98,7 @@ class KeyComboAction:
             _validate_token(modifier, "modifiers")
             if modifier not in MODIFIER_KEYS:
                 raise ConfigValidationError("modifiers", "must contain only modifier key tokens")
-        _validate_token(self.key, "key")
+        _validate_output_token(self.key, "key")
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,3 +133,9 @@ def _validate_token(value: str, field_path: str) -> None:
         raise ConfigValidationError(field_path, "must use lowercase ASCII key-token syntax")
     if value.startswith(("key_", "btn_")):
         raise ConfigValidationError(field_path, "must not use a Linux KEY_ or BTN_ name")
+
+
+def _validate_output_token(value: str, field_path: str) -> None:
+    _validate_token(value, field_path)
+    if value not in OUTPUT_KEY_TOKENS:
+        raise ConfigValidationError(field_path, f"unsupported key token {value!r}")
