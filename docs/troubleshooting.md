@@ -56,18 +56,29 @@ downloaded and reused local bytes must match before execution, service stop,
 sudo or image replacement. `installed-tag` alone is never trusted. An existing
 previous image/tag must also verify before a rollback pair can be retained.
 
-Missing sidecars on older releases, malformed hashes, empty images and digest
-mismatches are **failures**, not reasons to fall back to an unchecked download.
-Preserve the installed image; use a reviewed release that supplies the canonical
-sidecar, or arrange a separately reviewed manual recovery. Do not bypass the
+For the SELECTED new release, a missing or malformed sidecar, an empty
+image, or a digest mismatch is always a hard failure before any execution,
+service stop, privilege, or replacement, not a reason to fall back to an
+unchecked download. A previous old checksum is not a prerequisite: an old
+mismatch or a missing old sidecar quarantines while the strictly verified
+new image still replaces it. An unverified previous image does not block a verified upgrade: a
+mismatched, empty, or sidecar-missing old image is replaced by the strictly
+verified new image and preserved as a private unverified quarantine, not a
+verified rollback pair; only a previously verified old image keeps a
+`rollback.*` pair. A selected release without its canonical sidecar still
+cannot be installed, but a previous tag without a sidecar can be upgraded
+from. Preserve the installed image on selected-release failures; use a
+reviewed release that supplies the canonical sidecar, or arrange a separately
+reviewed manual recovery. Do not bypass the
 check by running the new installer as root or editing the hash to match.
 GitHub HTTPS hashes detect corruption/mismatch but are not signatures or an
 independent authenticity guarantee.
 
-The README's private-temp one-liner pins the existing published v0.4.0 script,
-its `--ref`, and its `--version`, and leaves stdin available for prompts.
-Checkout changes do not retrofit safety into scripts at older published tags.
-Review the actual tagged script; no unpublished future version is recommended.
+Matching outer bootstrap, `--ref`, and `--version` from the same published
+tag is the only reproducible selection; older tags keep their original
+behavior and checkout `main` fixes are not retroactive to the published
+v0.5.0 tag. Review the actual tagged script; no unpublished future version
+is recommended.
 
 ## Installer upgrades and rollback
 
@@ -111,6 +122,15 @@ OpenRazer package changes require separate operator recovery. User integration
 and wrapper files are restored best effort on failed replacement/activation;
 `RESTORATION FAILED` is a distinct error requiring inspection, not success.
 
+An unverified previous image is preserved as a private
+`~/.local/share/naga-control/quarantine.XXXXXX/` directory containing the
+exact old bytes, tag, and an `UNVERIFIED` marker (never `image.sha256` or a
+restore pair). It is not a verified backup and has no restore command; a
+failed replacement leaves Naga stopped and disabled with new files partial
+where the failure happened, so inspect and repair manually without resuming
+an unverified image. Quarantine survives uninstall for manual cleanup; remove
+it only after the verified replacement is confirmed.
+
 Manual image/tag restore (choose one verified backup, quit the GUI, release
 controls, and do not start Naga after a partial OpenRazer transaction):
 
@@ -132,7 +152,8 @@ Do not run another installer concurrently with manual recovery. Stop and inspect
 any failing step rather than continuing the snippet blindly. If the second move
 fails, finish the image/tag pair while Naga remains stopped. The backup remains
 available; user integration may need a reviewed reinstall. Uninstall removes
-installer pairs/stamp, retains the lock inode and OpenRazer, and preserves profiles
+installer rollback pairs/stamp, retains quarantine for manual cleanup, retains
+the lock inode and OpenRazer, and preserves profiles
 unless `--purge-config` is explicitly requested.
 
 Completion distinguishes running service from staged prerequisites, cancellation

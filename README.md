@@ -50,6 +50,17 @@ install.sh && bash install.sh --ref <tag> --version <tag>`. Running only
 is not a pinned bootstrap. From a
 checkout, run `./install.sh` (same latest-published default).
 
+Upgrades rerun the same command with the existing stop consent. By default
+the current `main` installer replaces a mismatched local image with the
+strictly verified new image: an unverified old image is preserved as a
+private quarantine under `~/.local/share/naga-control/quarantine.*` for
+manual inspection (not a verified rollback and not automatically resumed),
+while a verified old image keeps a `rollback.*` pair. Only a failed
+replacement with an unverified previous image leaves Naga stopped and
+disabled for manual repair; verified rollback and resume behavior is
+unchanged. Quarantine survives uninstall for manual cleanup. See
+[upgrades and recovery](docs/troubleshooting.md#installer-upgrades-and-rollback).
+
 Notes:
 
 - The installer creates `~/.local/bin/naga-control.AppImage` and

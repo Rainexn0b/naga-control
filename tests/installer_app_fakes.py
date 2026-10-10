@@ -70,3 +70,23 @@ def assert_private_cleanup(fake: InstallerHarness) -> None:
     assert not list((fake.root / "temporary").iterdir())
     assert not list((fake.root / "home").rglob(".naga-install.*"))
     assert not list((fake.root / "home").rglob(".rollback.*"))
+    assert not list((fake.root / "home").rglob(".quarantine.*"))
+
+
+def quarantines(fake: InstallerHarness) -> list[Path]:
+    parent = stamp(fake).parent
+    return sorted(parent.glob("quarantine.*")) if parent.is_dir() else []
+
+
+def rollbacks(fake: InstallerHarness) -> list[Path]:
+    parent = stamp(fake).parent
+    return sorted(parent.glob("rollback.*")) if parent.is_dir() else []
+
+
+def seed_altered_previous(
+    fake: InstallerHarness, *, tag: str = PREVIOUS_TAG, active: bool = True
+) -> tuple[bytes, bytes]:
+    old = seed_previous(fake, tag=tag, active=active)
+    altered = old + b"\n# locally rebuilt\n"
+    installed_image(fake).write_bytes(altered)
+    return old, altered

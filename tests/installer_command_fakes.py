@@ -48,11 +48,16 @@ elif name == "curl":
         if filename == "70-naga-control.rules" and state.get("rule_layout"):
             if "/" + state["rule_layout"] + "/udev/" not in url:
                 sys.exit(22)
-        if filename in state["download_fail"] or not fixture.is_file():
-            sys.exit(22)
         if filename == "Naga-Control-x86_64.AppImage.sha256" and ("/" + state.get("previous_tag", "unused") + "/") in url:
+            if state.get("previous_checksum_unavailable"):
+                sys.exit(22)
+            if state.get("previous_checksum_text") is not None:
+                target.write_text(state["previous_checksum_text"])
+                sys.exit(0)
             target.write_text(state["previous_digest"] + "  Naga-Control-x86_64.AppImage\n")
             sys.exit(0)
+        if filename in state["download_fail"] or not fixture.is_file():
+            sys.exit(22)
         shutil.copyfile(fixture, target)
 elif name == "pacman":
     assert args[0] == "-Q", args
@@ -101,6 +106,11 @@ elif name == "systemctl":
         sys.exit(1)
     if args[1] == "stop" or (args[1] == "disable" and "--now" in args):
         state["service_state"] = state.get("stop_state", "inactive")
+        if args[1] == "stop" and state.get("mutate_image_on_stop"):
+            target = root / "home/.local/bin/naga-control.AppImage"
+            if target.is_file():
+                with target.open("ab") as mutated:
+                    mutated.write(b"\n# stop-time mutation\n")
     elif args[1] == "start" or "--now" in args:
         state["service_state"] = "active"
     if args[1] == "enable" and "naga-control.service" in args:

@@ -25,6 +25,12 @@ UNIT_TOUCHED=0
 PREVIOUS_UNIT_STATE=""
 BACKUP=""
 BACKUP_PENDING=""
+OLD_VERIFIED=0
+OLD_DIGEST=""
+OLD_OBSERVED=""
+HAD_PREVIOUS_IMAGE=0
+QUARANTINE=""
+QUARANTINE_PENDING=""
 
 die() { echo "error: $*" >&2; exit 1; }
 log() { echo "==> $*"; }
@@ -177,11 +183,73 @@ restore() {
       || { echo "RESTORATION FAILED: previous Naga service could not resume" >&2; return 1; }
   fi
 }
+publish_quarantine() {
+  local observed=""
+  [ -f "$STAGE/previous/.local/bin/naga-control.AppImage" ] || return 1
+  [ -f "$STAGE/previous/.local/share/naga-control/installed-tag" ] || return 1
+  observed="$(sha256sum "$STAGE/previous/.local/bin/naga-control.AppImage" 2>/dev/null || true)"
+  observed="${observed:0:64}"
+  QUARANTINE_PENDING="$(mktemp -d "$STATE_DIR/.quarantine.XXXXXX")" || return 1
+  cp -p "$STAGE/previous/.local/bin/naga-control.AppImage" "$QUARANTINE_PENDING/naga-control.AppImage" || return 1
+  cp -p "$STAGE/previous/.local/share/naga-control/installed-tag" "$QUARANTINE_PENDING/installed-tag" || return 1
+  {
+    printf 'naga-control-installer-quarantine-v1\n'
+    printf 'UNVERIFIED previous image: not verified against release sidecar; not a rollback pair; manual recovery only\n'
+    if [ -n "$observed" ]; then
+      printf 'observed %s UNVERIFIED\n' "$observed"
+    else
+      printf 'observed unavailable UNVERIFIED\n'
+    fi
+    printf 'tag %s\n' "$INSTALLED_TAG"
+  } > "$QUARANTINE_PENDING/quarantine" || return 1
+  QUARANTINE="$STATE_DIR/quarantine.${QUARANTINE_PENDING##*.}"
+  [ ! -e "$QUARANTINE" ] && [ ! -L "$QUARANTINE" ] || return 1
+  mv -T "$QUARANTINE_PENDING" "$QUARANTINE" || return 1
+  QUARANTINE_PENDING=""
+  log "warning: unverified previous image preserved at $QUARANTINE (not a verified rollback; manual cleanup recommended once verified $VERSION works)"
+}
+handle_unverified_failure() {
+  local failed=0 disable_failed=0
+  log "installation failed: unverified previous image; manual recovery required (no automatic rollback of unverified bytes)"
+  if ! ensure_stopped; then
+    systemctl --user stop naga-control.service 9>&- || failed=1
+    if ! ensure_stopped; then
+      echo "RESTORATION FAILED: Naga did not become inactive; partial files retained; manual recovery required" >&2
+      [ -n "$QUARANTINE" ] && echo "unverified quarantine retained: $QUARANTINE" >&2
+      return 1
+    fi
+  fi
+  systemctl --user disable naga-control.service 9>&- || { failed=1; disable_failed=1; }
+  if [ "$disable_failed" -eq 1 ]; then
+    echo "warning: could not disable Naga service; manual recovery required" >&2
+  fi
+  if [ "$DEPENDENCIES_STARTED" -eq 1 ]; then
+    echo "error: Naga remains stopped; OpenRazer step failed/was interrupted, possible partial package changes; inspect inventory before reboot/re-login" >&2
+  fi
+  if [ -n "$QUARANTINE" ]; then
+    echo "unverified previous image preserved at $QUARANTINE (not a verified rollback); manual recovery required" >&2
+  else
+    echo "unverified previous image; manual recovery required (no verified rollback available)" >&2
+  fi
+  if [ "$disable_failed" -eq 1 ]; then
+    echo "partial state retained; profiles were not changed; Naga left stopped but not disabled; inspect AppImage/tag/integration manually" >&2
+  else
+    echo "partial state retained; profiles were not changed; Naga left stopped and disabled; inspect AppImage/tag/integration manually" >&2
+  fi
+  [ "$failed" -eq 0 ]
+}
 cleanup() {
   local status=$?
   trap - EXIT HUP INT TERM
   if [ "$status" -ne 0 ]; then
-    if [ "$TOUCHED" -eq 1 ] && [ "$COMMITTED" -eq 0 ]; then restore || true
+    if [ "$TOUCHED" -eq 1 ] && [ "$COMMITTED" -eq 0 ]; then
+      if [ "$HAD_PREVIOUS_IMAGE" -eq 1 ] && [ "$OLD_VERIFIED" -eq 0 ]; then
+        handle_unverified_failure || true
+      else
+        restore || true
+      fi
+    elif [ "$HAD_PREVIOUS_IMAGE" -eq 1 ] && [ "$OLD_VERIFIED" -eq 0 ] && { [ -n "$QUARANTINE" ] || [ "$STOPPED" -eq 1 ] || [ "$DEPENDENCIES_STARTED" -eq 1 ]; }; then
+      handle_unverified_failure || true
     elif [ "$STOPPED" -eq 1 ] || [ "$DEPENDENCIES_STARTED" -eq 1 ]; then
       if [ "$DEPENDENCIES_STARTED" -eq 1 ]; then
         if ! ensure_stopped; then
@@ -203,6 +271,7 @@ cleanup() {
   fi
   [ "${#SIBLINGS[@]}" -eq 0 ] || rm -f -- "${SIBLINGS[@]}"
   [ -z "$BACKUP_PENDING" ] || rm -rf -- "$BACKUP_PENDING"
+  [ -z "$QUARANTINE_PENDING" ] || rm -rf -- "$QUARANTINE_PENDING"
   [ -z "$STAGE" ] || rm -rf -- "$STAGE"
   exit "$status"
 }
@@ -247,6 +316,27 @@ verify_image() {
   actual="$(sha256sum "$image")" || die "could not hash AppImage"
   [ "${actual:0:64}" = "$expected" ] || die "AppImage checksum mismatch: $image; no execution or replacement permitted"
 }
+fetch_old_digest() {
+  local tag="$1" destination="$2" row
+  curl -fsSL -o "$destination" "https://github.com/$REPO/releases/download/$tag/$ASSET.sha256" || return 1
+  IFS= read -r row < "$destination" || return 1
+  [[ "$row" =~ ^[0-9a-f]{64}\ \ Naga-Control-x86_64\.AppImage$ ]] || return 1
+  printf '%s\n' "$row" > "$destination.canonical" || return 1
+  cmp -s "$destination" "$destination.canonical" || return 1
+  DIGEST="${row:0:64}"
+}
+probe_image() {
+  local image="$1" expected="$2" actual
+  [ -s "$image" ] || return 1
+  actual="$(sha256sum "$image")" || return 1
+  [ "${actual:0:64}" = "$expected" ]
+}
+observe_image() {
+  local image="$1" actual
+  [ -f "$image" ] || return 1
+  actual="$(sha256sum "$image" 2>/dev/null)" || return 1
+  printf '%s' "${actual:0:64}"
+}
 fetch_digest "$VERSION" "$STAGE/app.sha256"
 NEW_DIGEST="$DIGEST"
 INSTALLED_TAG=""
@@ -256,16 +346,33 @@ if [ -f "$STAMP" ]; then
   cmp -s "$STAMP" "$STAGE/previous-tag.canonical" || die "invalid installed-tag (expected one canonical tag row)"
 fi
 if [ -f "$APPIMAGE_DST" ]; then
+  HAD_PREVIOUS_IMAGE=1
   [[ "$INSTALLED_TAG" =~ ^[a-zA-Z0-9][a-zA-Z0-9._+-]*$ ]] || die "existing image has no valid installed-tag; preserve it and arrange manual recovery"
   if [ "$INSTALLED_TAG" = "$VERSION" ]; then
     OLD_DIGEST="$NEW_DIGEST"
+    if probe_image "$APPIMAGE_DST" "$OLD_DIGEST"; then
+      OLD_VERIFIED=1
+    else
+      OLD_OBSERVED="$(observe_image "$APPIMAGE_DST" || true)"
+      log "warning: existing $INSTALLED_TAG image checksum mismatch (expected $OLD_DIGEST${OLD_OBSERVED:+, observed $OLD_OBSERVED}); replacing with verified $VERSION image; previous bytes preserved as unverified quarantine, not a verified rollback"
+    fi
   else
-    fetch_digest "$INSTALLED_TAG" "$STAGE/previous.sha256"
-    OLD_DIGEST="$DIGEST"
+    if fetch_old_digest "$INSTALLED_TAG" "$STAGE/previous.sha256"; then
+      OLD_DIGEST="$DIGEST"
+      if probe_image "$APPIMAGE_DST" "$OLD_DIGEST"; then
+        OLD_VERIFIED=1
+      else
+        OLD_OBSERVED="$(observe_image "$APPIMAGE_DST" || true)"
+        log "warning: existing $INSTALLED_TAG image checksum mismatch (expected $OLD_DIGEST${OLD_OBSERVED:+, observed $OLD_OBSERVED}); replacing with verified $VERSION image $NEW_DIGEST; previous bytes preserved as unverified quarantine, not a verified rollback"
+      fi
+    else
+      OLD_DIGEST=""
+      OLD_OBSERVED="$(observe_image "$APPIMAGE_DST" || true)"
+      log "warning: previous $INSTALLED_TAG checksum unavailable; cannot verify existing image${OLD_OBSERVED:+ (observed $OLD_OBSERVED)}; replacing with verified $VERSION image $NEW_DIGEST; previous bytes preserved as unverified quarantine, not a verified rollback"
+    fi
   fi
-  verify_image "$APPIMAGE_DST" "$OLD_DIGEST"
 fi
-if [ -f "$APPIMAGE_DST" ] && [ "$INSTALLED_TAG" = "$VERSION" ] && [ -z "${NAGA_CONTROL_FORCE_DOWNLOAD:-}" ]; then
+if [ -f "$APPIMAGE_DST" ] && [ "$INSTALLED_TAG" = "$VERSION" ] && [ "$OLD_VERIFIED" -eq 1 ] && [ -z "${NAGA_CONTROL_FORCE_DOWNLOAD:-}" ]; then
   log "AppImage $VERSION already present; verified local bytes before reuse"
   cp -p "$APPIMAGE_DST" "$STAGE/$ASSET"
 else
@@ -328,6 +435,19 @@ for path in ".local/bin/naga-control.AppImage" ".local/share/naga-control/instal
     cp -p "$HOME/$path" "$STAGE/previous/$path"
   fi
 done
+# The old probe ran before the consented stop; reverify the stopped snapshot
+# before any helper, quarantine, or resume decision. A late change downgrades
+# to unverified quarantine, never a trusted rollback or automatic resume.
+if [ "$HAD_PREVIOUS_IMAGE" -eq 1 ] && [ "$OLD_VERIFIED" -eq 1 ]; then
+  if ! probe_image "$STAGE/previous/.local/bin/naga-control.AppImage" "$OLD_DIGEST"; then
+    OLD_VERIFIED=0
+    OLD_OBSERVED="$(observe_image "$STAGE/previous/.local/bin/naga-control.AppImage" || true)"
+    log "warning: previous image changed after stop (expected $OLD_DIGEST${OLD_OBSERVED:+, observed $OLD_OBSERVED}); treating as unverified quarantine, not a verified rollback"
+  fi
+fi
+if [ "$HAD_PREVIOUS_IMAGE" -eq 1 ] && [ "$OLD_VERIFIED" -eq 0 ]; then
+  publish_quarantine || die "could not preserve unverified previous image; Naga stopped; manual recovery required"
+fi
 if [ "$INSTALL_OPENRAZER" -eq 1 ]; then
   ensure_stopped || die "Naga became active again; quit the GUI before the OpenRazer transaction"
   DEPENDENCIES_STARTED=1
@@ -350,18 +470,24 @@ done
 safe_file "$APPIMAGE_DST"
 safe_file "$STAMP"
 ensure_stopped || die "Naga became active again; quit the GUI before replacing the image"
-if [ -f "$APPIMAGE_DST" ] && { [ "$INSTALLED_TAG" != "$VERSION" ] || [ "$OLD_DIGEST" != "$NEW_DIGEST" ] || [ -n "${NAGA_CONTROL_FORCE_DOWNLOAD:-}" ]; }; then
-  BACKUP_PENDING="$(mktemp -d "$STATE_DIR/.rollback.XXXXXX")"
-  cp -p "$STAGE/previous/.local/bin/naga-control.AppImage" "$BACKUP_PENDING/naga-control.AppImage"
-  cp -p "$STAGE/previous/.local/share/naga-control/installed-tag" "$BACKUP_PENDING/installed-tag"
-  verify_image "$BACKUP_PENDING/naga-control.AppImage" "$OLD_DIGEST"
-  printf '%s  naga-control.AppImage\n' "$OLD_DIGEST" > "$BACKUP_PENDING/image.sha256"
-  printf 'naga-control-installer-backup-v1\n' > "$BACKUP_PENDING/installer-backup"
-  BACKUP="$STATE_DIR/rollback.${BACKUP_PENDING##*.}"
-  [ ! -e "$BACKUP" ] && [ ! -L "$BACKUP" ] || die "rollback destination already exists"
-  mv -T "$BACKUP_PENDING" "$BACKUP" || die "could not publish rollback pair"
-  BACKUP_PENDING=""
-  log "verified rollback pair retained: $BACKUP (not a package/system rollback)"
+if [ -f "$APPIMAGE_DST" ] && { [ "$INSTALLED_TAG" != "$VERSION" ] || [ "$OLD_DIGEST" != "$NEW_DIGEST" ] || [ -n "${NAGA_CONTROL_FORCE_DOWNLOAD:-}" ] || [ "$OLD_VERIFIED" -eq 0 ]; }; then
+  if [ "$OLD_VERIFIED" -eq 1 ]; then
+    BACKUP_PENDING="$(mktemp -d "$STATE_DIR/.rollback.XXXXXX")"
+    cp -p "$STAGE/previous/.local/bin/naga-control.AppImage" "$BACKUP_PENDING/naga-control.AppImage"
+    cp -p "$STAGE/previous/.local/share/naga-control/installed-tag" "$BACKUP_PENDING/installed-tag"
+    verify_image "$BACKUP_PENDING/naga-control.AppImage" "$OLD_DIGEST"
+    printf '%s  naga-control.AppImage\n' "$OLD_DIGEST" > "$BACKUP_PENDING/image.sha256"
+    printf 'naga-control-installer-backup-v1\n' > "$BACKUP_PENDING/installer-backup"
+    BACKUP="$STATE_DIR/rollback.${BACKUP_PENDING##*.}"
+    [ ! -e "$BACKUP" ] && [ ! -L "$BACKUP" ] || die "rollback destination already exists"
+    mv -T "$BACKUP_PENDING" "$BACKUP" || die "could not publish rollback pair"
+    BACKUP_PENDING=""
+    log "verified rollback pair retained: $BACKUP (not a package/system rollback)"
+  elif [ -z "$QUARANTINE" ]; then
+    publish_quarantine || die "could not preserve unverified previous image; manual recovery required"
+  else
+    log "unverified quarantine already retained: $QUARANTINE"
+  fi
 fi
 TOUCHED=1
 atomic_copy "$STAGE/$ASSET" "$APPIMAGE_DST" || die "atomic AppImage replacement failed"

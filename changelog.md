@@ -12,6 +12,16 @@ installing or upgrading.
 
 ## [Unreleased]
 
+### Fixed
+
+- Main bootstrap and checkout installer upgrades now replace an unverified
+  previous image with the strictly verified new image instead of failing
+  the old verification gate, preserving the old bytes as a private
+  unverified quarantine (never a trusted rollback or automatic resume).
+  Only a failed replacement with an unverified previous image leaves Naga
+  stopped and disabled for manual repair; verified rollback and resume
+  behavior is unchanged.
+
 ## [0.5.0] - 2026-10-10
 
 This release improves installer portability, GUI profile/mode clarity,
