@@ -115,23 +115,28 @@ Verified rollback pairs are published as private
 `~/.local/share/naga-control/rollback.XXXXXX/` directories containing
 `naga-control.AppImage`, `installed-tag`, `image.sha256`, and an installer ownership
 marker. Forced same-version
-downloads retain a pair too; unchanged reinstalls leave prior pairs intact.
-Backups persist until manually removed or uninstalled. This is **not full-system
+downloads retain a pair too; unchanged reinstalls keep the newest existing
+pair. After a successful install only the newest verified pair is kept;
+older verified pairs are removed and owned quarantines are cleaned.
+Backups do not persist indefinitely across successful upgrades; failed
+installs preserve all prior snapshots. This is **not full-system
 or package rollback**: profiles are never rewritten/backed up here, and udev/
 OpenRazer package changes require separate operator recovery. User integration
 and wrapper files are restored best effort on failed replacement/activation;
 `RESTORATION FAILED` is a distinct error requiring inspection, not success.
 
-An unverified previous image is preserved as a private
+An unverified previous image is held as a private
 `~/.local/share/naga-control/quarantine.XXXXXX/` directory containing the
 exact old bytes, tag, and an `UNVERIFIED` marker (never `image.sha256` or a
 restore pair). It is not a verified backup and has no restore command; a
 failed replacement leaves Naga stopped and disabled with new files partial
 where the failure happened, so inspect and repair manually without resuming
-an unverified image. Quarantine survives uninstall for manual cleanup; remove
-it only after the verified replacement is confirmed.
+an unverified image. A held quarantine is removed after a successful
+install with other owned quarantines. A failure quarantine survives
+uninstall for manual cleanup; remove it only after a verified replacement
+is confirmed and working.
 
-Manual image/tag restore (choose one verified backup, quit the GUI, release
+Manual image/tag restore (choose the remaining verified backup, quit the GUI, release
 controls, and do not start Naga after a partial OpenRazer transaction):
 
 ```bash
@@ -152,7 +157,8 @@ Do not run another installer concurrently with manual recovery. Stop and inspect
 any failing step rather than continuing the snippet blindly. If the second move
 fails, finish the image/tag pair while Naga remains stopped. The backup remains
 available; user integration may need a reviewed reinstall. Uninstall removes
-installer rollback pairs/stamp, retains quarantine for manual cleanup, retains
+installer rollback pairs/stamp, retains failure quarantines for manual cleanup,
+retains
 the lock inode and OpenRazer, and preserves profiles
 unless `--purge-config` is explicitly requested.
 

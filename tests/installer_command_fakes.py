@@ -128,7 +128,12 @@ elif name == "ldconfig":
     if not state.get("fuse_library_missing"):
         print("libfuse.so.2 (libc6," + state.get("fuse_library_arch", "x86-64") + ") => " + str(root / "libfuse.so.2"))
 elif name == "stat":
-    if args[:2] in (["-Lc", "%d:%i"], ["-Lc", "%a"]):
+    if args[:2] == ["-c", "%Y"]:
+        fail = state.get("stat_Y_fail", "")
+        if fail == "all" or (isinstance(fail, str) and fail and len(args) > 2 and fail in args[2]):
+            sys.exit(1)
+        sys.exit(subprocess.run([os.environ["SAFE_STAT"], *args], check=False).returncode)
+    if args[:2] in (["-Lc", "%d:%i"], ["-Lc", "%a"], ["-c", "%u"]):
         sys.exit(subprocess.run([os.environ["SAFE_STAT"], *args], check=False).returncode)
     else:
         assert args[:2] == ["-c", "%F"], args
@@ -173,7 +178,9 @@ elif name in ("naga-control.AppImage", "Naga-Control-x86_64.AppImage"):
     if args == ["--uninstall"]:
         sys.exit(0)
     assert args[0] == "--install", args
-    assert args[args.index("--exec-prefix") + 1] == str(root / "home/.local/bin/naga-control.AppImage"), args
+    expected_prefix = root / "home/.local/bin/naga-control.AppImage"
+    actual_prefix = Path(args[args.index("--exec-prefix") + 1])
+    assert actual_prefix == expected_prefix or actual_prefix.resolve() == expected_prefix.resolve(), args
     home = Path(args[args.index("--home") + 1])
     assert home.is_relative_to(root / "temporary"), args
     files = [".config/systemd/user/naga-control.service",

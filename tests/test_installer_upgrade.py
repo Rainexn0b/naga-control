@@ -92,6 +92,7 @@ def test_atomic_upgrade_retains_verified_backup_pair_and_old_inode(tmp_path: Pat
     assert (backups[0] / "naga-control.AppImage").read_bytes() == previous
     assert (backups[0] / "installed-tag").read_text() == PREVIOUS_TAG + "\n"
     assert (backups[0] / "image.sha256").is_file()
+    assert "keeping newest verified rollback" in result.stdout
     assert profile.read_text() == "user profile untouched\n"
     stop = commands.index(["systemctl", "--user", "stop", "naga-control.service"])
     assert all(i < stop for i, c in enumerate(commands) if c[0] == "curl")
@@ -108,15 +109,20 @@ def test_unchanged_reinstall_preserves_backup_and_force_creates_pair(tmp_path: P
     result, _ = fake.run("--version", TAG, "--restart-service", script=script)
     assert result.returncode == 0, result.stderr
     backups = list(stamp(fake).parent.glob("rollback.*"))
-    saved = (backups[0] / "naga-control.AppImage").read_bytes()
+    assert len(backups) == 1
+    assert "keeping newest verified rollback" in result.stdout
     result, _ = fake.run("--version", TAG, "--restart-service", script=script)
     assert result.returncode == 0, result.stderr
     assert list(stamp(fake).parent.glob("rollback.*")) == backups
+    assert "keeping newest verified rollback" in result.stdout
     fake.environment["NAGA_CONTROL_FORCE_DOWNLOAD"] = "1"
     result, _ = fake.run("--version", TAG, "--restart-service", script=script)
     assert result.returncode == 0, result.stderr
-    assert len(list(stamp(fake).parent.glob("rollback.*"))) == 2
-    assert (backups[0] / "naga-control.AppImage").read_bytes() == saved
+    kept = list(stamp(fake).parent.glob("rollback.*"))
+    assert len(kept) == 1
+    assert "keeping newest verified rollback" in result.stdout
+    assert "removed older verified rollback" in result.stdout
+    assert (kept[0] / "installed-tag").read_text() == TAG + "\n"
     assert_private_cleanup(fake)
 
 

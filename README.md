@@ -52,13 +52,17 @@ checkout, run `./install.sh` (same latest-published default).
 
 Upgrades rerun the same command with the existing stop consent. By default
 the current `main` installer replaces a mismatched local image with the
-strictly verified new image: an unverified old image is preserved as a
-private quarantine under `~/.local/share/naga-control/quarantine.*` for
-manual inspection (not a verified rollback and not automatically resumed),
-while a verified old image keeps a `rollback.*` pair. Only a failed
+strictly verified new image: an unverified old image is held as a
+private quarantine under `~/.local/share/naga-control/quarantine.*` until
+a successful install, then removed with other owned quarantines,
+while a verified old image keeps a `rollback.*` pair. After a successful
+install only the newest verified rollback is kept; older verified pairs
+and all owned quarantines are removed. Only a failed
 replacement with an unverified previous image leaves Naga stopped and
 disabled for manual repair; verified rollback and resume behavior is
-unchanged. Quarantine survives uninstall for manual cleanup. See
+unchanged. Failed installs preserve recovery files; unsafe or unknown
+operator files are never automatically removed. A failure quarantine
+survives uninstall for manual cleanup. See
 [upgrades and recovery](docs/troubleshooting.md#installer-upgrades-and-rollback).
 
 Notes:
@@ -151,8 +155,11 @@ the latest published release and never installs unreleased `main` source.
 The installer verifies the exact release's canonical `.sha256` sidecar and
 AppImage bytes before execution, replacement, service stop, or sudo, using
 private temporary staging, same-filesystem atomic replacement, and a stable
-per-user lock. Verified rollback pairs are retained under
-`~/.local/share/naga-control/rollback.*`. See [upgrades and
+per-user lock. At most one verified rollback pair is retained under
+`~/.local/share/naga-control/rollback.*`: a successful install keeps only
+the newest verified pair and removes owned quarantines and older pairs,
+while failed installs preserve recovery files and unsafe or unknown files
+are left for manual inspection. See [upgrades and
 recovery](docs/troubleshooting.md#installer-upgrades-and-rollback).
 
 </details>

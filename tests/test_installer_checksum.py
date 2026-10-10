@@ -94,25 +94,18 @@ def test_same_tag_local_image_is_hashed_not_trusted_by_stamp(tmp_path: Path, cor
     result, commands = fake.run("--version", TAG, script=script)
     assert any(c[0] == "curl" and c[-1].endswith(f"/{TAG}/{ASSET}.sha256") for c in commands)
     if corrupt:
-        # Same-tag corruption no longer blocks a verified repair: the new
-        # download is strictly verified and the old bytes are quarantined.
+        # Same-tag corruption repairs from a verified download: the old bytes
+        # are quarantined privately before replacement, then pruned after the
+        # committed success. No unverified bytes are executed or retained.
         assert result.returncode == 0, result.stderr
         assert any(c[0] == "curl" and c[-1].endswith("/" + ASSET) for c in commands)
         assert image.stat().st_ino != inode
         assert image.read_bytes() == (fake.remote / ASSET).read_bytes()
         assert "warning" in result.stdout and "quarantine" in result.stdout
+        assert "held until successful commit then removed" in result.stdout
+        assert "removed unverified quarantine" in result.stdout
         assert "verified local bytes before reuse" not in result.stdout
-        kept = quarantines(fake)
-        assert len(kept) == 1
-        assert (kept[0] / "naga-control.AppImage").read_bytes() == b"corrupt"
-        assert (kept[0] / "installed-tag").read_text() == TAG + "\n"
-        assert (
-            (kept[0] / "quarantine")
-            .read_text()
-            .startswith("naga-control-installer-quarantine-v1\nUNVERIFIED")
-        )
-        assert not (kept[0] / "image.sha256").exists()
-        assert not (kept[0] / "installer-backup").exists()
+        assert quarantines(fake) == []
         assert rollbacks(fake) == []
     else:
         assert result.returncode == 0, result.stderr
@@ -134,7 +127,8 @@ def test_same_tag_empty_repairs_from_verified_download(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert any(c[0] == "curl" and c[-1].endswith("/" + ASSET) for c in commands)
     assert image.read_bytes() == (fake.remote / ASSET).read_bytes()
-    assert len(quarantines(fake)) == 1
+    assert "removed unverified quarantine" in result.stdout
+    assert quarantines(fake) == []
     assert rollbacks(fake) == []
     assert_private_cleanup(fake)
 

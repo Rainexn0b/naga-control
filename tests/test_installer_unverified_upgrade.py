@@ -58,11 +58,14 @@ def test_altered_old_upgrades_with_quarantine(tmp_path: Path, active: bool) -> N
     assert result.returncode == 0, result.stderr
     assert "warning" in result.stdout and "quarantine" in result.stdout
     assert "mismatch" in result.stdout or "checksum" in result.stdout
+    assert "held until successful commit then removed" in result.stdout
+    assert "removed unverified quarantine" in result.stdout
     assert image.stat().st_ino != inode
     assert image.read_bytes() == (fake.remote / ASSET).read_bytes()
     assert stamp(fake).read_text() == TAG + "\n"
     assert profile.read_text() == "user profile untouched\n"
-    _quarantine_ok(fake, altered, PREVIOUS_TAG)
+    assert quarantines(fake) == []
+    assert rollbacks(fake) == []
     # New bytes were strictly verified before any stop/privilege/execution.
     stop = (
         commands.index(["systemctl", "--user", "stop", "naga-control.service"]) if active else None
@@ -104,7 +107,10 @@ def test_explicit_v04_to_v05_repro(tmp_path: Path) -> None:
     assert image.stat().st_ino != inode
     assert image.read_bytes() == (fake.remote / ASSET).read_bytes()
     assert stamp(fake).read_text() == "v0.5.0\n"
-    _quarantine_ok(fake, altered, "v0.4.0")
+    assert "held until successful commit then removed" in result.stdout
+    assert "removed unverified quarantine" in result.stdout
+    assert quarantines(fake) == []
+    assert rollbacks(fake) == []
     assert_private_cleanup(fake)
 
 
@@ -149,15 +155,17 @@ def test_unverified_old_new_failures_leave_everything_untouched(
 
 def test_old_checksum_unavailable_still_upgrades_verified(tmp_path: Path) -> None:
     fake, script = app_harness(tmp_path)
-    _, altered = seed_altered_previous(fake, active=False)
+    seed_altered_previous(fake, active=False)
     fake.configure(previous_checksum_unavailable=True)
     result, commands = fake.run("--version", TAG, script=script)
     assert result.returncode == 0, result.stderr
     assert "checksum unavailable" in result.stdout
     assert "quarantine" in result.stdout
+    assert "removed unverified quarantine" in result.stdout
     assert installed_image(fake).read_bytes() == (fake.remote / ASSET).read_bytes()
     assert stamp(fake).read_text() == TAG + "\n"
-    _quarantine_ok(fake, altered, PREVIOUS_TAG)
+    assert quarantines(fake) == []
+    assert rollbacks(fake) == []
     # No unchecked fallback: the new sidecar was still strictly fetched.
     assert any(c[0] == "curl" and c[-1].endswith(f"/{TAG}/{ASSET}.sha256") for c in commands)
     assert_private_cleanup(fake)
@@ -165,12 +173,14 @@ def test_old_checksum_unavailable_still_upgrades_verified(tmp_path: Path) -> Non
 
 def test_old_malformed_sidecar_still_upgrades_verified(tmp_path: Path) -> None:
     fake, script = app_harness(tmp_path)
-    _, altered = seed_altered_previous(fake, active=False)
+    seed_altered_previous(fake, active=False)
     fake.configure(previous_checksum_text="not-a-valid-row\n")
     result, _ = fake.run("--version", TAG, script=script)
     assert result.returncode == 0, result.stderr
     assert installed_image(fake).read_bytes() == (fake.remote / ASSET).read_bytes()
-    _quarantine_ok(fake, altered, PREVIOUS_TAG)
+    assert "removed unverified quarantine" in result.stdout
+    assert quarantines(fake) == []
+    assert rollbacks(fake) == []
     assert_private_cleanup(fake)
 
 
@@ -315,6 +325,7 @@ def test_verified_upgrade_still_uses_rollback_not_quarantine(tmp_path: Path) -> 
     previous = seed_previous(fake, active=True)
     result, _ = fake.run("--version", TAG, "--restart-service", script=script)
     assert result.returncode == 0, result.stderr
+    assert "keeping newest verified rollback" in result.stdout
     assert quarantines(fake) == []
     kept = rollbacks(fake)
     assert len(kept) == 1
@@ -327,9 +338,12 @@ def test_verified_upgrade_still_uses_rollback_not_quarantine(tmp_path: Path) -> 
 def test_uninstall_leaves_quarantine_for_manual_cleanup(tmp_path: Path) -> None:
     fake, script = app_harness(tmp_path)
     _, altered = seed_altered_previous(fake, active=False)
+    fake.configure(integration_failure=1)
     result, _ = fake.run("--version", TAG, script=script)
-    assert result.returncode == 0, result.stderr
+    assert result.returncode != 0
+    assert "unverified" in result.stdout + result.stderr
     kept = quarantines(fake)[0]
+    assert (kept / "naga-control.AppImage").read_bytes() == altered
     uninstall = fake.root / "uninstall.sh"
     uninstall.write_text(
         (ROOT / "scripts/uninstall.sh")

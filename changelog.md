@@ -12,12 +12,21 @@ installing or upgrading.
 
 ## [Unreleased]
 
+### Added
+
+- Committed installs keep one verified rollback after commit: the newest
+  verified pair is retained and older verified pairs plus all owned
+  quarantines are removed; failed installs still preserve recovery files
+  and unsafe or unknown operator files are never automatically removed.
+
 ### Fixed
 
 - Main bootstrap and checkout installer upgrades now replace an unverified
   previous image with the strictly verified new image instead of failing
-  the old verification gate, preserving the old bytes as a private
-  unverified quarantine (never a trusted rollback or automatic resume).
+  the old verification gate, holding the old bytes as a private
+  unverified quarantine until the committed success (then automatically
+  removed with other owned quarantines, never a trusted rollback or
+  automatic resume).
   Only a failed replacement with an unverified previous image leaves Naga
   stopped and disabled for manual repair; verified rollback and resume
   behavior is unchanged.

@@ -51,18 +51,16 @@ def test_stop_time_mutation_never_resumes_unverified(tmp_path: Path) -> None:
 
 def test_stop_time_mutation_still_allows_verified_upgrade(tmp_path: Path) -> None:
     fake, script = app_harness(tmp_path)
-    previous = seed_previous(fake, active=True)
+    seed_previous(fake, active=True)
     fake.configure(mutate_image_on_stop=True)
     result, _ = fake.run("--version", TAG, "--restart-service", script=script)
     assert result.returncode == 0, result.stderr
-    mutated = previous + MUTATION_SUFFIX
     assert installed_image(fake).read_bytes() == (fake.remote / ASSET).read_bytes()
     assert stamp(fake).read_text() == TAG + "\n"
     assert rollbacks(fake) == []
-    kept = quarantines(fake)
-    assert len(kept) == 1
-    assert (kept[0] / "naga-control.AppImage").read_bytes() == mutated
+    assert quarantines(fake) == []
     assert "quarantine" in result.stdout
+    assert "removed unverified quarantine" in result.stdout
     assert "verified rollback pair retained" not in result.stdout + result.stderr
     assert "not a verified rollback" in result.stdout + result.stderr
     assert_private_cleanup(fake)

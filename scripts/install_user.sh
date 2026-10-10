@@ -93,7 +93,7 @@ USER_FILES=(
 for size in 64 128 256 512; do
   USER_FILES+=(".local/share/icons/hicolor/${size}x${size}/apps/org.nagacontrol.NagaControl.png")
 done
-for tool in id uname curl systemctl busctl sudo install udevadm sha256sum flock mktemp mkdir rm dirname cp mv chmod cmp grep stat; do
+for tool in id uname curl systemctl busctl sudo install udevadm sha256sum flock mktemp mkdir rm rmdir dirname cp mv chmod cmp grep stat; do
   command -v "$tool" >/dev/null || die "$tool is required; see docs/troubleshooting.md#installer-prerequisites (no automatic package installation)"
 done
 [ "$(id -u)" -ne 0 ] || die "run as your desktop user, not root"
@@ -206,7 +206,212 @@ publish_quarantine() {
   [ ! -e "$QUARANTINE" ] && [ ! -L "$QUARANTINE" ] || return 1
   mv -T "$QUARANTINE_PENDING" "$QUARANTINE" || return 1
   QUARANTINE_PENDING=""
-  log "warning: unverified previous image preserved at $QUARANTINE (not a verified rollback; manual cleanup recommended once verified $VERSION works)"
+  log "warning: unverified previous image preserved at $QUARANTINE (not a verified rollback; held until successful commit then removed; manual recovery only if install fails)"
+}
+# Ownership guard for post-commit retention: exact STATE_DIR child, canonical
+# suffix, no symlink ancestors to /, owned/mode-checked only within HOME.
+retention_owned_dir() {
+  local candidate="$1" owner="$2" base path anc_uid anc_mode
+  [[ "$candidate" == "$STATE_DIR"/rollback.* || "$candidate" == "$STATE_DIR"/quarantine.* ]] || return 1
+  base="${candidate##*/}"
+  [[ "$base" =~ ^(rollback|quarantine)\.[A-Za-z0-9]{6}$ ]] || return 1
+  [[ "$owner" =~ ^[0-9]+$ ]] || return 1
+  path="$candidate"
+  while :; do
+    [ ! -L "$path" ] || return 1
+    case "$path" in
+      "$HOME"/*|"$HOME")
+        [ -d "$path" ] || return 1
+        anc_uid="$(stat -c '%u' "$path" 2>/dev/null)" || return 1
+        [ "$anc_uid" = "$owner" ] || return 1
+        anc_mode="$(stat -Lc '%a' "$path" 2>/dev/null)" || return 1
+        [[ "$anc_mode" =~ ^[0-7]{3,4}$ ]] || return 1
+        (( (8#$anc_mode & 0022) == 0 )) || return 1
+        ;;
+    esac
+    [ "$path" = / ] && break
+    path="$(dirname "$path")" || return 1
+  done
+  return 0
+}
+# Regular owned file, never following symlinks.
+retention_owned_file() {
+  local path="$1" owner="$2" have_uid
+  [ -f "$path" ] || return 1
+  [ ! -L "$path" ] || return 1
+  have_uid="$(stat -c '%u' "$path" 2>/dev/null)" || return 1
+  [ "$have_uid" = "$owner" ] || return 1
+  return 0
+}
+# Exactly one canonical row matching regex; prints the row, rejects extras/NUL/CR.
+retention_canonical_row() {
+  local file="$1" regex="$2" row
+  IFS= read -r row < "$file" || return 1
+  [[ "$row" =~ $regex ]] || return 1
+  printf '%s\n' "$row" | cmp -s -- "$file" - || return 1
+  printf '%s' "$row"
+  return 0
+}
+# Validates one rollback or quarantine candidate. Logs untrusted/corrupt
+# warning, returns 0 valid, 1 untrusted/unsafe, 2 corrupt rollback image.
+# Caller must enable nullglob; listing uses /* + /.* so dotglob is untouched.
+retention_valid_candidate() {
+  local candidate="$1" kind="$2" owner="$3" row digest tag_row name e b
+  local entries=()
+  local -a lines
+  retention_owned_dir "$candidate" "$owner" || { log "warning: retention left untrusted $kind $candidate for manual inspection"; return 1; }
+  for e in "$candidate"/* "$candidate"/.*; do
+    b="${e##*/}"
+    [ "$b" = . ] && continue
+    [ "$b" = .. ] && continue
+    entries+=("$e")
+  done
+  if [ "$kind" = rollback ]; then
+    [ "${#entries[@]}" -eq 4 ] || { log "warning: retention left untrusted rollback $candidate for manual inspection"; return 1; }
+    for e in "${entries[@]}"; do
+      b="${e##*/}"
+      case "$b" in
+        naga-control.AppImage|installed-tag|image.sha256|installer-backup) ;;
+        *) log "warning: retention left untrusted rollback $candidate for manual inspection"; return 1 ;;
+      esac
+    done
+    for name in naga-control.AppImage installed-tag image.sha256 installer-backup; do
+      retention_owned_file "$candidate/$name" "$owner" || { log "warning: retention left untrusted rollback $candidate for manual inspection"; return 1; }
+    done
+    row="$(retention_canonical_row "$candidate/installer-backup" '^naga-control-installer-backup-v1$')" || { log "warning: retention left untrusted rollback $candidate for manual inspection"; return 1; }
+    tag_row="$(retention_canonical_row "$candidate/installed-tag" '^[a-zA-Z0-9][a-zA-Z0-9._+-]*$')" || { log "warning: retention left untrusted rollback $candidate for manual inspection"; return 1; }
+    row="$(retention_canonical_row "$candidate/image.sha256" '^[0-9a-f]{64}\ \ naga-control\.AppImage$')" || { log "warning: retention left untrusted rollback $candidate for manual inspection"; return 1; }
+    digest="${row:0:64}"
+    probe_image "$candidate/naga-control.AppImage" "$digest" || { log "warning: retention kept corrupt rollback $candidate for manual inspection"; return 2; }
+  else
+    [ "${#entries[@]}" -eq 3 ] || { log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1; }
+    for e in "${entries[@]}"; do
+      b="${e##*/}"
+      case "$b" in
+        naga-control.AppImage|installed-tag|quarantine) ;;
+        *) log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1 ;;
+      esac
+    done
+    for name in naga-control.AppImage installed-tag quarantine; do
+      retention_owned_file "$candidate/$name" "$owner" || { log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1; }
+    done
+    tag_row="$(retention_canonical_row "$candidate/installed-tag" '^[a-zA-Z0-9][a-zA-Z0-9._+-]*$')" || { log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1; }
+    mapfile -t lines < "$candidate/quarantine" || { log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1; }
+    [ "${#lines[@]}" -eq 4 ] || { log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1; }
+    [ "${lines[0]}" = "naga-control-installer-quarantine-v1" ] || { log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1; }
+    [ "${lines[1]}" = "UNVERIFIED previous image: not verified against release sidecar; not a rollback pair; manual recovery only" ] || { log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1; }
+    [ "${lines[2]}" = "observed unavailable UNVERIFIED" ] || [[ "${lines[2]}" =~ ^observed\ [0-9a-f]{64}\ UNVERIFIED$ ]] || { log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1; }
+    [ "${lines[3]}" = "tag $tag_row" ] || { log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1; }
+    printf '%s\n' "${lines[0]}" "${lines[1]}" "${lines[2]}" "${lines[3]}" | cmp -s -- "$candidate/quarantine" - || { log "warning: retention left untrusted quarantine $candidate for manual inspection"; return 1; }
+  fi
+  return 0
+}
+# Best-effort exact removal of known files then rmdir.
+retention_remove_exact() {
+  local candidate="$1" owner="$2"
+  shift 2
+  local entries=() e b name rm_args=() found
+  retention_owned_dir "$candidate" "$owner" || { log "warning: retention cleanup incomplete for $candidate"; return 1; }
+  for e in "$candidate"/* "$candidate"/.*; do
+    b="${e##*/}"
+    [ "$b" = . ] && continue
+    [ "$b" = .. ] && continue
+    entries+=("$e")
+  done
+  [ "${#entries[@]}" -eq "$#" ] || { log "warning: retention cleanup incomplete for $candidate"; return 1; }
+  for e in "${entries[@]}"; do
+    b="${e##*/}"
+    found=0
+    for name in "$@"; do [ "$b" = "$name" ] && { found=1; break; }; done
+    [ "$found" -eq 1 ] || { log "warning: retention cleanup incomplete for $candidate"; return 1; }
+  done
+  for name in "$@"; do
+    retention_owned_file "$candidate/$name" "$owner" || { log "warning: retention cleanup incomplete for $candidate"; return 1; }
+  done
+  for name in "$@"; do
+    rm_args+=("$candidate/$name")
+  done
+  rm -f -- "${rm_args[@]}" || { log "warning: retention cleanup incomplete for $candidate"; return 1; }
+  rmdir -- "$candidate" || { log "warning: retention cleanup incomplete for $candidate"; return 1; }
+  return 0
+}
+# Post-commit retention: keep one verified rollback, remove owned quarantines.
+# Best effort, always 0; only exact known files unlinked then rmdir, re-checked
+# before unlink. Never touches profiles, live files, lock, or unknown files.
+prune_retention() {
+  local candidate base="" keep="" best_mtime="" best_name="" mtime mtime_failed=0 skip_rollback_prune=""
+  local valid_rollbacks=() valid_quarantines=() desktop_uid="" old_nullglob=""
+  desktop_uid="$(id -u 2>/dev/null)" || {
+    log "warning: retention cleanup incomplete; could not verify ownership"
+    return 0
+  }
+  [[ "$desktop_uid" =~ ^[0-9]+$ ]] || {
+    log "warning: retention cleanup incomplete; could not verify ownership"
+    return 0
+  }
+  if shopt -q nullglob; then old_nullglob="shopt -s nullglob"; else old_nullglob="shopt -u nullglob"; fi
+  shopt -s nullglob
+  for candidate in "$STATE_DIR"/rollback.*; do
+    [ -e "$candidate" ] || [ -L "$candidate" ] || continue
+    retention_valid_candidate "$candidate" rollback "$desktop_uid" && valid_rollbacks+=("$candidate") || true
+  done
+  for candidate in "$STATE_DIR"/quarantine.*; do
+    [ -e "$candidate" ] || [ -L "$candidate" ] || continue
+    retention_valid_candidate "$candidate" quarantine "$desktop_uid" && valid_quarantines+=("$candidate") || true
+  done
+  keep=""
+  if [ -n "$BACKUP" ]; then
+    for candidate in "${valid_rollbacks[@]}"; do
+      if [ "$candidate" = "$BACKUP" ]; then
+        keep="$BACKUP"
+        break
+      fi
+    done
+    if [ -z "$keep" ]; then
+      log "warning: retention left current backup $BACKUP for manual inspection; keeping existing snapshots"
+      skip_rollback_prune=1
+    fi
+  fi
+  if [ -z "$keep" ] && [ -z "$skip_rollback_prune" ] && [ "${#valid_rollbacks[@]}" -gt 0 ]; then
+    best_mtime=""; best_name=""; mtime_failed=0
+    for candidate in "${valid_rollbacks[@]}"; do
+      mtime="$(stat -c '%Y' "$candidate" 2>/dev/null)" || {
+        log "warning: retention left $candidate for manual inspection"
+        mtime_failed=1
+        continue
+      }
+      [[ "$mtime" =~ ^[0-9]+$ ]] || {
+        log "warning: retention left $candidate for manual inspection"
+        mtime_failed=1
+        continue
+      }
+      base="${candidate##*/}"
+      if [ -z "$keep" ] || [ "$mtime" -gt "$best_mtime" ] || { [ "$mtime" -eq "$best_mtime" ] && [[ "$base" > "$best_name" ]]; }; then
+        best_mtime="$mtime"
+        best_name="$base"
+        keep="$candidate"
+      fi
+    done
+    if [ "$mtime_failed" -ne 0 ]; then
+      log "warning: retention kept existing verified rollbacks for manual inspection; could not determine newest"
+      skip_rollback_prune=1
+      keep=""
+    fi
+  fi
+  if [ -z "$skip_rollback_prune" ] && [ -n "$keep" ]; then
+    log "cleanup: keeping newest verified rollback $keep"
+  fi
+  if [ -z "$skip_rollback_prune" ]; then
+    for candidate in "${valid_rollbacks[@]}"; do
+      [ "$candidate" = "$keep" ] && continue
+      retention_remove_exact "$candidate" "$desktop_uid" naga-control.AppImage installed-tag image.sha256 installer-backup && log "cleanup: removed older verified rollback $candidate" || true
+    done
+  fi
+  for candidate in "${valid_quarantines[@]}"; do
+    retention_remove_exact "$candidate" "$desktop_uid" naga-control.AppImage installed-tag quarantine && log "cleanup: removed unverified quarantine $candidate" || true
+  done
+  eval "$old_nullglob" || true
+  return 0
 }
 handle_unverified_failure() {
   local failed=0 disable_failed=0
@@ -241,16 +446,18 @@ handle_unverified_failure() {
 cleanup() {
   local status=$?
   trap - EXIT HUP INT TERM
-  if [ "$status" -ne 0 ]; then
+  if [ "$status" -ne 0 ] && [ "$COMMITTED" -eq 1 ]; then
+    echo "warning: installation already committed; post-install cleanup interrupted/failed (status $status)" >&2
+  elif [ "$status" -ne 0 ]; then
     if [ "$TOUCHED" -eq 1 ] && [ "$COMMITTED" -eq 0 ]; then
       if [ "$HAD_PREVIOUS_IMAGE" -eq 1 ] && [ "$OLD_VERIFIED" -eq 0 ]; then
         handle_unverified_failure || true
       else
         restore || true
       fi
-    elif [ "$HAD_PREVIOUS_IMAGE" -eq 1 ] && [ "$OLD_VERIFIED" -eq 0 ] && { [ -n "$QUARANTINE" ] || [ "$STOPPED" -eq 1 ] || [ "$DEPENDENCIES_STARTED" -eq 1 ]; }; then
+    elif [ "$COMMITTED" -eq 0 ] && [ "$HAD_PREVIOUS_IMAGE" -eq 1 ] && [ "$OLD_VERIFIED" -eq 0 ] && { [ -n "$QUARANTINE" ] || [ "$STOPPED" -eq 1 ] || [ "$DEPENDENCIES_STARTED" -eq 1 ]; }; then
       handle_unverified_failure || true
-    elif [ "$STOPPED" -eq 1 ] || [ "$DEPENDENCIES_STARTED" -eq 1 ]; then
+    elif [ "$COMMITTED" -eq 0 ] && { [ "$STOPPED" -eq 1 ] || [ "$DEPENDENCIES_STARTED" -eq 1 ]; }; then
       if [ "$DEPENDENCIES_STARTED" -eq 1 ]; then
         if ! ensure_stopped; then
           systemctl --user stop naga-control.service 9>&- && ensure_stopped \
@@ -269,10 +476,10 @@ cleanup() {
     fi
     echo "error: installation not completed" >&2
   fi
-  [ "${#SIBLINGS[@]}" -eq 0 ] || rm -f -- "${SIBLINGS[@]}"
-  [ -z "$BACKUP_PENDING" ] || rm -rf -- "$BACKUP_PENDING"
-  [ -z "$QUARANTINE_PENDING" ] || rm -rf -- "$QUARANTINE_PENDING"
-  [ -z "$STAGE" ] || rm -rf -- "$STAGE"
+  [ "${#SIBLINGS[@]}" -eq 0 ] || rm -f -- "${SIBLINGS[@]}" || true
+  [ -z "$BACKUP_PENDING" ] || rm -rf -- "$BACKUP_PENDING" || true
+  [ -z "$QUARANTINE_PENDING" ] || rm -rf -- "$QUARANTINE_PENDING" || true
+  [ -z "$STAGE" ] || rm -rf -- "$STAGE" || true
   exit "$status"
 }
 trap cleanup EXIT
@@ -515,6 +722,7 @@ else
   log "app installed; Naga user service running (NOT proof of hardware readiness). Replug the mouse if permissions changed."
 fi
 COMMITTED=1
+prune_retention || log "warning: retention cleanup incomplete; older snapshots left for manual inspection"
 log "Run '$WRAPPER_DST' to open the GUI after prerequisites are activated."
 echo "Verification (not executed by installer; may activate the service):"
 echo "busctl --user call org.nagacontrol.Service1 /org/nagacontrol/Service1 org.nagacontrol.Service1 GetSnapshot"
