@@ -168,7 +168,10 @@ def test_foreign_rollback_left(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     target = rollbacks(fake)[0]
     before = _snapshot(target)
-    fake.configure(uid="1234")
+    # Dynamic foreign UID: fixture files are owned by the harness UID, so
+    # owner+1 stays foreign on any host (including a host UID of 1234).
+    owner_uid = target.stat().st_uid
+    fake.configure(uid=str(owner_uid + 1))
     result, _ = _run_unchanged(fake, script)
     assert result.returncode == 0, result.stderr
     assert _snapshot(target) == before

@@ -23,7 +23,7 @@ state = json.loads((root / "state.json").read_text())
 with (root / "commands.jsonl").open("a") as log:
     log.write(json.dumps([name, *args]) + "\n")
 if name == "id":
-    print({"-u": state.get("uid", "1000"), "-un": "desktop-user", "-nG": state["groups"]}[args[0]])
+    print({"-u": state.get("uid", str(os.getuid())), "-un": "desktop-user", "-nG": state["groups"]}[args[0]])
 elif name == "installer-helper":
     assert len(args) == 3 and args[0] == "--version", args
     if args[2] == "--preflight":
