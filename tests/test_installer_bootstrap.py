@@ -121,31 +121,51 @@ def test_actual_helper_inherits_app_lock_and_precedes_execution_not_verification
     assert not any("--now" in c for c in commands)
 
 
-def test_documented_one_liner_pins_all_refs_preserves_stdin_and_cleans(tmp_path: Path) -> None:
+def test_documented_install_command_preserves_stdin_and_cleans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake = harness(tmp_path)
-    (fake.remote / "install.sh").write_text(
+    # The documented command downloads the dispatcher; stage it plus the
+    # bootstrap scripts it fetches so the run stays fully hermetic.
+    (fake.remote / "install.sh").write_text((ROOT / "install.sh").read_text())
+    (fake.remote / "install_user.sh").write_text(
         'printf "args: %s\\n" "$*"; read -r reply; printf "stdin: %s\\n" "$reply"\n'
     )
-    command = next(
+    (fake.remote / "uninstall.sh").write_text("exit 0\n")
+    matches = [
         line
         for line in (ROOT / "README.md").read_text().splitlines()
-        if line.startswith("(umask 077; d=")
-    )
-    assert "/v0.4.0/install.sh" in command
-    assert "--ref v0.4.0 --version v0.4.0" in command
-    assert "curl|bash" not in command and "<(" not in command
-    script = fake.root / "one-liner.sh"
+        if "main/install.sh -o install.sh && bash install.sh" in line
+    ]
+    assert len(matches) == 1
+    command = matches[0].strip()
+    assert "/main/install.sh" in command
+    assert "|" not in command and "<(" not in command
+    # The download lands in the process cwd, which must not look like a
+    # checkout; otherwise the dispatcher would take its local-scripts path.
+    work = fake.root / "work"
+    work.mkdir()
+    script = work / "one-liner.sh"
     script.write_text(command + "\n")
+    monkeypatch.chdir(work)
     master, slave = pty.openpty()
     try:
         os.write(master, b"preserved\n")
-        result, _ = fake.run(script=script, input_fd=slave)
+        result, commands = fake.run(script=script, input_fd=slave)
     finally:
         os.close(master)
         os.close(slave)
     assert result.returncode == 0, result.stderr
-    assert "args: --ref v0.4.0 --version v0.4.0" in result.stdout
+    # The dispatcher bootstraps from main with no --ref; the bootstrap
+    # download URLs prove the main ref was honored.
+    assert "args: \n" in result.stdout
     assert "stdin: preserved" in result.stdout
+    urls = [item for command in commands for item in command if "https:" in item]
+    assert urls[0] == "https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh"
+    assert (
+        "https://raw.githubusercontent.com/Rainexn0b/naga-control/main/scripts/install_user.sh"
+        in urls
+    )
     assert not list((fake.root / "temporary").iterdir())
 
 

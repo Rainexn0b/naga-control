@@ -52,7 +52,8 @@ def test_kernel_failure_keeps_generic_capability_remedy(tmp_path: Path) -> None:
 def test_readme_lists_exact_verified_fuse_references() -> None:
     text = (ROOT / "README.md").read_text()
     text.encode("ascii")
-    assert "--ref v0.4.0 --version v0.4.0" in text
+    assert "main/install.sh -o install.sh && bash install.sh" in text
+    assert "--ref <tag> --version <tag>" in text
     assert "app-only" in text and "--install-openrazer" in text
     for token in (
         "Ubuntu 22.04",

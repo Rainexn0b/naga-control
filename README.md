@@ -27,41 +27,51 @@ Managed service/desktop integration always requires FUSE; leave
 `APPIMAGE_EXTRACT_AND_RUN` unset (or `0`). Extraction is manual launch-only,
 not a supported FUSEless managed installation.
 
-### Standalone AppImage install and update (recommended, no checkout)
-
-Download the installer to a private temp dir, then run it with the terminal
-still attached (no pipe into bash, no process substitution):
+### Install and update
 
 ```bash
-(
-  umask 077
-  d=$(mktemp -d) || exit 1
-  trap 'rm -rf "$d"' EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' HUP TERM
-  curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh \
-    -o "$d/install.sh" && bash "$d/install.sh" --ref main
-)
+curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/install.sh -o install.sh && bash install.sh
 ```
 
-This uses the current `main` installer bootstrap (the default; `--ref main`
-is shown explicitly). `main` is mutable, so this is not a reproducibly pinned
-install. It does not install unreleased source: with no `--version`, the
-installer resolves the latest **published** release via `/releases/latest`
-and installs only the fixed `Naga-Control-x86_64.AppImage` plus its `.sha256`
-sidecar. Tags are recommended for reproducibility; see the pinned command
-below. The installer creates `~/.local/bin/naga-control.AppImage` and
-`~/.local/bin/naga-control`, plus the user unit, D-Bus activation entry,
-desktop entry, and icons. Ordinary app-only use asks `sudo` only for the udev
-rule. Rerun the same command to update. The app installer accepts
-`--version <tag>`, `--install-openrazer`, and `--restart-service`, while the
-dispatcher accepts `--ref <git-ref>`.
+Download to a file and then run it: the installer needs the terminal for
+confirmations, so do not pipe it into bash. Rerun the same command to
+update. `main` is mutable, so this is not a reproducibly pinned install; it
+does not install unreleased source. With no `--version`, the installer
+resolves the latest **published** release via `/releases/latest` and
+installs only the fixed `Naga-Control-x86_64.AppImage` plus its `.sha256`
+sidecar. The dispatcher accepts `--ref <git-ref>`; the app installer accepts
+`--version <tag>`, `--install-openrazer`, and `--restart-service`.
 
-Quit the GUI and release held controls before consenting to the temporary
-remapping outage. App-only success enables and starts the user service, which
-is not hardware readiness. `--restart-service` only consents to a graceful
-Naga-only stop and resume; it does not make the install fully noninteractive
-or sudo-free.
+For a reproducible install, pin both the bootstrap and the artifact to a
+published tag: `bash install.sh --ref <tag> --version <tag>`. From a
+checkout, run `./install.sh` (same latest-published default).
+
+Notes:
+
+- The installer creates `~/.local/bin/naga-control.AppImage` and
+  `~/.local/bin/naga-control`, plus the user unit, D-Bus activation entry,
+  desktop entry, and icons. Ordinary app-only use asks `sudo` only for the
+  udev rule. The exact release's canonical `.sha256` sidecar and AppImage
+  bytes are verified before execution, replacement, or `sudo`.
+- Quit the GUI and release held controls before consenting to the temporary
+  remapping outage. `--restart-service` only consents to a graceful
+  Naga-only stop and resume; it does not make the install fully
+  noninteractive or sudo-free.
+- App-only success enables and starts the user service, which is not
+  hardware readiness: replug the target mouse after the udev reload, then
+  verify with this read-only snapshot (it can D-Bus-activate the service;
+  the installer only prints it):
+
+  ```bash
+  busctl --user call org.nagacontrol.Service1 /org/nagacontrol/Service1 org.nagacontrol.Service1 GetSnapshot
+  ```
+
+  Require `status` = `available` and perform physical F13/F14 DPI-stage and
+  F17 held-ALT down/up checks. These are not automatically established by
+  installation.
+- The ordinary install is **app-only**: it never offers, downloads,
+  installs, or replaces OpenRazer. Explicit opt-in is an advanced topic,
+  see below.
 
 ### Run
 
@@ -74,24 +84,16 @@ terminal:
 
 `naga-control` alone works when `~/.local/bin` is in `PATH`.
 
-### Pinned reproducible alternative (v0.4.0, older installer)
+<details><summary><b>Advanced install topics</b></summary>
 
-One command that preserves terminal stdin and pins **script, bootstrap ref and
-artifact version** to the published v0.4.0 tag (older installer):
-
-```bash
-(umask 077; d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT && trap 'exit 130' INT && trap 'exit 143' HUP TERM && curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/v0.4.0/install.sh -o "$d/install.sh" && bash "$d/install.sh" --ref v0.4.0 --version v0.4.0)
-```
-
-The safety behavior described for current `main` belongs to the current `main`
-and this checkout's installer, not retroactively to scripts published at
-v0.4.0 or other older tags. The v0.4.0 script predates that behavior; review
-a published tagged installer before using it. No future release is implied here.
-To use the reviewed new installer from a checkout:
-
-```bash
-./install.sh --version v0.4.0
-```
+OpenRazer opt-in is for experimental Arch/pacman hosts only: append
+`--install-openrazer` to the same bash command, or set
+`NAGA_CONTROL_INSTALL_OPENRAZER=1`. `NAGA_CONTROL_INSTALL_OPENRAZER=0` is a
+hard skip even with the flag; any other value is an error. Activation is
+deferred: units are enabled without starting them, so reboot or re-login
+and verify OpenRazer first. Read [required
+OpenRazer](docs/release-notes.md#required-openrazer) before opting in, and
+never fetch and execute the Arch helper directly.
 
 Manual FUSE2 library references (verified 2026-10-08; you run these yourself,
 the installer never installs packages):
@@ -120,120 +122,45 @@ D-Bus desktop session. FUSE 3 alone does not satisfy the FUSE 2 library
 check, and installing the library alone does not guarantee `/dev/fuse` works.
 
 The approved portable build target is Ubuntu 22.04 (glibc 2.35) on x86_64,
-but that is a build target, not evidence about the published v0.4.0 artifact:
+but that is a build target, not evidence about the published release artifact:
 its library floor remains UNVERIFIED, and this table makes no Ubuntu 22.04
 support claim for it.
 
-The ordinary install is **app-only**: it never offers, downloads, installs, or
-replaces OpenRazer, and never changes its group or daemon. On experimental
-Arch/pacman hosts, explicitly append `--install-openrazer` to the **same bash
-command** in the standalone snippet (for example
-`bash "$d/install.sh" --ref main --install-openrazer`) or use
-`./install.sh --version v0.4.0 --install-openrazer` from a checkout. Do not
-fetch and execute the Arch helper by default.
-`NAGA_CONTROL_INSTALL_OPENRAZER=1` also opts in. This deliberately reinstalls
-the whole pinned cohort, even at the same source/version (recipe metadata,
-wrapper, or builder Python may have changed), with pacman's own prompts; read the
-[prerequisite and rollback guidance](docs/release-notes.md#required-openrazer)
-first. `NAGA_CONTROL_INSTALL_OPENRAZER=0` is a hard skip even with the flag;
-other values (including an empty value) are errors.
+The installer verifies the exact release's canonical `.sha256` sidecar and
+AppImage bytes before execution, replacement, service stop, or sudo, using
+private temporary staging, same-filesystem atomic replacement, and a stable
+per-user lock. Verified rollback pairs are retained under
+`~/.local/share/naga-control/rollback.*`. See [upgrades and
+recovery](docs/troubleshooting.md#installer-upgrades-and-rollback).
 
-Opt-in still needs a terminal for confirmation and pacman's own conflict
-prompts. It validates the release manifest, hashes, source stamps, metadata,
-and the system Python minor via isolated `/usr/bin/python3`, not a PATH/virtualenv
-alias, before sudo, including active-kernel headers/build metadata and toolchain
-checks.
-The helper's read-only `--preflight` checks Python minimum, active-kernel headers,
-tools and session connectivity **before Naga stop consent**. Opt-in needs the
-selected release's helper with this mode. Older releases may lack this mode;
-opt-in fails closed with no legacy fallback. Ordinary app-only installs still
-need no helper.
-Release archive/Python-minor validation happens separately before sudo; the
-actual install repeats environment gates and keeps pacman's own prompts.
-Activation is deferred: the user units are
-enabled **without starting them**; reboot/re-login and verify OpenRazer before
-starting Naga. The new app installer requires consent to gracefully stop a
-running **Naga-only** service first; no OpenRazer/GUI processes are killed.
-Other distributions
-need a manual matching-source native build, not Arch packages; this is not a
-promise of support for all Arch derivatives or for Debian/Fedora.
+</details>
 
 ### Uninstall
 
 Checkout-free removal of a standalone install (needs no AppImage and no host
-Python). Quit the GUI and release held controls first. It removes
-installer-owned app and user integration files, and prompts separately before
-udev rule removal (requires sudo). Do not add `--yes` unless you want to skip
-that udev confirmation and consent to udev removal:
+Python). It removes installer-owned app and user integration files:
 
 ```bash
-(
-  umask 077
-  d=$(mktemp -d) || exit 1
-  trap 'rm -rf "$d"' EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' HUP TERM
-  curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/scripts/uninstall.sh \
-    -o "$d/uninstall.sh" && bash "$d/uninstall.sh"
-)
+curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/uninstall.sh -o uninstall.sh && bash uninstall.sh
 ```
 
-From a checkout, the same remover is useful with explicit confirmation skip:
+From a checkout:
 
 ```bash
-./scripts/uninstall.sh --yes
+./uninstall.sh --yes
 ```
 
-It reuses the same stable per-user install lock, checks owners and symlinks,
-and removes only known installer-owned files; quit the GUI and release held
-controls first. `--yes` only skips that udev-removal prompt and consents to
-udev removal; sudo authentication is not bypassed and the service, file
-ownership, symlink, and lock checks remain. Unsafe or unverifiable service
-state refuses with files
-retained for manual recovery instead of blind deletion. Profiles stay unless
-`--purge-config` is passed; OpenRazer packages, group membership, and daemon
-stay; udev rule removal still asks for consent unless `--yes` is given. See
-[upgrades and recovery](docs/troubleshooting.md#installer-upgrades-and-rollback).
+Notes:
 
-Optional checkout-only distro advice (read-only, offline; never an install
-check or consent):
-
-```bash
-bash scripts/distro_report.sh
-```
-
-Only the Ubuntu 22.04, Ubuntu 24.04, and Arch rows are reviewed; the Fedora
-44 entry above is a README reference, not a reporter row. The report does not
-certify a distro, check prerequisite presence, or allow installation.
-
-The new installer verifies the exact release's canonical `.sha256` sidecar and
-AppImage bytes **before execution, replacement, service stop or sudo**. Reused
-local images are hashed too. Missing older-release checksums fail closed, with
-no legacy fallback. HTTPS hashes detect corruption, not independent publisher
-authenticity or signatures. Installation uses private temporary staging,
-same-filesystem atomic replacement, and a stable per-user nonblocking lock.
-
-For a running service, quit the GUI and release held controls before consenting
-to the temporary remapping outage. No TTY/default refusal cancels safely;
-`--restart-service` explicitly consents. Verified previous image/tag rollback
-pairs are retained in `~/.local/share/naga-control/rollback.*`, including forced
-same-version downloads; unchanged reinstalls preserve existing backups. Profiles
-are untouched. See [upgrades and recovery](docs/troubleshooting.md#installer-upgrades-and-rollback).
-Uninstall removes installer backups/stamps but retains the lock inode and
-OpenRazer. Add `--purge-config` only if profile removal is intended.
-
-App-only success enables/starts the user service; that is **not hardware
-readiness**. OpenRazer opt-in or a failed udev reload leaves activation staged.
-There is no broad udev trigger; replug the target mouse after rules reload.
-After prerequisites are activated, inspect this read-only application snapshot
-(the command can D-Bus-activate the service; the installer only prints it):
-
-```bash
-busctl --user call org.nagacontrol.Service1 /org/nagacontrol/Service1 org.nagacontrol.Service1 GetSnapshot
-```
-
-Require `status` = `available` and perform physical F13/F14 DPI-stage and F17
-held-ALT down/up checks. These are not automatically established by installation.
+- Quit the GUI and release held controls first. Removal prompts before udev
+  rule deletion, which needs `sudo`.
+- `--yes` only skips that udev-removal confirmation; `sudo` authentication is
+  still required and all ownership and service checks remain.
+- Profiles stay unless `--purge-config` is passed. OpenRazer packages, group
+  membership, and daemon stay.
+- Unsafe or unverifiable service state refuses with files retained for manual
+  recovery. See [upgrades and
+  recovery](docs/troubleshooting.md#installer-upgrades-and-rollback).
 
 ## Status
 
