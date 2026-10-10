@@ -85,7 +85,18 @@ jobs:
       - name: AppImage smoke on host container (Ubuntu 24.04)
         env:
           QT_QPA_PLATFORM: offscreen
-        run: .venv/bin/python -m buildpython --run-steps "AppImage Smoke"
+        run: |
+          set +e
+          .venv/bin/python -m buildpython --run-steps "AppImage Smoke"
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            if [ -f buildlog/naga-control/step-15-appimage-smoke.log ]; then
+              cat buildlog/naga-control/step-15-appimage-smoke.log
+            else
+              echo "AppImage smoke failure log missing: buildlog/naga-control/step-15-appimage-smoke.log" >&2
+            fi
+          fi
+          exit "$status"
       - name: Stage exactly one AppImage and checksum
         run: |
           shopt -s nullglob

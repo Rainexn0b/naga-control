@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+from pathlib import Path
 
 from tests.release_assets_fakes import ROOT
 
 WORKFLOW = (ROOT / ".github/workflows/release.yml").read_text()
 
 PYTEST_LOG = "buildlog/naga-control/step-02-pytest.log"
+SMOKE_LOG = "buildlog/naga-control/step-15-appimage-smoke.log"
 
 
 def jobs() -> dict[str, str]:
@@ -191,3 +194,114 @@ def test_ci_validation_prints_pytest_log_and_preserves_status() -> None:
         ["bash", "-n"], input=script, text=True, capture_output=True, check=False
     )
     assert result.returncode == 0, result.stderr
+
+
+def _write_fake_python(root: Path, exit_code: int, sentinel: str) -> None:
+    python_path = root / ".venv/bin/python"
+    python_path.parent.mkdir(parents=True, exist_ok=True)
+    python_path.write_text(f"#!/bin/sh\necho '{sentinel}'\nexit {exit_code}\n", encoding="utf-8")
+    python_path.chmod(0o755)
+
+
+def test_appimage_smoke_wrapper_prints_smoke_log_and_preserves_status(tmp_path: Path) -> None:
+    appimage = jobs()["appimage"]
+    assert '.venv/bin/python -m buildpython --run-steps "AppImage Smoke"' in appimage
+    assert SMOKE_LOG in appimage
+    assert f"cat {SMOKE_LOG}" in appimage
+    assert "continue-on-error" not in appimage
+    assert "always()" not in appimage
+    portable_pos = appimage.index("portable-build.sh")
+    smoke_pos = appimage.index('--run-steps "AppImage Smoke"')
+    log_pos = appimage.index(SMOKE_LOG)
+    stage_pos = appimage.index("Stage exactly one AppImage")
+    assert portable_pos < smoke_pos < log_pos < stage_pos
+    script = _validation_script(WORKFLOW, "AppImage smoke on host container (Ubuntu 24.04)")
+    assert script.splitlines()[0] == "set +e"
+    assert '.venv/bin/python -m buildpython --run-steps "AppImage Smoke"' in script
+    assert "status=$?" in script
+    assert 'if [ "$status" -ne 0 ]' in script
+    assert f"cat {SMOKE_LOG}" in script
+    assert "missing" in script
+    assert ">&2" in script
+    assert 'exit "$status"' in script
+    result = subprocess.run(
+        ["bash", "-n"], input=script, text=True, capture_output=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    marker = "smoke-log-marker-present"
+    log_path = tmp_path / SMOKE_LOG
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(marker + "\n", encoding="utf-8")
+    _write_fake_python(tmp_path, 13, "fake-python-sentinel-failure")
+    run_result = subprocess.run(
+        ["bash", "-e", "-c", script],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run_result.returncode == 13
+    assert marker in run_result.stdout
+    assert "fake-python-sentinel-failure" in run_result.stdout
+
+
+def test_appimage_smoke_wrapper_reports_missing_log(tmp_path: Path) -> None:
+    script = _validation_script(WORKFLOW, "AppImage smoke on host container (Ubuntu 24.04)")
+    _write_fake_python(tmp_path, 13, "fake-python-sentinel-missing")
+    run_result = subprocess.run(
+        ["bash", "-e", "-c", script],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run_result.returncode == 13
+    assert "fake-python-sentinel-missing" in run_result.stdout
+    assert "missing" in run_result.stderr
+    assert SMOKE_LOG in run_result.stderr
+
+
+def test_appimage_smoke_wrapper_success_is_silent(tmp_path: Path) -> None:
+    script = _validation_script(WORKFLOW, "AppImage smoke on host container (Ubuntu 24.04)")
+    marker = "smoke-log-marker-silent"
+    log_path = tmp_path / SMOKE_LOG
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(marker + "\n", encoding="utf-8")
+    _write_fake_python(tmp_path, 0, "fake-python-sentinel-success")
+    run_result = subprocess.run(
+        ["bash", "-e", "-c", script],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run_result.returncode == 0
+    assert "fake-python-sentinel-success" in run_result.stdout
+    assert marker not in run_result.stdout
+    assert marker not in run_result.stderr
+    assert "missing" not in run_result.stderr
+
+
+def test_appimage_smoke_wrapper_preserves_status_when_cat_fails(tmp_path: Path) -> None:
+    script = _validation_script(WORKFLOW, "AppImage smoke on host container (Ubuntu 24.04)")
+    log_path = tmp_path / SMOKE_LOG
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text("smoke-log-marker-cat\n", encoding="utf-8")
+    _write_fake_python(tmp_path, 13, "fake-python-sentinel-cat")
+    fake_bin = tmp_path / "fakebin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    fake_cat = fake_bin / "cat"
+    fake_cat.write_text("#!/bin/sh\necho fake-cat-failure >&2\nexit 7\n", encoding="utf-8")
+    fake_cat.chmod(0o755)
+    env = dict(os.environ)
+    env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
+    run_result = subprocess.run(
+        ["bash", "-e", "-c", script],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+    assert run_result.returncode == 13
+    assert "fake-cat-failure" in run_result.stderr
