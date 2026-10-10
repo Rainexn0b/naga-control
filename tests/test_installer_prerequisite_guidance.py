@@ -68,9 +68,25 @@ def test_readme_lists_exact_verified_fuse_references() -> None:
         "https://archlinux.org/packages/extra/x86_64/fuse2/",
         "https://packages.fedoraproject.org/pkgs/fuse/fuse-libs/fedora-44.html",
         "2.9.9-25.fc44",
-        "its library floor remains UNVERIFIED",
     ):
         assert token in text, token
+    normalized = " ".join(text.split())
+    assert "finished-artifact static gate" in normalized
+    assert "208 objects" in normalized
+    assert "22.04 baseline plus 24.04 userspace smoke checks" in normalized
+    assert (
+        "Scope is bundled runtime imports, offscreen QApplication, CLI `--help`, and "
+        "temporary integration payload only;" in normalized
+    )
+    assert (
+        "no full install, upgrade, remove, FUSE, user units, D-Bus, sudo, udev, "
+        "desktop, service, or hardware certification is claimed" in normalized
+    )
+    assert "Only these four package references are verified" in normalized
+    assert (
+        "not a claim of complete prerequisites, AppImage launch, install, "
+        "or hardware support" in normalized
+    )
 
 
 def _anchors(path: Path) -> set[str]:
