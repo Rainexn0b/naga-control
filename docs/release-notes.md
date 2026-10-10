@@ -5,21 +5,26 @@ history. It contains Unreleased and the dated 0.5.0, 0.4.0, 0.3.0, 0.2.0,
 and 0.1.4 entries. See GitHub releases for current publication status.
 Release publishing extracts only the
 matching version section via `scripts/prepare_release.py`, not this overview
-or the entire changelog. The v0.5.0 GitHub body comes from the
-`## [0.5.0] - 2026-10-08` section in the root changelog.
+or the entire changelog. The v0.5.0 GitHub body is the
+matching `## [0.5.0]` section of the root changelog.
 
 ## v0.5.0
 
 The release body is the matching
-`## [0.5.0] - 2026-10-08` section in [changelog.md](../changelog.md),
+`## [0.5.0]` section in [changelog.md](../changelog.md),
 extracted by `scripts/prepare_release.py`. This overview is not the release
 body, and the checkout installer notes below are not retroactive to already
-published tags. On committed `84d77df`, validation-only run `37840267274`
-passed AppImage assembly but the static finished-artifact gate failed at
-extraction staging before inspecting any payload. The extraction staging fix
-is in the reviewed working tree and awaits a real CI rerun. The 22.04 baseline
-and 24.04 smoke checks, staging, and upload were not reached. This overview
-claims no real ABI, distro install, or launch acceptance.
+published tags. v0.5.0 is currently untagged/unpublished work pending final
+validation; latest published stays v0.4.0. On committed `7661eb4`,
+validation-only run `38040471477`
+(https://github.com/Rainexn0b/naga-control/actions/runs/38040471477)
+passed AppImage assembly but the static finished-artifact gate FAILED after
+auditing 208 objects with 70 missing normal desktop runtime dependency
+errors; the 22.04 baseline and 24.04 smoke checks, staging, and upload were
+not reached, and publication was skipped by dispatch design. The bounded
+validation-image plus trusted-baseline fix is reviewed and awaits real CI
+validation; publication remains blocked. This overview claims no real ABI, distro
+install, or launch acceptance, and no support certification.
 
 ### Changes in 0.5.0
 
@@ -46,9 +51,11 @@ claims no real ABI, distro install, or launch acceptance.
 - Portability candidate: controlled Ubuntu 22.04 / glibc 2.35 / x86_64 plus
   CPython 3.12 build candidate with a finished static audit of the AppImage
   outer runtime and extracted bundled ELF/provider closure (inspection only,
-  nothing executed). No real ABI, distro install, or launch acceptance is
-  claimed; on `84d77df` assembly passed but the static gate failed at
-  extraction staging before payload inspection, and the corrected working tree
+  nothing executed). No real ABI, distro install, launch, or support
+  certification is claimed; on `7661eb4` assembly passed but the static gate
+  audited 208 objects with 70 missing normal desktop runtime prerequisite
+  errors (minimal-image Wayland/XCB, xkb, GTK3, CUPS, plus trusted-baseline
+  libresolv handling), smokes/staging/upload unreached, and the bounded fix
   awaits a real CI rerun; representative-environment checks are pending.
 - Runtime robustness: teardown retains ownership and joins through cancellation
   and close failures, held-output cleanup attempts each release independently,

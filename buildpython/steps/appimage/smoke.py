@@ -18,7 +18,10 @@ def smoke_script(artifact: str, version: str) -> str:
             "apt-get update -qq",
             "apt-get install -y --no-install-recommends "
             "libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 libudev1 "
-            "libglib2.0-0t64 >/dev/null",
+            "libglib2.0-0t64 libwayland-cursor0 libwayland-egl1 "
+            "libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 "
+            "libxcb-render-util0 libxcb-render0 libxcb-shape0 libxcb-util1 libxcb-xkb1 "
+            "libxkbcommon-x11-0 libgtk-3-0t64 libcups2t64 >/dev/null",
             "useradd --create-home --uid 10001 naga-smoke",
             f"cp {shlex.quote('/dist/' + artifact)} /work/naga.AppImage",
             "chmod +x /work/naga.AppImage",

@@ -54,6 +54,20 @@ ALLOWED_APT = frozenset(
         "libdbus-1-3",
         "libarchive-tools",
         "util-linux",
+        "libcups2",
+        "libgtk-3-0",
+        "libwayland-cursor0",
+        "libwayland-egl1",
+        "libxcb-cursor0",
+        "libxcb-icccm4",
+        "libxcb-image0",
+        "libxcb-keysyms1",
+        "libxcb-render-util0",
+        "libxcb-render0",
+        "libxcb-shape0",
+        "libxcb-util1",
+        "libxcb-xkb1",
+        "libxkbcommon-x11-0",
     }
 )
 

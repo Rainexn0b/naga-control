@@ -24,7 +24,7 @@ from .versions import (
 MAX_OUTPUT = 2 * 1024 * 1024
 TIMEOUT = 10.0
 READELF = "/usr/bin/readelf"
-BASELINE_PRIVATE_ALLOW = ("libc.so.6", "ld-linux-x86-64.so.2", "libm.so.6")
+BASELINE_PRIVATE_ALLOW = ("libc.so.6", "ld-linux-x86-64.so.2", "libm.so.6", "libresolv.so.2")
 
 
 @dataclass(frozen=True)
@@ -257,10 +257,11 @@ def parse_readelf(text: str) -> ElfInfo:
 
 
 def parse_baseline_provider(text: str, *, provider_key: str) -> ElfInfo:
-    """Parse trusted baseline glibc components (libc/loader/libm) with internal PRIVATE allowed."""
+    """Parse trusted baseline glibc components (libc/loader/libm/resolv) with internal PRIVATE allowed."""
     if provider_key not in BASELINE_PRIVATE_ALLOW:
         raise ValueError(
-            "baseline PRIVATE allowance only for trusted baseline glibc components (libc/loader/libm)"
+            "baseline PRIVATE allowance only for trusted baseline glibc components"
+            " (libc/loader/libm/resolv)"
         )
     if not text.startswith("ELF Header:\n") or len(text.encode()) > MAX_OUTPUT:
         raise ValueError("missing ELF header or oversized output")

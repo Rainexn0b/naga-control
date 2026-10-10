@@ -1,46 +1,95 @@
 # Distro Portability Execution Tracker
 
-Status (2026-10-08, HEAD `84d77df`): **source CI `37840267101` SUCCESS,
-validation-only Release `37840267274` FAILED at the static finished-artifact
+Status (2026-10-10 UTC, latest completed CI source `7661eb4`): **source CI `38040471530` SUCCESS,
+validation-only Release `38040471477` FAILED at the static finished-artifact
 gate after AppImage assembly PASSED; v0.5.0 untagged/unpublished, latest
 published stays v0.4.0**.
 The user approved [Distro Portability Plan (Revised)](distro-portability-plan-revised.md)
 with "then follow the revised plan. please continue". That read-only plan controls
 the sequence and scope; it supersedes this file's former execution waves.
 This is its compact evidence/register tracker, not another plan or support promise.
+Concurrent README and keyboard/chord changes remain excluded from v0.5
+by user choice ("Release reviewed snapshot"); no new hardware acceptance is claimed.
 
-- Source: `991f331` was README-only and caused no release/tag/dispatch; the
-  `file` fix `84d77df` then reached source CI `37840267101` SUCCESS plus
-  validation-only dispatch `37840267274` (still no tag or publication). The
-  shared-tree GUI flat-tray plus gate-label edits, the extraction staging fix,
-  and these note updates are reviewed but uncommitted.
-- Release: validation-only `37840267274` assembled the AppImage in 56.6s
-  (`Naga-Control-0.5.0-x86_64.AppImage`, 269670904 bytes, sha256
-  `b22c30d0c15079d00d72bb9653524a84eae4e29b9352068f3bc87c13ecc3e45e`,
-  squashFS offset 944632), then FAILED the static gate at extraction staging
-  before inspecting any payload: the gate pre-created the destination the
-  trusted extractor must create. Source full-profile, release metadata, and
-  OpenRazer build/cohort gates were successful; 22.04 baseline and 24.04
-  userspace smoke, staging, and upload were never reached. No ABI, smoke,
-  hardware, or distro pass is claimed. Failure log:
-  `/tmp/opencode/naga-portability/file-prereq-release.failed.log`.
-- Historical: validation-only `37837269798` FAILED at appimagetool assembly with
-  `file command is missing` (fixed by `84d77df`); prior `37834701338` stays
-  UNKNOWN (unprinted log) and its cause is not inferred.
-- Fix: the extraction staging fix (leave the staging child absent for trusted
-  unsquashfs while keeping the private parent and fail-closed checks) is
-  reviewed but uncommitted; its focused fake tests pass (219, parent-verified).
-  Parent independently ran 141 GUI consumer tests on Python 3.14.7/Qt 6.11.2 and
-  Python 3.12.15/Qt 6.12.0, both PASS. Whole-tree local acceptance (exit 0):
-  Ruff pass, format 420, Pyright 0/0/0, offscreen pytest 3458 passed / 2 skipped
-  / 5 hardware deselected in 223.30s; all Python <=400 lines, 478 source files
-  hash-identical pre/post, including the new tray-sections test and 3 artifact
-  paths. Doc ASCII/link/README-fence checks pass; no hardware/live
-  service/GUI/node ops run. Logs under `/tmp/opencode/naga-portability/`.
-- Next: commit/push the reviewed paths, rerun the validation-only Release, and
-  tag/publish v0.5.0 only when green. Source CI for the new whole-tree SHA is
-  still pending; real ABI/smokes unverified until rerun; then record final
-  evidence notes.
+- Current (2026-10-10, `7661eb4` = `f48b3a4` plus approved 12-path checker/Qt-payload
+  trim, committed/pushed): source CI `38040471530` SUCCESS on `7661eb4`;
+  validation-only Release `38040471477`
+  (https://github.com/Rainexn0b/naga-control/actions/runs/38040471477) assembled
+  the trimmed AppImage in 31.2s (`Naga-Control-0.5.0-x86_64.AppImage`,
+  123202040 bytes, sha256
+  `7f1b636b76b54c487514e005b66b19ed30ecf926f8fcd4d64e2f66c91b29dc11`,
+  squashFS offset 944632), then FAILED the static gate: 208 objects checked,
+  providers_checked true, 70 errors. The 70 are missing normal desktop runtime
+  prerequisites in the minimal 22.04 test image (Qt Wayland/XCB, xkb, GTK3
+  theme, libcups) plus 2 trusted-baseline `libresolv.so.2` GLIBC_PRIVATE
+  rejections with 2 cascading missing-resolv entries; this run reported no
+  glibc/GLIBCXX floor violation, which does NOT mean ABI pass. Source
+  full-profile, release metadata, and OpenRazer gates passed; 22.04 baseline
+  and 24.04 smoke, staging, and upload were never reached, and publication was
+  skipped by dispatch design. Actual report:
+  `/tmp/opencode/naga-portability/trim-checker-artifact-gate.json`, jobs
+  `trim-checker-release.jobs.json`, raw `trim-checker-appimage.raw.log`.
+- Prior reviewed snapshot (`f48b3a4`, 16 tray/extraction/docs paths,
+  committed/pushed): source CI `37847748963` SUCCESS; validation-only Release
+  `37847748826`
+  (https://github.com/Rainexn0b/naga-control/actions/runs/37847748826)
+  assembled in 56.2s (269670904 bytes, offset 944632, sha256
+  `ed394d235db6c970876d7b986efc9c63a43e71de0afdb6fbc7a54ebf70b6823a`),
+  extraction SUCCESS with 589 native objects, providers_checked true, then
+  FAILED with 2196 errors (singular GNU `contains 1 entry` parser case, private
+  baseline libm, safe `$ORIGIN/` cases, plus genuine unused Qt
+  QML/SQL/WebEngine/SDK payload). The child root-extraction bug is fixed.
+  Source/meta/OpenRazer passed; 22/24 smokes, staging, upload UNREACHED.
+  Actual records (not the truncated `gh` log view):
+  `/tmp/opencode/naga-portability/reviewed-snapshot-artifact-gate.json`,
+  `reviewed-snapshot-appimage.raw.log`. Local reviewed-tree acceptance at that
+  point: 478 files, 3458 passed / 2 skipped / 5 hardware deselected, 8 warnings,
+  223.30s; Ruff 420 formatted, Pyright 0.
+- Trim basis (owner-approved "Trim unused payloads (Recommended)", 12 paths at
+  `7661eb4`): retain Core/Gui/Widgets/Network plus XCB/Wayland/offscreen/image
+  platforms, TLS/ICU, NumPy runtime, metadata/licenses; remove unused
+  QML/SQL/WebEngine/tools/known-NumPy-static-SDK files in AppDir staging ONLY
+  (no fake skipping, no gate weakening; sources/venv unchanged; `libqeglfs`
+  embedded-only removal within unused scope; symlink/root-wildcard confinement
+  fake-covered; singular-GNU 1-entry fix, libm trusted-PRIVATE-only, trailing
+  `$ORIGIN` separators safe under existing traversal rules). Release-only
+  archive `/tmp/opencode/naga-portability/release-acceptance.1QKC8n`
+  (`f48b3a4` plus 12 ONLY, future work excluded): Ruff check PASS, format 423,
+  Pyright 0, pytest 3496 passed / 2 coverage-unavailable skips / 5 hardware
+  deselected / 8 warnings, 226.75s, exit 0; 481-file manifest unchanged
+  pre/post, all Python <=400 lines; focused static/runtime/portable 16 files
+  290 passed in 3.90s (never summed with 3496). Logs
+  `trim-checker-standard-{ruff,format,pyright,pytest}.log` and
+  `trim-checker-accepted-manifest.json`.
+- Historical: validation-only `37840267274` on `84d77df` FAILED at extraction
+  staging before payload inspection (pre-created destination); prior
+  `37834701338` stays UNKNOWN (unprinted log, cause not inferred).
+- Next: reviewed runtime/source fixes await real CI validation. The bounded fix
+  adds normal Qt Wayland/XCB, GTK, CUPS runtime prerequisites to the existing
+  22/24 CI validation images ONLY (no host installers, bundling, provisioner,
+  target, format, or pin change), plus a trusted EXACT `libresolv`
+  PRIVATE-baseline allowance (payload still rejects). Parent independently
+  passed the release-only archive (`7661eb4` plus exact 6 runtime/test paths
+  plus 2 docs, 8 paths): 482 files hash-unchanged before/after, all Python
+  <=400 lines; Ruff check PASS, format 424, Pyright 0, full pytest 3510 passed
+  / 2 coverage-unavailable skips / 5 hardware deselected / 8 warnings,
+  219.69s, exit 0; focused 266 passed in 1.86s (original 164 plus release
+  consumers, not summed with 3510). Logs
+  `desktop-standard-{ruff,format,pyright,pytest}.log`, manifest
+  `desktop-accepted-manifest.json`. Repo Git main 766, remote 766, still no
+  tag. Last completed CI runs stay source `38040471530` green and validation
+  `38040471477` FAILED with 70 errors; real apt/static/22/24 validation for
+  the fix is still unrun. Next: push/retry under existing auth; this receipt
+  freezes at the last completed run. Publication remains BLOCKED; do not claim
+  PASS for unrun work. Local Docker/Podman/unsquashfs still missing; read-only
+  `bwrap --unshare-all /usr/bin/true` presence probe exit 0
+  (`installer-smoke-isolation-probe.log`/`.status`) is NOT private
+  systemd-user/session-D-Bus/FUSE/sudo/udev installer validation. Throwaway
+  HOME alone is unsafe; post-publish installer validation needs isolated
+  HOME/user units/sudo/udev or a precise blocker, not system changes. No new
+  hardware acceptance; fix2 natural wake, held handoff, remaining modes, wired
+  2/6 signatures open; tray switch disabled. Then record final evidence notes
+  and tag/publish v0.5.0 only when green.
 
 ## Verified baseline and limits
 
@@ -56,16 +105,24 @@ This is its compact evidence/register tracker, not another plan or support promi
 - Historical snapshot after the hexadecimal version-index parser fix: one Qt6Core ELF metadata
   parse reported maximum required `GLIBC_2.34`. This is **one-object static parsing**,
   not ABI/provider closure, a finished-artifact audit, or launch acceptance.
-- Supervisor's `.venv/bin/python -B -m buildpython.steps.appimage.abi build/appimage/AppDir`
-  returned **exit 1**, fail-closed: AppDir is now absent (staging has only venv/wheel).
-  **Zero objects inspected**; no artifact decoded/executed/imported. Full ABI unknown.
+- Current artifact evidence (2026-10-10, `7661eb4`): real finished-artifact
+  inspection RAN and FAILED, superseding the older zero-objects staging note.
+  Validation-only `38040471477` audited 208 bundled objects
+  (providers_checked true) with 70 missing normal desktop runtime prerequisite
+  errors; no glibc/GLIBCXX floor violation was reported in that run, which
+  does NOT mean ABI pass. Prior `37847748826` extracted and inspected 589
+  native objects, then FAILED with 2196 errors. Neither run reached baseline,
+  smoke, staging, upload, or publication. No ABI, install, or launch pass
+  is claimed.
 - A read-only GNU readelf scout of a local 0.4.0 outer runtime found ELF64 LE
   x86_64 DYN, static, no DT_NEEDED/GLIBC needs. Inner SquashFS/payload uninspected;
   this establishes neither a complete artifact ABI floor/identity nor launch acceptance.
-- Local `.venv` is still host Python 3.14.7. Docker, Podman, and unsquashfs were
-  confirmed unavailable on 2026-10-08; readelf, objdump, and ShellCheck are available.
-  No Ubuntu 22.04 portable build, container, desktop, new hardware pass, ABI real
-  output, Ubuntu build, or representative distro installed/launched evidence exists.
+- Local `.venv` is still host Python 3.14.7. Docker, Podman, and unsquashfs remain
+  unavailable locally; readelf, objdump, and ShellCheck are available.
+  No LOCAL 22.04 build/container execution and no accepted static-gate, smoke,
+  install, desktop, or hardware result exists; the successful CI assemblies
+  above are real build evidence, not an ABI pass. The read-only
+  `bwrap --unshare-all` presence probe is not installer validation (see header).
 - Managed installs still require x86_64/glibc, FUSE2, user systemd, session D-Bus,
   existing tools and scoped permissions. Extraction remains manual launch-only;
   no automatic missing-package setup or managed FUSEless fallback is delivered.
@@ -77,7 +134,7 @@ This is its compact evidence/register tracker, not another plan or support promi
 Required context: [AGENTS.md](../AGENTS.md), [starter](naga-linux-control-agent-starter.md), [integration findings](integration-findings.md),
 [architecture](architecture.md), [implementation plan](implementation-plan.md), [hardware validation](hardware-validation.md),
 [README install](../README.md#install), and [release notes](release-notes.md).
-Load `naga-guided`; no extra skill is required for this documentation update.
+Load `naga-guided` and `publish-release`; no other skill is required for this documentation update.
 
 ## Standard checkpoints (never sum scoped runs; historical receipts labelled)
 
@@ -222,9 +279,9 @@ include those reviewed fixes. Acceptance is fake-only.
 | A4 | New [distro_report.sh](../scripts/distro_report.sh) parses `ID`, `ID_LIKE`, `VERSION_ID` as Bash data; own release strings and UNKNOWN/CONDITIONAL statuses remain explicit. Its reviewed rows remain only Ubuntu 22.04/24.04 and Arch, not the newer Fedora reference below. | 172 fake checks approved; no installer integration or runtime proof. `ID_LIKE` is a hint, never package/version/validation inheritance. |
 | A5 | Prerequisite guidance landed with capability-first errors and exact per-release manual references. No broad native-package provisioning need is confirmed; representative versions/snapshots beyond the build floor remain TBD. | FAKE-ACCEPTED (183 focused tests); add only a demonstrated small branch, never guessed packages or a provider framework. |
 | A6 | App-only install never fetches the optional helper; [release prerequisites](release-notes.md#required-openrazer) restrict explicit opt-in to experimental Arch/pacman and the exact matching cohort. | CONFIRMED; preserve consent, deferred activation and rollback. No wider helper cohort. |
-| A7 | `runtime.py`:104-146 copies complete selected-host stdlib/extensions. Historical math/cmath needed 2.44; current AppDir is absent, audit inspected zero objects. New [elf.py](../buildpython/steps/appimage/elf.py)/[abi.py](../buildpython/steps/appimage/abi.py) inspect staged AppDir only; outer-runtime scout leaves payload uninspected. | PARTIAL static foundation (124 fake checks); pinned 22.04/CPython 3.12 rebuild and finished-artifact ABI/provider validation PENDING/unknown. Fix build inputs, not the launcher. |
+| A7 | `runtime.py`:104-146 copies complete selected-host stdlib/extensions. Historical math/cmath needed 2.44; floor 2.35. Real finished-artifact inspection has now RUN and FAILED (not zero objects): `37847748826` inspected 589 objects then FAILED with 2196 errors; `38040471477` on trimmed `7661eb4` audited 208 objects with 70 missing normal desktop runtime prerequisite errors. | Real artifact gate REACHED but FAILED; pinned 22.04/CPython 3.12 rebuild inputs fixed, ABI/provider closure still FAILING. Fix validation-image prerequisites and trusted-baseline handling, not the launcher. |
 | A8 | Manual extraction changes root-folder/stable launcher, service, update and backup layout; HEAD `install_user.sh`:343-354 backs up image/tag pairs, not extracted trees. | INVESTIGATED contract risk; small reversible managed fallback unproven. DEFER implementation; keep FUSE required, no safety weakening. |
-| A9 | [Existing release workflow](../.github/workflows/release.yml) validates source on ubuntu-latest, then runs a controlled Ubuntu 22.04 CPython 3.12 build/static gate/baseline check plus 24.04 userspace smoke; OpenRazer builds in an Arch container. [smoke.py](../buildpython/steps/appimage/smoke.py) defaults to 24.04/apt/extracted userspace; local Docker/Podman/unsquashfs absent. | Dispatched CI failed at ubuntu-latest source validation (segfault below); controlled 22.04 build/static gate/baseline check and 24.04 smoke were unreached. Local execution remains BLOCKED. No full install/desktop or 22.04/Fedora matrix pass. |
+| A9 | [Existing release workflow](../.github/workflows/release.yml) validates source on ubuntu-latest, then runs a controlled Ubuntu 22.04 CPython 3.12 build/static gate/baseline check plus 24.04 userspace smoke; OpenRazer builds in an Arch container. [smoke.py](../buildpython/steps/appimage/smoke.py) defaults to 24.04/apt/extracted userspace; local Docker/Podman/unsquashfs absent. | Current runs reach the controlled 22.04 build and static gate, then FAIL there: `38040471477` assembled in 31.2s and FAILED with 70 errors; 22.04 baseline and 24.04 smoke, staging, upload UNREACHED. Local execution remains BLOCKED; bwrap presence probe is not installer validation. No full install/desktop or 22.04/Fedora matrix pass. |
 | A10 | [Prior hardware results](hardware-validation.md#existing-baseline-evidence) and CachyOS first-slice passes are separate from [current fix2 evidence](integration-findings.md#openrazer-baseline). Exact-pin natural wake acceptance remains open. | CONFIRMED separation: install/launch is not hardware support. Operator-only existing checks; no extra device/firmware campaign. |
 
 Reporter package references (supervisor official-web inspection, 2026-10-08):
@@ -249,7 +306,7 @@ behavior. Historical facts are scoped, not a fresh AppDir audit or finished-arti
 | Missing/uncallable installed image; no host Python/module | Baseline fake exited 0/claimed uninstall complete while 7/7 user integration assets remained. | Direct known-manifest Bash cleanup, independent of image/wrapper/Python; retain default profiles, unknown backups and OpenRazer. | FAKE-reproduced/fix independently accepted in 109 scoped tests; no live cleanup/device/remap pass. |
 | Uninstall during install, or failed unit stop | Baseline source lacked install lock/suppressed stop failure; fake overlap and unsafe/failure cases now covered. | Same stable nonblocking install-lock inode, private owner/non-symlink paths; stop/disable/unknown unsafe state failures retain files/profiles/backups before cleanup. | FAKE-ACCEPTED in same 109-test run; partial filesystem/reload failures nonzero, no false completion. Real not-found-unit behavior pending. |
 | Desktop PATH omits sbin | Parent's stripped-PATH baseline fixture failed exit 1 without mutations despite available ldconfig. | Prefer PATH executable, then `/usr/sbin/ldconfig`, then `/sbin/ldconfig`; C-locale `-p` only, query failure rejects valid partial stdout. | FAKE-reproduced/fix independently accepted in 179 scoped tests; NOT a real-distro install pass. |
-| Host-built image on old glibc target; current staging absent | Historical math/cmath needed `GLIBC_2.44`; floor 2.35. Current AppDir audit exit 1/zero objects; local 0.4.0 outer runtime scout leaves payload uninspected. | Rebuild with pinned 22.04/CPython 3.12 inputs; minimal finished-artifact static gate in existing workflow. | Partial audit fakes approved; full ABI/provider closure unknown, no finished-artifact or launch acceptance. |
+| Host-built image on old glibc target; trimmed 22.04/CPython 3.12 artifact | Historical math/cmath needed `GLIBC_2.44`; floor 2.35. Real gates now inspect the finished artifact and FAIL: 589 objects/2196 errors on `f48b3a4`, 208 objects/70 missing-prerequisite errors on trimmed `7661eb4` (no floor violation reported in the latest run, not an ABI pass). | Rebuild inputs pinned; minimal finished-artifact static gate in existing workflow REACHED but FAILING. | Reviewed fix (awaits real CI validation): add normal desktop runtime prerequisites to existing 22/24 CI validation images plus EXACT libresolv PRIVATE-baseline allowance; publication BLOCKED. |
 | Missing FUSE2; extraction only manual | Installer requires FUSE; extracted tree lacks proven managed update/rollback/removal contract. | Verified version-appropriate package instructions; preserve FUSE requirement. | Guidance FAKE-ACCEPTED (183); no automatic fallback/setup implemented or runtime pass. |
 | Local container/extraction-tool gap | Docker/Podman/unsquashfs unavailable; existing smoke recipe is apt/extracted userspace only. | Existing authorized runner/VM, not daemon installation or a new test platform. | Environment blocker confirmed; portable build/matrix acceptance absent. |
 
@@ -257,7 +314,7 @@ behavior. Historical facts are scoped, not a fresh AppDir audit or finished-arti
 
 | Family | Concrete target / snapshot | Install / launch / upgrade / remove evidence |
 | --- | --- | --- | --- |
-| Ubuntu | 22.04 approved build floor; newer smoke target TBD | NOT TESTED in this campaign; 24.04 package reference only |
+| Ubuntu | 22.04 approved build floor; existing selected smoke is Ubuntu 24.04 | Controlled build REACHED, static artifact gate FAILED (208 objects, 70 missing-prerequisite errors on `7661eb4`); 22.04 baseline and 24.04 smoke UNREACHED |
 | Debian | Current supported version TBD | NOT TESTED; package lookup pending |
 | Fedora | 44 package-only candidate; actual runner target pending | NOT TESTED; package reference only, no launch/runtime guarantee |
 | Arch | Current immutable rolling snapshot TBD | NOT TESTED for new artifact; prior CachyOS hardware evidence separate |
@@ -290,11 +347,13 @@ cover userspace only, not FUSE desktop, permissions, DKMS, session services, or 
    checks to an attentive operator. Known hardware gates (exact-pin wake,
    held-output handoff, wired alternate plates) remain open; no new device campaign
    and no hardware evidence newly accepted here.
-6. Git/CI/release: `991f331` (README-only) is already committed and pushed;
-   no release/tag/dispatch was triggered. Stable archive acceptance has passed.
-   Next is commit/push of 4 paths (this tracker plus the 3-path `file` fix),
-   then rerun quality plus validation-only Release. Only when green:
-   record final evidence notes, tag/publish v0.5.0 with 6 assets, verify
+6. Git/CI/release: `f48b3a4` (16 paths) and `7661eb4` (12-path trim) are
+   committed and pushed; concurrent README and keyboard/chord changes remain
+   excluded from v0.5 by user choice. Source CI `38040471530`
+   SUCCESS and validation-only Release `38040471477` FAILED at the static gate
+   as recorded above. Next is parent review of the bounded validation-image
+   plus libresolv-baseline fix, then rerun validation-only Release. Only when
+   green: record final evidence notes, tag/publish v0.5.0 with 6 assets, verify
    checksums, run a safe isolated installer test or name the blocker.
    Latest published stays v0.4.0 until then. Other concurrent GUI paths are
    owned separately and are not listed or staged here.
@@ -305,8 +364,8 @@ cover userspace only, not FUSE desktop, permissions, DKMS, session services, or 
 
 Use focused fakes then the exact standard commands above, hardware excluded; changed scripts
 need Bash/ShellCheck. Guidance/builder/gate/workflow are historical FAKE-ACCEPTED local
-receipts; real CI was dispatched and segfaulted (now historical evidence; fix above
-awaits CI rerun); never sum scoped runs.
+receipts; real CI now reaches the controlled build/static gate and FAILS there
+(header evidence); never sum scoped runs.
 Doc-only checks for this edit: ASCII, local links/anchors, read-only `git diff --check` and
 diff review. No Python suite is run for this docs change.
 Keep all Python files <=400 physical lines and follow milestone/first-slice gates.
@@ -316,7 +375,7 @@ adapters; GUI owner remains `src/naga_control/gui/`. Require physical USB ancest
 and forwarding readiness before grabs; retain key-down actions through key-up.
 Unsafe states/write failures release grabs/generated held outputs. Keep filesystem,
 GUI and blocking OpenRazer work off the evdev read/forwarding path.
-This worker writes only this tracker; the revised plan and concurrent GUI, troubleshooting,
+This worker writes only this tracker and the release-notes overview; the revised plan and concurrent GUI, troubleshooting,
 changelog and UI-tracker edits are untouched. This worker performs no Git mutations and runs
 no builds/tests/services/devices; the parent owns commits/pushes/reruns under the user
 authorization above. No version bump, tag, or publication is claimed or done here.
