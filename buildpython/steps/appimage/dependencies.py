@@ -22,6 +22,8 @@ def validate_needed(name: str) -> None:
 
 
 def expand_rpath(entry: str, obj_dir: str) -> str:
+    if entry.endswith("/") and entry != "/" and not entry.endswith("//"):
+        entry = entry[:-1]
     if entry == "" or entry in (".", ".."):
         raise ValueError(f"unsupported RPATH entry: {entry!r}")
     if entry.startswith(("./", "../")) or entry.endswith(("/.", "/..")):

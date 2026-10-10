@@ -89,11 +89,14 @@ def parse_tables(text: str) -> dict[str, tuple[int, int, list[str]]]:
     for block in blocks:
         lines = [line.strip() for line in block.splitlines() if line.strip()]
         header = re.fullmatch(
-            r"Version (symbols|definition|needs) section '[^']+' contains (\d+) entries:", lines[0]
+            r"Version (symbols|definition|needs) section '[^']+' contains (\d+) (entries|entry):",
+            lines[0],
         )
         if header is None or header[1] not in result or header[1] in seen:
             raise ValueError("malformed or unexpected version table")
         kind, count = header[1], int(header[2])
+        if header[3] == "entry" and count != 1:
+            raise ValueError("malformed or unexpected version table")
         if (
             count == 0
             or len(lines) < 3

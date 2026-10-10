@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from appimage_artifact_fakes import (
     MappingInspector,
     baseline_text,
@@ -14,6 +15,7 @@ from appimage_artifact_fakes import (
 )
 
 from buildpython.steps.appimage.artifact import GateReport, audit_artifact
+from buildpython.steps.appimage.dependencies import expand_rpath
 
 
 def _baseline_full(tmp_path: Path, mapping: dict[bytes, str]) -> Path:
@@ -320,3 +322,74 @@ def test_ambiguous_providers_fail(tmp_path: Path) -> None:
     report = _run(tmp_path, bundled, baseline, outer, mapping)
     assert report.status == "fail"
     assert "ambiguous" in " ".join(report.errors).lower()
+
+
+def test_rpath_trailing_slash_matches_loader_semantics() -> None:
+    assert expand_rpath("$ORIGIN/", "usr/lib") == "usr/lib"
+    assert (
+        expand_rpath("$ORIGIN/Qt/lib/", "usr/lib/python3.12/site-packages/PySide6")
+        == "usr/lib/python3.12/site-packages/PySide6/Qt/lib"
+    )
+    assert (
+        expand_rpath("$ORIGIN/../shiboken6/", "usr/lib/python3.12/site-packages/PySide6")
+        == "usr/lib/python3.12/site-packages/shiboken6"
+    )
+
+
+def test_rpath_trailing_slash_closure_resolves(tmp_path: Path) -> None:
+    mapping: dict[bytes, str] = {}
+    baseline = _baseline_full(tmp_path, mapping)
+    outer = _outer()
+    provider = dep_text(
+        needed=("libc.so.6",),
+        needs_map={"libc.so.6": ("GLIBC_2.35",)},
+        defs=("EXTRA_1",),
+        soname="libextra.so",
+    )
+    inner = dep_text(
+        needed=("libextra.so",), needs_map={"libextra.so": ("EXTRA_1",)}, rpath="$ORIGIN/../lib/"
+    )
+    bundled = [
+        ("usr/lib/libextra.so", b"slash-prov", provider),
+        ("usr/bin/app.so", b"slash-app", inner),
+    ]
+    report = _run(tmp_path, bundled, baseline, outer, mapping)
+    assert report.status == "pass", report.errors
+
+
+def test_shiboken_trailing_slash_closure_resolves(tmp_path: Path) -> None:
+    mapping: dict[bytes, str] = {}
+    baseline = _baseline_full(tmp_path, mapping)
+    outer = _outer()
+    provider = dep_text(
+        needed=("libc.so.6",),
+        needs_map={"libc.so.6": ("GLIBC_2.35",)},
+        defs=("SHIBOKEN_1",),
+        soname="libshiboken.so",
+    )
+    inner = dep_text(
+        needed=("libshiboken.so",),
+        needs_map={"libshiboken.so": ("SHIBOKEN_1",)},
+        rpath="$ORIGIN/../shiboken6/",
+    )
+    bundled = [
+        ("usr/lib/python3.12/site-packages/shiboken6/libshiboken.so", b"shib-prov", provider),
+        ("usr/lib/python3.12/site-packages/PySide6/app.so", b"shib-app", inner),
+    ]
+    report = _run(tmp_path, bundled, baseline, outer, mapping)
+    assert report.status == "pass", report.errors
+
+
+@pytest.mark.parametrize(
+    "bad", ["$ORIGIN//", "$ORIGIN/foo//bar", "$ORIGIN/../../..", "$ORIGIN/../.."]
+)
+def test_rpath_double_slash_and_escape_still_fail(tmp_path: Path, bad: str) -> None:
+    with pytest.raises(ValueError, match=r"RPATH|escapes|unsupported"):
+        expand_rpath(bad, "usr/bin")
+    mapping: dict[bytes, str] = {}
+    baseline = _baseline_full(tmp_path, mapping)
+    outer = _outer()
+    inner = dep_text(needed=("libc.so.6",), needs_map={"libc.so.6": ("GLIBC_2.35",)}, rpath=bad)
+    report = _run(tmp_path, [("usr/bin/app.so", b"slash-bad", inner)], baseline, outer, mapping)
+    assert report.status == "fail"
+    assert "RPATH" in " ".join(report.errors) or "escapes" in " ".join(report.errors).lower()

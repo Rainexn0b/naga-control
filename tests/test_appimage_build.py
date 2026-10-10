@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from appimage_assembly_fakes import FakeAssembly, asset_sources, probe_data, write
+from appimage_assembly_fakes import FakeAssembly, asset_sources, probe_data, stage_qt_runtime, write
 
 from buildpython.steps.appimage import assets, build, runtime, tool
 from buildpython.utils.subproc import RunResult
@@ -106,6 +106,7 @@ def test_runtime_excludes_all_host_sites_and_retains_staged_dependencies(tmp_pat
     site = tmp_path / "venv/lib/python3.12/site-packages"
     write(site / "PySide6/__init__.py", "bundled Qt")
     write(site / "dbus/__init__.py", "bundled dbus")
+    stage_qt_runtime(site)
     write(site / "naga_control/adapters/openrazer/__init__.py", "application adapter")
     write(site / "openrazer/__init__.py")
     write(site / "openrazer_client-1.dist-info/METADATA")
@@ -260,6 +261,7 @@ def test_runtime_supports_native_lib64_layout(tmp_path: Path) -> None:
     write(info.dynload / "_test.so")
     write(tmp_path / "venv/lib/python3.12/site-packages/dbus_next/__init__.py")
     write(tmp_path / "venv/lib64/python3.12/site-packages/PySide6/__init__.py", "bundled Qt")
+    stage_qt_runtime(tmp_path / "venv/lib64/python3.12/site-packages")
     appdir = tmp_path / "AppDir"
     runtime.copy_runtime(appdir=appdir, venv=tmp_path / "venv", info=info, libpython=None)
     assert (appdir / "usr/lib64").readlink() == Path("lib")

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import abi
-from .elf import ElfInfo, Inspector, parse_baseline_provider
+from .elf import BASELINE_PRIVATE_ALLOW, ElfInfo, Inspector, parse_baseline_provider
 
 BASELINE_DIRS = (
     "lib/x86_64-linux-gnu",
@@ -62,10 +62,7 @@ def inspect_baseline_fd(fd: int, header: bytes, hint: str, inspector: Inspector)
     try:
         return inspect_elf(fd, header, inspector)
     except ValueError as exc:
-        if "GLIBC_PRIVATE or unknown" in str(exc) and hint in (
-            "libc.so.6",
-            "ld-linux-x86-64.so.2",
-        ):
+        if "GLIBC_PRIVATE or unknown" in str(exc) and hint in BASELINE_PRIVATE_ALLOW:
             result = inspector(fd)
             if result.exit_code or result.skip_reason or result.stderr:
                 raise ValueError("baseline readelf failed") from None

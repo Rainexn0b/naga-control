@@ -177,6 +177,41 @@ def test_version_definition_auxiliary_integrity_and_unknown_table() -> None:
         )
 
 
+def test_real_gnu_singular_entry_count_one_passes() -> None:
+    text = output()
+    assert "contains 1 entries:" in text
+    singular = text.replace("contains 1 entries:", "contains 1 entry:")
+    assert elf.parse_readelf(singular).required_glibc == ("GLIBC_2.35",)
+    both = output(needs=("GLIBC_2.35",), definitions=("GLIBC_2.44",))
+    singular_both = both.replace("contains 1 entries:", "contains 1 entry:")
+    assert singular_both.count("contains 1 entry:") == 2
+    assert elf.parse_readelf(singular_both).required_glibc == ("GLIBC_2.35",)
+
+
+@pytest.mark.parametrize("count", [0, 2, 10])
+def test_singular_entry_with_count_not_one_fails(count: int) -> None:
+    text = output()
+    bad = text.replace("contains 1 entries:", f"contains {count} entry:", 1)
+    assert f"contains {count} entry:" in bad
+    with pytest.raises(ValueError, match="malformed or unexpected version table"):
+        elf.parse_readelf(bad)
+    symbols = text.replace("contains 2 entries:", "contains 2 entry:", 1)
+    with pytest.raises(ValueError, match="malformed or unexpected version table"):
+        elf.parse_readelf(symbols)
+
+
+def test_singular_truncated_aux_address_and_count_still_fail() -> None:
+    singular = output().replace("contains 1 entries:", "contains 1 entry:")
+    with pytest.raises(ValueError):
+        elf.parse_readelf(
+            singular.replace(" 000010: Name: GLIBC_2.35 Flags: none Version: 2\n", "")
+        )
+    with pytest.raises(ValueError):
+        elf.parse_readelf(singular.replace("Addr: 0x0000000000000000 Offset:", "Addr: ? Offset:"))
+    with pytest.raises(ValueError):
+        elf.parse_readelf(singular.replace("contains 1 entry:", "contains 2 entry:", 1))
+
+
 def test_interpreter_header_requires_exactly_one_complete_description() -> None:
     text = output(interpreter="/lib64/ld-linux-x86-64.so.2")
     assert elf.parse_readelf(text).interpreter == "/lib64/ld-linux-x86-64.so.2"

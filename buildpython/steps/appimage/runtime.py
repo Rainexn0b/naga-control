@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from .payload import trim_staged_payloads
 from .tool import APPIMAGETOOL_SHA256
 
 RUNTIME_PROBE = """
@@ -144,3 +145,4 @@ def copy_runtime(*, appdir: Path, venv: Path, info: RuntimeInfo, libpython: Path
     shutil.copy2(info.executable, executable)
     if libpython is not None:
         shutil.copy2(libpython, lib / libpython.name)
+    trim_staged_payloads(appdir=appdir, python_version=info.version)
