@@ -202,6 +202,7 @@ def test_opt_in_partial_failure_stays_stopped_and_never_activates(
     tmp_path: Path, failure: str
 ) -> None:
     fake, script = app_harness(tmp_path, helper=HELPER_OK)
+    (fake.root / "os-release").write_text('NAME="Arch Linux"\nID=arch\nBUILD_ID=rolling\n')
     previous = seed_previous(fake)
     if failure == "helper":
         fake.configure(helper_install_failure=42)
@@ -227,6 +228,7 @@ def test_real_helper_transaction_failure_after_preflight_keeps_previous_naga_sto
     tmp_path: Path,
 ) -> None:
     fake, script = app_harness(tmp_path)
+    (fake.root / "os-release").write_text('NAME="Arch Linux"\nID=arch\nBUILD_ID=rolling\n')
     previous = seed_previous(fake)
     fake.stage_openrazer(script.parent / "install_openrazer.sh")
     fake.configure(pacman_failure=1)
@@ -263,6 +265,7 @@ def test_real_helper_transaction_failure_after_preflight_keeps_previous_naga_sto
 
 def test_opt_in_success_only_enables_and_pending_udev_is_not_ready(tmp_path: Path) -> None:
     fake, script = app_harness(tmp_path, helper=HELPER_OK)
+    (fake.root / "os-release").write_text('NAME="Arch Linux"\nID=arch\nBUILD_ID=rolling\n')
     seed_previous(fake)
     result, commands = fake.run(
         "--version", TAG, "--restart-service", "--install-openrazer", script=script

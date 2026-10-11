@@ -20,6 +20,8 @@ def _run_installer(
     opt_in: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], list[list[str]], InstallerHarness]:
     fake, script = app_harness(tmp_path)
+    if opt_in:
+        (fake.root / "os-release").write_text('NAME="Arch Linux"\nID=arch\nBUILD_ID=rolling\n')
     tag = "v0.3.0" if rule_layout == "packaging" else "v0.4.0"
     fake.configure(rule_layout=rule_layout)
     if checkout:

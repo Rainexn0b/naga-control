@@ -25,17 +25,42 @@ with (root / "commands.jsonl").open("a") as log:
 if name == "id":
     print({"-u": state.get("uid", str(os.getuid())), "-un": "desktop-user", "-nG": state["groups"]}[args[0]])
 elif name == "installer-helper":
-    assert len(args) == 3 and args[0] == "--version", args
-    if args[2] == "--preflight":
-        print("fake prerequisite preflight: " + " ".join(args))
-        sys.exit(state.get("helper_preflight_failure", 0))
-    assert args[2] == "--install", args
-    print("fake prerequisite called: " + " ".join(args))
-    sys.exit(state.get("helper_install_failure", 0))
+    if len(args) == 3 and args[0] == "--version":
+        if args[2] == "--preflight":
+            print("fake prerequisite preflight: " + " ".join(args))
+            sys.exit(state.get("helper_preflight_failure", 0))
+        assert args[2] == "--install", args
+        print("fake prerequisite called: " + " ".join(args))
+        sys.exit(state.get("helper_install_failure", 0))
+    elif len(args) == 7 and args[0] == "--family" and args[2] == "--version" and args[4] == "--code-ref":
+        family = args[1]
+        assert family in ("debian", "fedora", "opensuse"), args
+        assert args[6] in ("--preflight", "--install"), args
+        if args[6] == "--preflight":
+            print("fake native prerequisite preflight: family=" + family + " " + " ".join(args))
+            sys.exit(state.get("helper_preflight_failure", 0))
+        print("fake native prerequisite called: family=" + family + " " + " ".join(args))
+        sys.exit(state.get("helper_install_failure", 0))
+    else:
+        raise AssertionError(f"unexpected helper args: {args}")
 elif name == "curl":
     url = next(arg for arg in args if arg.startswith("https://"))
     if url.endswith("/releases/latest"):
         print("https://github.com/Rainexn0b/naga-control/releases/tag/v0.4.0")
+    elif "api.github.com" in url and "/commits/" in url:
+        if state.get("api_failure"):
+            sys.exit(22)
+        target = Path(args[args.index("-o") + 1])
+        malformed = state.get("api_malformed")
+        if malformed is not None:
+            if isinstance(malformed, list):
+                target.write_text("\n".join(str(p) for p in malformed) + ("\n" if malformed else ""))
+            elif isinstance(malformed, bytes):
+                target.write_bytes(malformed)
+            else:
+                target.write_text(str(malformed))
+            sys.exit(0)
+        target.write_text(state.get("naga_sha", "a" * 40) + "\n")
     else:
         filename = Path(urlsplit(url).path).name
         if filename == state.get("barrier_file"):
@@ -56,15 +81,64 @@ elif name == "curl":
                 sys.exit(0)
             target.write_text(state["previous_digest"] + "  Naga-Control-x86_64.AppImage\n")
             sys.exit(0)
+        if filename == "install_openrazer_native.sh" and state.get("native_helper_download_fail"):
+            sys.exit(22)
         if filename in state["download_fail"] or not fixture.is_file():
             sys.exit(22)
         shutil.copyfile(fixture, target)
+elif name == "dpkg-query":
+    if state.get("dpkg_error"):
+        sys.exit(1)
+    if state.get("dpkg_malformed") is not None:
+        malformed = state["dpkg_malformed"]
+        if isinstance(malformed, list):
+            print("\n".join(str(p) for p in malformed))
+        else:
+            print(str(malformed))
+        sys.exit(0)
+    for pkg, ver in state.get("dpkg_installed", {}).items():
+        print(f"install ok installed {pkg} {ver}")
+elif name == "rpm":
+    if args and args[0] == "-qa":
+        if state.get("rpm_error"):
+            sys.exit(1)
+        if state.get("rpm_malformed") is not None:
+            malformed = state["rpm_malformed"]
+            if isinstance(malformed, list):
+                print("\n".join(str(p) for p in malformed))
+            else:
+                print(str(malformed))
+            sys.exit(0)
+        for pkg, ver in state.get("rpm_installed", {}).items():
+            print(f"{pkg} {ver}")
+    elif args[:2] == ["-q", "--whatprovides"] or (len(args) >= 2 and args[0] == "-q"):
+        if state.get("rpm_query_error"):
+            sys.exit(1)
+        print(state.get("rpm_evr", "6.0.0-1"))
+    else:
+        raise AssertionError(f"unexpected rpm args: {args}")
+elif name in ("apt-get", "dnf", "zypper"):
+    sys.exit(state.get(name + "_failure", 0))
 elif name == "pacman":
     assert args[0] == "-Q", args
-    version = state["installed"].get(args[1])
-    if version is None:
-        sys.exit(1)
-    print(args[1] + " " + version)
+    if len(args) == 1:
+        if state.get("pacman_inventory_error"):
+            sys.exit(1)
+        if state.get("pacman_malformed") is not None:
+            malformed = state["pacman_malformed"]
+            if isinstance(malformed, list):
+                print("\n".join(str(p) for p in malformed))
+            else:
+                print(str(malformed))
+            sys.exit(0)
+        for pkg, ver in state["installed"].items():
+            print(pkg + " " + ver)
+    else:
+        assert len(args) == 2, args
+        version = state["installed"].get(args[1])
+        if version is None:
+            sys.exit(1)
+        print(args[1] + " " + version)
 elif name == "sudo":
     if args[0] == "pacman":
         assert args[1] == "-U", args
@@ -144,14 +218,44 @@ elif name in ("system-python3", "python", "python3"):
     assert args[:2] == ["-I", "-B"], args
     if "-c" in args:
         code = args[args.index("-c") + 1]
+        if "sys.stdin.buffer.read" in code:
+            proc = subprocess.run(
+                [sys.executable, "-I", "-B", "-c", code], input=sys.stdin.buffer.read()
+            )
+            sys.exit(proc.returncode)
         if "sys.exit(0 if sys.version_info" in code:
             version = tuple(int(part) for part in state["host_python"].split(".")) if state["host_python"][0].isdigit() else ()
+            if "(3, 10)" in code:
+                sys.exit(0 if version >= (3, 10) else 1)
             sys.exit(0 if version >= (3, 9) else 1)
         elif "sys.version_info" in code:
             print(state["host_python"] if name == "system-python3" else state["venv_python"])
         else:
             assert "PathFinder" in code, code
-            print("Host import discoverability: openrazer.client=True, openrazer_daemon=True")
+            if "OFFER-PROBE" in code:
+                if state.get("python_discover_error"):
+                    sys.exit(1)
+                if state.get("offer_malformed") is not None:
+                    malformed = state["offer_malformed"]
+                    if isinstance(malformed, list):
+                        print("\n".join(malformed))
+                    else:
+                        print(malformed)
+                elif state.get("python_unknown"):
+                    print("OFFER-PROBE unknown")
+                else:
+                    root = state.get("python_root", False)
+                    client = state.get("python_client", False)
+                    daemon = state.get("python_daemon", False)
+                    print(f"OFFER-PROBE openrazer={root} client={client} daemon={daemon}")
+            elif state.get("python_discover_error"):
+                sys.exit(1)
+            elif state.get("python_unknown"):
+                print("Host import discoverability: unknown")
+            else:
+                client = state.get("python_client", True)
+                daemon = state.get("python_daemon", True)
+                print(f"Host import discoverability: openrazer.client={client}, openrazer_daemon={daemon}")
     else:
         assert name == "system-python3", "validator must use the absolute system interpreter"
         assert args[:3] == ["-I", "-B", "-"], args

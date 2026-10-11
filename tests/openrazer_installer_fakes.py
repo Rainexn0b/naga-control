@@ -130,6 +130,9 @@ def harness(tmp_path: Path) -> InstallerHarness:
         "host_python": "3.14",
         "venv_python": "3.12",
         "metadata": metadata,
+        "dpkg_installed": {},
+        "rpm_installed": {},
+        "naga_sha": "a" * 40,
     }
     (root / "state.json").write_text(json.dumps(state))
     bin_dir = root / "bin"
@@ -139,6 +142,11 @@ def harness(tmp_path: Path) -> InstallerHarness:
         "installer-helper",
         "curl",
         "pacman",
+        "dpkg-query",
+        "rpm",
+        "apt-get",
+        "dnf",
+        "zypper",
         "sudo",
         "systemctl",
         "system-python3",
@@ -167,7 +175,7 @@ def harness(tmp_path: Path) -> InstallerHarness:
         path = bin_dir / command
         path.write_text(f"#!{sys.executable}\n{FAKE}")
         path.chmod(0o755)
-    safe_tools = "bash mkdir mv chmod mktemp rm rmdir dirname grep sha256sum cp cmp wc flock"
+    safe_tools = "bash mkdir mv chmod mktemp rm rmdir dirname grep sha256sum cp cmp wc flock head"
     for command in safe_tools.split():
         executable = shutil.which(command)
         assert executable is not None
@@ -213,9 +221,18 @@ def stage_app_installer(fake: InstallerHarness, *, helper: str | None = None) ->
     source = source.replace("/dev/fuse", str(fake.root / "fuse-device"))
     source = source.replace("/sys/module/fuse", str(fake.root / "missing-fuse-module"))
     source = source.replace("/proc/filesystems", str(fake.root / "filesystems"))
+    source = source.replace("/etc/os-release", str(fake.root / "os-release"))
+    source = source.replace("/usr/lib/os-release", str(fake.root / "vendor-os-release"))
+    source = source.replace("/usr/bin/python3", str(fake.root / "bin/system-python3"))
     (scripts / "install_user.sh").write_text(source)
     if helper is not None:
         (scripts / "install_openrazer.sh").write_text(helper)
+    (fake.root / "os-release").write_text(
+        'NAME="Ubuntu"\nVERSION_ID="24.04"\nID=ubuntu\nID_LIKE=debian\n'
+    )
+    (fake.root / "vendor-os-release").write_text(
+        'NAME="Ubuntu"\nVERSION_ID="24.04"\nID=ubuntu\nID_LIKE=debian\n'
+    )
     (fake.remote / "70-naga-control.rules").write_text("fake tagged rule\n")
     app = fake.remote / "Naga-Control-x86_64.AppImage"
     app.write_text(f"#!{sys.executable}\n{FAKE}")

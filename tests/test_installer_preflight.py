@@ -200,6 +200,7 @@ def test_app_optional_preflight_failure_leaves_old_naga_active_and_files_unchang
     tmp_path: Path, problem: str, stop_consent: bool
 ) -> None:
     fake, script = app_harness(tmp_path)
+    (fake.root / "os-release").write_text('NAME="Arch Linux"\nID=arch\nBUILD_ID=rolling\n')
     previous = seed_previous(fake)
     before = json.loads((fake.root / "state.json").read_text())
     files = [installed_image(fake), stamp(fake), *(fake.root / "home" / p for p in USER_FILES)]

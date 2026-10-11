@@ -16,6 +16,7 @@ from tests.installer_app_fakes import (
     mutations,
     seed_previous,
 )
+from tests.installer_openrazer_offer_fakes import ARCH_OS
 from tests.openrazer_installer_fakes import ROOT, TAG, harness, stage_app_installer
 
 
@@ -23,6 +24,7 @@ from tests.openrazer_installer_fakes import ROOT, TAG, harness, stage_app_instal
 def test_app_opt_in_and_hard_skip(tmp_path: Path, opt_in: str) -> None:
     fake = harness(tmp_path)
     script = stage_app_installer(fake, helper=HELPER_OK)
+    (fake.root / "os-release").write_text(ARCH_OS)
     args = ["--version", TAG]
     if "flag" in opt_in:
         args.append("--install-openrazer")
@@ -58,6 +60,7 @@ def test_app_invalid_env_fails_before_network(tmp_path: Path, value: str) -> Non
 def test_opt_in_helper_failure_precedes_app_install(tmp_path: Path, helper: str | None) -> None:
     fake = harness(tmp_path)
     script = stage_app_installer(fake, helper=helper)
+    (fake.root / "os-release").write_text(ARCH_OS)
     result, commands = fake.run("--version", TAG, "--install-openrazer", script=script)
     assert result.returncode != 0
     assert "done:" not in result.stdout
@@ -70,6 +73,7 @@ def test_opt_in_helper_failure_precedes_app_install(tmp_path: Path, helper: str 
 def test_actual_helper_validation_failure_propagates_to_app(tmp_path: Path) -> None:
     fake = harness(tmp_path)
     script = stage_app_installer(fake)
+    (fake.root / "os-release").write_text(ARCH_OS)
     fake.stage_openrazer(script.parent / "install_openrazer.sh")
     seed_previous(fake)
     # The real helper must not mistake explicit app opt-in for noninteractive --yes.
@@ -88,6 +92,7 @@ def test_actual_helper_inherits_app_lock_and_precedes_execution_not_verification
 ) -> None:
     fake = harness(tmp_path)
     script = stage_app_installer(fake)
+    (fake.root / "os-release").write_text(ARCH_OS)
     fake.stage_openrazer(script.parent / "install_openrazer.sh")
     seed_previous(fake)
     master, slave = pty.openpty()
@@ -173,6 +178,7 @@ def test_documented_install_command_preserves_stdin_and_cleans(
 def test_app_unit_failure_after_opt_in_is_visible(tmp_path: Path, failure: str) -> None:
     fake = harness(tmp_path)
     script = stage_app_installer(fake, helper=HELPER_OK)
+    (fake.root / "os-release").write_text(ARCH_OS)
     fake.configure(unit_failure=failure)
     result, _ = fake.run("--version", TAG, "--install-openrazer", script=script)
     assert result.returncode != 0
@@ -185,6 +191,7 @@ def test_app_unit_failure_after_opt_in_is_visible(tmp_path: Path, failure: str) 
 def test_missing_opted_in_helper_fetched_only_from_selected_release(tmp_path: Path) -> None:
     fake = harness(tmp_path)
     script = stage_app_installer(fake)
+    (fake.root / "os-release").write_text(ARCH_OS)
     (fake.remote / "install_openrazer.sh").write_text(HELPER_OK)
     result, commands = fake.run("--version", TAG, "--install-openrazer", script=script)
     assert result.returncode == 0, result.stderr
@@ -205,6 +212,7 @@ def test_legacy_helper_missing_preflight_support_fails_before_naga_stop(
 ) -> None:
     legacy = 'echo "error: unknown argument: --preflight" >&2; exit 1\n'
     fake, script = app_harness(tmp_path, helper=None if downloaded else legacy)
+    (fake.root / "os-release").write_text(ARCH_OS)
     previous = seed_previous(fake)
     if downloaded:
         (fake.remote / "install_openrazer.sh").write_text(legacy)
@@ -223,6 +231,7 @@ def test_optional_helper_phase_order_is_verified_preflight_stop_install_then_int
     tmp_path: Path,
 ) -> None:
     fake, script = app_harness(tmp_path, helper=HELPER_OK)
+    (fake.root / "os-release").write_text(ARCH_OS)
     seed_previous(fake)
     result, commands = fake.run(
         "--version", TAG, "--install-openrazer", "--restart-service", script=script
@@ -246,6 +255,7 @@ def test_dispatcher_forwards_flag_without_unconditional_helper_fetch(
 ) -> None:
     fake = harness(tmp_path)
     script = stage_app_installer(fake)
+    (fake.root / "os-release").write_text(ARCH_OS)
     shutil.copyfile(script, fake.remote / "install_user.sh")
     (fake.remote / "uninstall.sh").write_text("exit 0\n")
     (fake.remote / "install_openrazer.sh").write_text(HELPER_OK)
@@ -303,6 +313,7 @@ def test_dispatcher_rejects_invalid_env_before_bootstrap(tmp_path: Path, value: 
 def test_app_accepts_safe_build_metadata_release_tag(tmp_path: Path) -> None:
     fake = harness(tmp_path)
     script = stage_app_installer(fake, helper=HELPER_OK)
+    (fake.root / "os-release").write_text(ARCH_OS)
     tag = TAG + "+fixture.1"
     result, commands = fake.run("--version", tag, "--install-openrazer", script=script)
     assert result.returncode == 0, result.stderr

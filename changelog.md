@@ -18,6 +18,22 @@ installing or upgrading.
   verified pair is retained and older verified pairs plus all owned
   quarantines are removed; failed installs still preserve recovery files
   and unsafe or unknown operator files are never automatically removed.
+- Normal installation on eligible Arch/pacman and exact named Ubuntu/Debian,
+  Fedora, and openSUSE hosts with an entirely absent OpenRazer backend now offers
+  consented first-install setup of the pinned cohort `3.12.1.pr2904.fix2-1` from
+  `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` via local native builds (Arch uses
+  prebuilt release assets; named Deb/RPM hosts build local unsigned
+  `openrazer-*-local` packages from the same pinned source) with sudo/package/group
+  and reboot/re-login implications; declining, EOF, or no TTY stays app-only with
+  hardware prerequisites reported as not ready. Existing, partial, manual, or unknown
+  backends are never automatically replaced, and native routes stay first-install only
+  even when explicit. `NAGA_CONTROL_INSTALL_OPENRAZER` unset offers when entirely
+  absent; `=1` is explicit opt-in; `=0` skips even with `--install-openrazer`; any
+  other value is an error;
+  explicit `--install-openrazer` selects the distro helper
+  (`scripts/install_openrazer.sh` or `scripts/install_openrazer_native.sh`;
+  Arch keeps a reviewed reinstall path). Other hosts use the manual matching-source route. Published v0.5
+  scripts/body are unchanged.
 
 ### Fixed
 

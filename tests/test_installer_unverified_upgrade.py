@@ -238,6 +238,8 @@ def test_unverified_after_stop_failure_stays_stopped_with_quarantine(
     tmp_path: Path, failure: str
 ) -> None:
     fake, script = app_harness(tmp_path, helper=HELPER_OK)
+    if failure == "helper":
+        (fake.root / "os-release").write_text('NAME="Arch Linux"\nID=arch\nBUILD_ID=rolling\n')
     _, altered = seed_altered_previous(fake, active=True)
     profile = fake.root / "home/.config/naga-control/profiles.toml"
     profile.parent.mkdir(parents=True)

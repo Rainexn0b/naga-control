@@ -13,6 +13,22 @@ WRAPPER_DST="$BIN_DIR/naga-control"
 STATE_DIR="$HOME/.local/share/naga-control"
 STAMP="$STATE_DIR/installed-tag"
 INSTALL_OPENRAZER=0
+OPENRAZER_HARD_SKIP=0
+OPENRAZER_EXPLICIT=0
+OFFER_ID="UNKNOWN"
+OFFER_LIKE=""
+OFFER_OS_STATUS="unknown"
+OFFER_INVENTORY="unknown"
+OFFER_PYTHON="unknown"
+OFFER_STATUS="unknown"
+OFFER_NATIVE_FAMILY=""
+OFFER_NATIVE_INVENTORY="unknown"
+NATIVE_GATE="unknown"
+OPENRAZER_HELPER_KIND=""
+OPENRAZER_INSTALLER=""
+NATIVE_CODE_REF=""
+EFFECTIVE_BOOTSTRAP_REF=""
+HELPER_BASE_ARGS=()
 RESTART_SERVICE=0
 STAGE=""
 SIBLINGS=()
@@ -41,18 +57,20 @@ while [ "$#" -gt 0 ]; do
     --restart-service) RESTART_SERVICE=1; shift ;;
     -h|--help)
       echo "usage: install_user.sh [--version <tag>] [--install-openrazer] [--restart-service]"
-      echo "App-only by default; env =1 opts in, =0 hard skips OpenRazer."
+      echo "App-only by default; offers consented OpenRazer setup if absent on eligible Arch or named Ubuntu/Debian, Fedora, openSUSE Leap/Tumbleweed, existing/manual/unknown unchanged; env =1 opts in, =0 hard skips OpenRazer."
+      echo "--install-openrazer requests explicit first-install setup (reviewed reinstall/partial inventory only on Arch; existing, partial, manual, or unknown native backends need manual matching-cohort migration) and nonTTY handling."
       echo "--restart-service consents to a graceful Naga-only stop/resume; quit the GUI and release controls first."
       exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
 case "${NAGA_CONTROL_INSTALL_OPENRAZER-}" in
-  0) INSTALL_OPENRAZER=0; log "NAGA_CONTROL_INSTALL_OPENRAZER=0: hard skip (including --install-openrazer)" ;;
+  0) INSTALL_OPENRAZER=0; OPENRAZER_HARD_SKIP=1; log "NAGA_CONTROL_INSTALL_OPENRAZER=0: hard skip (including --install-openrazer)" ;;
   1) INSTALL_OPENRAZER=1 ;;
   "") [ "${NAGA_CONTROL_INSTALL_OPENRAZER+x}" != x ] || die "NAGA_CONTROL_INSTALL_OPENRAZER must be 0, 1, or unset" ;;
   *) die "NAGA_CONTROL_INSTALL_OPENRAZER must be 0, 1, or unset" ;;
 esac
+if [ "$INSTALL_OPENRAZER" -eq 1 ]; then OPENRAZER_EXPLICIT=1; fi
 [ -z "$VERSION" ] || [[ "$VERSION" =~ ^[a-zA-Z0-9][a-zA-Z0-9._+-]*$ ]] || die "invalid release tag"
 case "${APPIMAGE_EXTRACT_AND_RUN-}" in
   0) ;;
@@ -83,6 +101,331 @@ safe_path() {
 safe_file() {
   safe_path "$1"
   [ ! -e "$1" ] || [ -f "$1" ] || die "not a regular file destination: $1"
+}
+# Installer-local OpenRazer auto-offer detection (read-only, no execution).
+# Parses os-release as data, never sources it. Unknown never means supported.
+offer_parse_identity() {
+  local LC_ALL=C
+  local path="" data="" line="" raw="" key="" quote=""
+  local seen_id=0 seen_like=0 newline=0
+  OFFER_ID="UNKNOWN"
+  OFFER_LIKE=""
+  OFFER_OS_STATUS="unknown"
+  if [ -e /etc/os-release ] || [ -L /etc/os-release ]; then
+    path="/etc/os-release"
+  elif [ -e /usr/lib/os-release ] || [ -L /usr/lib/os-release ]; then
+    path="/usr/lib/os-release"
+  else
+    return 0
+  fi
+  [ -f "$path" ] || return 0
+  [ -r "$path" ] || return 0
+  if { IFS= read -r -d '' -n 65537 data < "$path"; } 2>/dev/null; then
+    return 0
+  fi
+  OFFER_ID="UNKNOWN"
+  OFFER_LIKE=""
+  seen_id=0
+  seen_like=0
+  while [ -n "$data" ]; do
+    newline=0
+    if [[ "$data" == *$'\n'* ]]; then
+      line="${data%%$'\n'*}"
+      data="${data#*$'\n'}"
+      newline=1
+    else
+      line="$data"
+      data=""
+    fi
+    if [ "${#line}" -gt 4096 ]; then
+      OFFER_ID="UNKNOWN"; OFFER_LIKE=""; OFFER_OS_STATUS="unknown"; return 0
+    fi
+    if [ "$newline" -eq 1 ]; then
+      line="${line%$'\r'}"
+    fi
+    if [[ "$line" =~ [[:cntrl:]] ]]; then
+      OFFER_ID="UNKNOWN"; OFFER_LIKE=""; OFFER_OS_STATUS="unknown"; return 0
+    fi
+    case "$line" in ""|\#*) continue ;; esac
+    if [[ "$line" =~ ^\ *(ID|ID_LIKE)([^A-Za-z0-9_]|$) ]]; then
+      [[ "$line" =~ ^(ID|ID_LIKE)= ]] || { OFFER_ID="UNKNOWN"; OFFER_LIKE=""; OFFER_OS_STATUS="unknown"; return 0; }
+      key="${BASH_REMATCH[1]}"
+      raw="${line#*=}"
+      if [ "$key" = "ID" ]; then
+        [ "$seen_id" -eq 0 ] || { OFFER_ID="UNKNOWN"; OFFER_LIKE=""; OFFER_OS_STATUS="unknown"; return 0; }
+        seen_id=1
+      else
+        [ "$seen_like" -eq 0 ] || { OFFER_ID="UNKNOWN"; OFFER_LIKE=""; OFFER_OS_STATUS="unknown"; return 0; }
+        seen_like=1
+      fi
+      case "$raw" in
+        \"*\"|\'*\' )
+          quote="${raw:0:1}"
+        [ "${#raw}" -ge 2 ] || { OFFER_ID="UNKNOWN"; OFFER_LIKE=""; OFFER_OS_STATUS="unknown"; return 0; }
+        [ "${raw: -1}" = "$quote" ] || { OFFER_ID="UNKNOWN"; OFFER_LIKE=""; OFFER_OS_STATUS="unknown"; return 0; }
+        raw="${raw:1:${#raw}-2}"
+        ;;
+      esac
+      if [ "$key" = "ID" ]; then
+        [[ "$raw" =~ ^[a-z0-9._-]+$ ]] || { OFFER_ID="UNKNOWN"; OFFER_LIKE=""; OFFER_OS_STATUS="unknown"; return 0; }
+        OFFER_ID="$raw"
+      else
+        [[ "$raw" =~ ^[a-z0-9._-]+(\ +[a-z0-9._-]+)*$ ]] || { OFFER_ID="UNKNOWN"; OFFER_LIKE=""; OFFER_OS_STATUS="unknown"; return 0; }
+        OFFER_LIKE="$raw"
+      fi
+    fi
+  done
+  [ "$seen_id" -eq 1 ] || { OFFER_ID="UNKNOWN"; OFFER_LIKE=""; OFFER_OS_STATUS="unknown"; return 0; }
+  OFFER_OS_STATUS="parsed"
+}
+offer_arch_eligible() {
+  local rest="" token="" found_arch=0
+  [ "$OFFER_OS_STATUS" = "parsed" ] || return 1
+  case "$OFFER_ID" in
+    arch|archlinux)
+      if [ -z "$OFFER_LIKE" ]; then
+        command -v pacman >/dev/null 2>&1 || return 1
+        return 0
+      fi
+      rest="$OFFER_LIKE"
+      while [ -n "$rest" ]; do
+        token="${rest%% *}"
+        if [[ "$rest" == *" "* ]]; then rest="${rest#* }"; else rest=""; fi
+        [ -n "$token" ] || continue
+        case "$token" in arch|archlinux) ;; *) return 1 ;; esac
+      done
+      command -v pacman >/dev/null 2>&1 || return 1
+      return 0
+      ;;
+    ubuntu|debian|fedora|rhel|centos|rocky|almalinux|opensuse|opensuse-leap|opensuse-tumbleweed|suse|sles|alpine)
+      return 1
+      ;;
+  esac
+  [ -n "$OFFER_LIKE" ] || return 1
+  rest="$OFFER_LIKE"
+  while [ -n "$rest" ]; do
+    token="${rest%% *}"
+    if [[ "$rest" == *" "* ]]; then rest="${rest#* }"; else rest=""; fi
+    [ -n "$token" ] || continue
+    case "$token" in
+      arch|archlinux) found_arch=1 ;;
+      ubuntu|debian|fedora|rhel|centos|rocky|almalinux|opensuse|opensuse-leap|opensuse-tumbleweed|suse|sles|alpine) return 1 ;;
+    esac
+  done
+  [ "$found_arch" -eq 1 ] || return 1
+  command -v pacman >/dev/null 2>&1 || return 1
+  return 0
+}
+offer_check_inventory() {
+  local output="" line="" name="" ver="" low="" found=0
+  OFFER_INVENTORY="unknown"
+  command -v pacman >/dev/null 2>&1 || return 0
+  [ -x "/usr/bin/python3" ] || return 0
+  if ! output="$(pacman -Q 2>/dev/null | /usr/bin/python3 -I -B -c 'import sys; data=sys.stdin.buffer.read(1048577); sys.exit(1) if len(data)>1048576 or b"\x00" in data or any(b!=10 and not 32<=b<=126 for b in data) else sys.stdout.buffer.write(data)')"; then
+    OFFER_INVENTORY="unknown"
+    return 0
+  fi
+  if [ -z "$output" ]; then
+    OFFER_INVENTORY="absent"
+    return 0
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    if [[ "$line" =~ [[:cntrl:]] ]]; then
+      OFFER_INVENTORY="unknown"
+      return 0
+    fi
+    case "$line" in *" "* ) ;; *) OFFER_INVENTORY="unknown"; return 0 ;; esac
+    name="${line%% *}"
+    ver="${line#* }"
+    case "$ver" in *" "* ) OFFER_INVENTORY="unknown"; return 0 ;; esac
+    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || { OFFER_INVENTORY="unknown"; return 0; }
+    [[ "$ver" =~ ^[A-Za-z0-9][A-Za-z0-9._+:~+-]*$ ]] || { OFFER_INVENTORY="unknown"; return 0; }
+    low="${name,,}"
+    case "$low" in
+      *openrazer*|*razer-*)
+        found=1
+        break
+        ;;
+    esac
+  done <<< "$output"
+  if [ "$found" -eq 1 ]; then
+    OFFER_INVENTORY="present"
+  else
+    OFFER_INVENTORY="absent"
+  fi
+}
+offer_check_python() {
+  local LC_ALL=C
+  local output=""
+  OFFER_PYTHON="unknown"
+  [ -x "/usr/bin/python3" ] || return 0
+  if ! output="$(/usr/bin/python3 -I -B -c 'from importlib.machinery import PathFinder; p=PathFinder.find_spec("openrazer"); c=PathFinder.find_spec("openrazer.client",p.submodule_search_locations) if p else None; d=PathFinder.find_spec("openrazer_daemon"); print("OFFER-PROBE openrazer="+str(p is not None)+" client="+str(c is not None)+" daemon="+str(d is not None))' 2>/dev/null | /usr/bin/python3 -I -B -c 'import sys; data=sys.stdin.buffer.read(1048577); sys.exit(1) if len(data)>1048576 or b"\x00" in data or any(b!=10 and not 32<=b<=126 for b in data) else sys.stdout.buffer.write(data)')"; then
+    OFFER_PYTHON="unknown"
+    return 0
+  fi
+  case "$output" in
+    "OFFER-PROBE openrazer=False client=False daemon=False")
+      if command -v openrazer-daemon >/dev/null 2>&1; then
+        OFFER_PYTHON="present"
+      else
+        OFFER_PYTHON="absent"
+      fi
+      ;;
+    "OFFER-PROBE openrazer=False client=False daemon=True"|"OFFER-PROBE openrazer=False client=True daemon=False"|"OFFER-PROBE openrazer=False client=True daemon=True"|"OFFER-PROBE openrazer=True client=False daemon=False"|"OFFER-PROBE openrazer=True client=False daemon=True"|"OFFER-PROBE openrazer=True client=True daemon=False"|"OFFER-PROBE openrazer=True client=True daemon=True")
+      OFFER_PYTHON="present"
+      ;;
+    *)
+      OFFER_PYTHON="unknown"
+      ;;
+  esac
+}
+# Native family mapping uses exact named IDs only. ID_LIKE never proves
+# binary or package compatibility, so derivatives stay ineligible.
+offer_native_family() {
+  OFFER_NATIVE_FAMILY=""
+  [ "$OFFER_OS_STATUS" = "parsed" ] || return 1
+  case "$OFFER_ID" in
+    ubuntu|debian) OFFER_NATIVE_FAMILY="debian"; return 0 ;;
+    fedora) OFFER_NATIVE_FAMILY="fedora"; return 0 ;;
+    opensuse-leap|opensuse-tumbleweed) OFFER_NATIVE_FAMILY="opensuse"; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+# Eligible for an automatic native offer: exact ID plus live manager and
+# system Python capabilities. Read-only, no package changes.
+offer_native_eligible() {
+  offer_native_family || return 1
+  case "$OFFER_NATIVE_FAMILY" in
+    debian) command -v apt-get >/dev/null 2>&1 && command -v dpkg-query >/dev/null 2>&1 || return 1 ;;
+    fedora) command -v dnf >/dev/null 2>&1 && command -v rpm >/dev/null 2>&1 || return 1 ;;
+    opensuse) command -v zypper >/dev/null 2>&1 && command -v rpm >/dev/null 2>&1 || return 1 ;;
+  esac
+  [ -x "/usr/bin/python3" ] || return 1
+  /usr/bin/python3 -I -B -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null || return 1
+  return 0
+}
+# Confident absence only: a successful bounded full-database query with every
+# row strictly parsed and unrelated. Any error or malformed row is unknown.
+# A read-only byte gate (<=1MiB, NUL/non-ASCII/controls except LF reject)
+# runs before Bash substitution so NUL is never silently dropped and a
+# truncated tail never reads as absent.
+offer_native_check_inventory() {
+  local output="" line="" pkg="" ver="" low="" found=0 query_ok=0
+  local status="" fields=()
+  OFFER_NATIVE_INVENTORY="unknown"
+  if [ "$OFFER_NATIVE_FAMILY" = "debian" ]; then
+    command -v dpkg-query >/dev/null 2>&1 || return 0
+    if output="$(dpkg-query -W -f='${Status} ${Package} ${Version}\n' 2>/dev/null | /usr/bin/python3 -I -B -c 'import sys; data=sys.stdin.buffer.read(1048577); sys.exit(1) if len(data)>1048576 or b"\x00" in data or any(b!=10 and not 32<=b<=126 for b in data) else sys.stdout.buffer.write(data)')"; then
+      query_ok=1
+      if [ -n "$output" ]; then
+        while IFS= read -r line; do
+          [ -n "$line" ] || continue
+          if [[ "$line" =~ [[:cntrl:]] ]]; then query_ok=0; break; fi
+          # shellcheck disable=SC2206
+          read -r -a fields <<< "$line" || { query_ok=0; break; }
+          [ "${#fields[@]}" -eq 5 ] || { query_ok=0; break; }
+          status="${fields[0]} ${fields[1]} ${fields[2]}"
+          pkg="${fields[3]}"
+          ver="${fields[4]}"
+          case "$status" in
+            "install ok installed"|"install ok unpacked"|"install ok half-configured"|"install ok half-installed"|"install ok config-files"|"deinstall ok config-files"|"hold ok installed") ;;
+            *) query_ok=0; break ;;
+          esac
+          [[ "$pkg" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || { query_ok=0; break; }
+          [[ "$ver" =~ ^[A-Za-z0-9][A-Za-z0-9._+:~+-]*$ ]] || { query_ok=0; break; }
+          low="${pkg,,}"
+          case "$low" in *openrazer*|*razer-*) found=1; break ;; esac
+        done <<< "$output"
+      fi
+    else
+      query_ok=0
+    fi
+  else
+    command -v rpm >/dev/null 2>&1 || return 0
+    if output="$(rpm -qa --queryformat '%{NAME} %{VERSION}-%{RELEASE}\n' 2>/dev/null | /usr/bin/python3 -I -B -c 'import sys; data=sys.stdin.buffer.read(1048577); sys.exit(1) if len(data)>1048576 or b"\x00" in data or any(b!=10 and not 32<=b<=126 for b in data) else sys.stdout.buffer.write(data)')"; then
+      query_ok=1
+      if [ -n "$output" ]; then
+        while IFS= read -r line; do
+          [ -n "$line" ] || continue
+          if [[ "$line" =~ [[:cntrl:]] ]]; then query_ok=0; break; fi
+          case "$line" in *" "* ) ;; *) query_ok=0; break ;; esac
+          pkg="${line%% *}"
+          ver="${line#* }"
+          case "$ver" in *" "* ) query_ok=0; break ;; esac
+          [[ "$pkg" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || { query_ok=0; break; }
+          [[ "$ver" =~ ^[A-Za-z0-9][A-Za-z0-9._+:~+-]*$ ]] || { query_ok=0; break; }
+          low="${pkg,,}"
+          case "$low" in *openrazer*|*razer-*) found=1; break ;; esac
+        done <<< "$output"
+      fi
+    else
+      query_ok=0
+    fi
+  fi
+  if [ "$found" -eq 1 ]; then
+    OFFER_NATIVE_INVENTORY="present"
+  elif [ "$query_ok" -ne 1 ]; then
+    OFFER_NATIVE_INVENTORY="unknown"
+  else
+    OFFER_NATIVE_INVENTORY="absent"
+  fi
+}
+# Effective source code ref for native helper routing. Data only, never
+# executed or used for authentication. Validated before any network.
+resolve_bootstrap_ref() {
+  EFFECTIVE_BOOTSTRAP_REF="${NAGA_CONTROL_BOOTSTRAP_REF:-main}"
+  [[ "$EFFECTIVE_BOOTSTRAP_REF" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || die "invalid code ref"
+  case "$EFFECTIVE_BOOTSTRAP_REF" in
+    *..*|/*|*/|*//*) die "invalid code ref" ;;
+  esac
+  if [[ "$EFFECTIVE_BOOTSTRAP_REF" =~ [[:cntrl:]] ]]; then
+    die "invalid code ref"
+  fi
+}
+ensure_arch_helper() {
+  OPENRAZER_INSTALLER="$SCRIPT_DIR/install_openrazer.sh"
+  if [ ! -f "$OPENRAZER_INSTALLER" ]; then
+    OPENRAZER_INSTALLER="$STAGE/install_openrazer.sh"
+    curl -fsSL -o "$OPENRAZER_INSTALLER" "https://raw.githubusercontent.com/$REPO/$VERSION/scripts/install_openrazer.sh" \
+      || die "could not download install_openrazer.sh for $VERSION"
+  fi
+  [ -s "$OPENRAZER_INSTALLER" ] || die "empty OpenRazer helper"
+}
+# Native helper comes from the source bootstrap ref, never the AppImage
+# version. A checkout-local helper needs no network; otherwise resolve the
+# full commit via the fixed commits API and fetch that exact raw helper.
+ensure_native_helper() {
+  local local_helper="$SCRIPT_DIR/install_openrazer_native.sh"
+  local sha_file="" sha=""
+  if [ -f "$local_helper" ] && [ ! -L "$local_helper" ] && [ -s "$local_helper" ]; then
+    OPENRAZER_INSTALLER="$local_helper"
+    resolve_bootstrap_ref
+    NATIVE_CODE_REF="$EFFECTIVE_BOOTSTRAP_REF"
+    return 0
+  fi
+  resolve_bootstrap_ref
+  sha_file="$STAGE/naga-sha"
+  curl -fsSL -H "Accept: application/vnd.github.sha" -o "$sha_file" "https://api.github.com/repos/$REPO/commits/$EFFECTIVE_BOOTSTRAP_REF" \
+    || die "could not resolve Naga code ref $EFFECTIVE_BOOTSTRAP_REF; no packages built"
+  [ -s "$sha_file" ] || die "invalid Naga code ref data; no packages built"
+  /usr/bin/python3 -I -B - "$sha_file" <<'PY' || die "invalid Naga code ref data; no packages built"
+import pathlib
+import re
+import sys
+text = pathlib.Path(sys.argv[1]).read_text(encoding="ascii")
+if not re.fullmatch(r"[0-9a-f]{40}\n?", text):
+    print("error: invalid Naga code SHA", file=sys.stderr)
+    sys.exit(1)
+PY
+  sha="$(cat "$sha_file")"
+  sha="${sha%$'\n'}"
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "invalid Naga code SHA"
+  OPENRAZER_INSTALLER="$STAGE/install_openrazer_native.sh"
+  curl -fsSL -o "$OPENRAZER_INSTALLER" "https://raw.githubusercontent.com/$REPO/$sha/scripts/install_openrazer_native.sh" \
+    || die "could not fetch native helper for $sha"
+  [ -s "$OPENRAZER_INSTALLER" ] || die "empty native helper"
+  NATIVE_CODE_REF="$sha"
 }
 USER_FILES=(
   ".local/bin/naga-control"
@@ -597,18 +940,148 @@ if [ ! -f "$UDEV_SRC" ]; then
 fi
 [ -s "$UDEV_SRC" ] || die "empty udev rule"
 if [ "$INSTALL_OPENRAZER" -eq 1 ]; then
-  OPENRAZER_INSTALLER="$SCRIPT_DIR/install_openrazer.sh"
-  if [ ! -f "$OPENRAZER_INSTALLER" ]; then
-    OPENRAZER_INSTALLER="$STAGE/install_openrazer.sh"
-    curl -fsSL -o "$OPENRAZER_INSTALLER" "https://raw.githubusercontent.com/$REPO/$VERSION/scripts/install_openrazer.sh" \
-      || die "could not download install_openrazer.sh for $VERSION"
+  offer_parse_identity
+  if offer_arch_eligible; then
+    OPENRAZER_HELPER_KIND="arch"
+    ensure_arch_helper
+    HELPER_BASE_ARGS=(--version "$VERSION")
+    log "checking optional OpenRazer install prerequisites before Naga stop consent"
+    bash "$OPENRAZER_INSTALLER" "${HELPER_BASE_ARGS[@]}" --preflight 9>&- \
+      || die "OpenRazer prerequisite preflight failed; Naga unchanged; opt-in requires a helper supporting --preflight (no legacy fallback)"
+  elif offer_native_family; then
+    if ! offer_native_eligible; then
+      die "explicit OpenRazer setup unsupported on this host ($OFFER_ID); only experimental Arch/pacman and named Ubuntu/Debian, Fedora, openSUSE Leap/Tumbleweed are supported; Naga unchanged"
+    fi
+    offer_native_check_inventory
+    if [ "$OFFER_NATIVE_INVENTORY" = "absent" ]; then
+      offer_check_python
+      if [ "$OFFER_PYTHON" = "absent" ]; then
+        NATIVE_GATE="absent"
+      elif [ "$OFFER_PYTHON" = "present" ]; then
+        NATIVE_GATE="present"
+      else
+        NATIVE_GATE="unknown"
+      fi
+    elif [ "$OFFER_NATIVE_INVENTORY" = "present" ]; then
+      NATIVE_GATE="present"
+    else
+      NATIVE_GATE="unknown"
+    fi
+    if [ "$NATIVE_GATE" != "absent" ]; then
+      die "native first install refused: existing, partial, manual, or unknown OpenRazer detected; follow manual matching-cohort migration or the Arch-specific helper; Naga unchanged; no silent replacement"
+    fi
+    OPENRAZER_HELPER_KIND="native"
+    ensure_native_helper
+    HELPER_BASE_ARGS=(--family "$OFFER_NATIVE_FAMILY" --version "$VERSION" --code-ref "$NATIVE_CODE_REF")
+    log "checking optional OpenRazer install prerequisites before Naga stop consent"
+    bash "$OPENRAZER_INSTALLER" "${HELPER_BASE_ARGS[@]}" --preflight 9>&- \
+      || die "OpenRazer prerequisite preflight failed; Naga unchanged; opt-in requires a helper supporting --preflight (no legacy fallback)"
+  else
+    die "explicit OpenRazer setup unsupported on this host ($OFFER_ID); only experimental Arch/pacman and named Ubuntu/Debian, Fedora, openSUSE Leap/Tumbleweed are supported; Naga unchanged"
   fi
-  [ -s "$OPENRAZER_INSTALLER" ] || die "empty OpenRazer helper"
-  log "checking optional OpenRazer install prerequisites before Naga stop consent"
-  bash "$OPENRAZER_INSTALLER" --version "$VERSION" --preflight 9>&- \
-    || die "OpenRazer prerequisite preflight failed; Naga unchanged; opt-in requires a helper supporting --preflight (no legacy fallback)"
 else
-  log "app-only install: OpenRazer packages, group, and daemon are unchanged"
+  if [ "$OPENRAZER_HARD_SKIP" -eq 1 ] || [ "$OPENRAZER_EXPLICIT" -eq 1 ]; then
+    log "app-only install: OpenRazer packages, group, and daemon are unchanged"
+  else
+    OFFER_STATUS="unknown"
+    OPENRAZER_HELPER_KIND=""
+    OFFER_NATIVE_FAMILY=""
+    offer_parse_identity
+    if offer_arch_eligible; then
+      offer_check_inventory
+      if [ "$OFFER_INVENTORY" = "absent" ]; then
+        offer_check_python
+        if [ "$OFFER_PYTHON" = "absent" ]; then
+          OFFER_STATUS="arch-absent"
+        elif [ "$OFFER_PYTHON" = "present" ]; then
+          OFFER_STATUS="present"
+        else
+          OFFER_STATUS="unknown"
+        fi
+      elif [ "$OFFER_INVENTORY" = "present" ]; then
+        OFFER_STATUS="present"
+      else
+        OFFER_STATUS="unknown"
+      fi
+    elif offer_native_eligible; then
+      offer_native_check_inventory
+      if [ "$OFFER_NATIVE_INVENTORY" = "absent" ]; then
+        offer_check_python
+        if [ "$OFFER_PYTHON" = "absent" ]; then
+          OFFER_STATUS="native-absent"
+        elif [ "$OFFER_PYTHON" = "present" ]; then
+          OFFER_STATUS="present"
+        else
+          OFFER_STATUS="unknown"
+        fi
+      elif [ "$OFFER_NATIVE_INVENTORY" = "present" ]; then
+        OFFER_STATUS="present"
+      else
+        OFFER_STATUS="unknown"
+      fi
+    elif [ "$OFFER_OS_STATUS" = "parsed" ]; then
+      OFFER_STATUS="ineligible"
+    else
+      OFFER_STATUS="unknown"
+    fi
+    if [ "$OFFER_STATUS" = "arch-absent" ]; then
+      if [ -t 0 ]; then
+        log "OpenRazer backend absent: no installed packages or host imports detected"
+        log "Experimental Arch setup offers pinned cohort 3.12.1.pr2904.fix2-1 from 26b0eeb5ed70d638fa3528851adcd5e58369a7f5 (sudo pacman -U, separate group consent, reboot/re-login required)"
+        answer=""
+        read -r -p "Install experimental pinned OpenRazer 3.12.1.pr2904.fix2-1 via sudo pacman -U (driver/daemon/client) with separate openrazer group consent and reboot/re-login required? [y/N] " answer || true
+        case "$answer" in
+          [yY]|[yY][eE][sS])
+            INSTALL_OPENRAZER=1
+            OPENRAZER_HELPER_KIND="arch"
+            ensure_arch_helper
+            HELPER_BASE_ARGS=(--version "$VERSION")
+            log "checking optional OpenRazer install prerequisites before Naga stop consent"
+            bash "$OPENRAZER_INSTALLER" "${HELPER_BASE_ARGS[@]}" --preflight 9>&- \
+              || die "OpenRazer prerequisite preflight failed; Naga unchanged; opt-in requires a helper supporting --preflight (no legacy fallback)"
+            ;;
+          *)
+            log "app-only install: OpenRazer packages, group, and daemon are unchanged"
+            log "OpenRazer is not installed; hardware prerequisites still missing. Rerun with --install-openrazer on experimental Arch/pacman for consented setup, or follow the manual matching-source route for other distributions. See docs/release-notes.md#required-openrazer. Installer success does not establish hardware readiness."
+            ;;
+        esac
+      else
+        log "app-only install: OpenRazer packages, group, and daemon are unchanged"
+        log "OpenRazer is not installed; hardware prerequisites still missing. Rerun with --install-openrazer on experimental Arch/pacman for consented setup, or follow the manual matching-source route for other distributions. See docs/release-notes.md#required-openrazer. Installer success does not establish hardware readiness."
+      fi
+    elif [ "$OFFER_STATUS" = "native-absent" ]; then
+      if [ -t 0 ]; then
+        log "OpenRazer backend absent: no installed packages or host imports detected"
+        log "Experimental $OFFER_NATIVE_FAMILY native setup builds pinned cohort 3.12.1.pr2904.fix2-1 from 26b0eeb5ed70d638fa3528851adcd5e58369a7f5 locally (consented build tools/active-kernel headers/stock OS repos + 3 local native packages, separate prerequisite/group consent, reboot/re-login required)"
+        answer=""
+        read -r -p "Build locally and install the native cohort (managers keep their prompts) with separate prerequisite/group consent and reboot/re-login required? [y/N] " answer || true
+        case "$answer" in
+          [yY]|[yY][eE][sS])
+            INSTALL_OPENRAZER=1
+            OPENRAZER_HELPER_KIND="native"
+            ensure_native_helper
+            HELPER_BASE_ARGS=(--family "$OFFER_NATIVE_FAMILY" --version "$VERSION" --code-ref "$NATIVE_CODE_REF")
+            log "checking optional OpenRazer install prerequisites before Naga stop consent"
+            bash "$OPENRAZER_INSTALLER" "${HELPER_BASE_ARGS[@]}" --preflight 9>&- \
+              || die "OpenRazer prerequisite preflight failed; Naga unchanged; opt-in requires a helper supporting --preflight (no legacy fallback)"
+            ;;
+          *)
+            log "app-only install: OpenRazer packages, group, and daemon are unchanged"
+            log "OpenRazer is not installed; hardware prerequisites still missing. Rerun with --install-openrazer on named Ubuntu/Debian, Fedora, openSUSE Leap/Tumbleweed for consented local build, on experimental Arch/pacman for prebuilt setup, or follow the manual matching-source route for other distributions. See docs/release-notes.md#required-openrazer. Installer success does not establish hardware readiness."
+            ;;
+        esac
+      else
+        log "app-only install: OpenRazer packages, group, and daemon are unchanged"
+        log "OpenRazer is not installed; hardware prerequisites still missing. Rerun with --install-openrazer on named Ubuntu/Debian, Fedora, openSUSE Leap/Tumbleweed for consented local build, on experimental Arch/pacman for prebuilt setup, or follow the manual matching-source route for other distributions. See docs/release-notes.md#required-openrazer. Installer success does not establish hardware readiness."
+      fi
+    elif [ "$OFFER_STATUS" = "present" ]; then
+      log "app-only install: OpenRazer packages, group, and daemon are unchanged"
+      log "Existing OpenRazer installation detected; leaving it unchanged (no automatic replacement). Presence alone does not prove hardware readiness. For reviewed reinstall use --install-openrazer only on Arch; on named native families an existing backend needs manual matching-cohort migration; see docs/release-notes.md#required-openrazer."
+    else
+      log "app-only install: OpenRazer packages, group, and daemon are unchanged"
+      log "OpenRazer status unknown or host not eligible for automatic Arch or native offer; leaving it unchanged. For explicit setup use --install-openrazer on experimental Arch/pacman or named Ubuntu/Debian, Fedora, openSUSE Leap/Tumbleweed, or the manual matching-source route; see docs/release-notes.md#required-openrazer."
+    fi
+  fi
 fi
 state="$(active_state)" || die "could not query Naga service state"
 PREVIOUS_UNIT_STATE="$(systemctl --user show naga-control.service --property=UnitFileState --value 9>&-)" \
@@ -658,10 +1131,15 @@ fi
 if [ "$INSTALL_OPENRAZER" -eq 1 ]; then
   ensure_stopped || die "Naga became active again; quit the GUI before the OpenRazer transaction"
   DEPENDENCIES_STARTED=1
+  case "$OPENRAZER_HELPER_KIND" in
+    arch|native) ;;
+    *) die "unknown helper kind" ;;
+  esac
+  [ "${#HELPER_BASE_ARGS[@]}" -gt 0 ] || die "missing helper arguments"
   # The foreground helper may inherit this lock; its own privileged/service
   # children close it. Preflight passed before any Naga stop; the actual helper
   # independently repeats its environment gates before the package transaction.
-  bash "$OPENRAZER_INSTALLER" --version "$VERSION" --install \
+  bash "$OPENRAZER_INSTALLER" "${HELPER_BASE_ARGS[@]}" --install \
     || die "OpenRazer prerequisite step failed; possible partial changes, Naga was not installed/started"
 fi
 # Prepare integration off to the side; the AppImage never writes live user files.

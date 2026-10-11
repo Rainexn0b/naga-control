@@ -2,7 +2,15 @@
 
 ## Installer prerequisites
 
-The new checkout installer is app-only by default. It requires a **non-root
+The new checkout installer is app-only by default with a consented first-install
+offer on eligible Arch/pacman and exact named Ubuntu/Debian/Fedora/openSUSE hosts.
+On those hosts with an entirely absent backend it prompts with the pinned cohort,
+sudo/package/group and reboot/re-login implications; declining, EOF, or no TTY stays
+app-only with hardware prerequisites reported as not ready. Existing, partial, manual,
+or unknown backends are never automatically replaced. Native routes are first-install
+only even when explicit. `NAGA_CONTROL_INSTALL_OPENRAZER` unset offers when entirely
+absent; `=1` is explicit opt-in; `=0` skips even with `--install-openrazer`; any
+other value is an error. It requires a **non-root
 Linux x86_64 desktop user**, writable HOME/`.local`/user integration trees, and
 no symlink file destinations or installation ancestors. Do not run the panel
 as root or fix this by broadening device permissions. It checks user systemd
@@ -47,6 +55,23 @@ It overrides install flags/`=1`; `=0` still hard-skips everything, and invalid
 environment values fail. It does not establish release archive/Python-minor
 compatibility or hardware readiness. Actual installation repeats these gates.
 
+Local native setup on exact named Ubuntu/Debian, Fedora, and openSUSE Leap/TW
+needs system Python >= 3.10 (Leap 15.6 default 3.6 is not ready and is never
+replaced automatically), plus the distro package manager and its normal build and
+runtime prerequisites; see [local native installer](release-notes.md#local-native-installer-ubuntudebian-fedora-opensuse).
+Mint, RHEL, SLES, and unknown-ID derivatives get no automated native install.
+For a separate read-only install-environment plan, use
+`bash scripts/install_openrazer_native.sh --family debian --preflight`; for
+inventory use `bash scripts/install_openrazer_native.sh --family debian --check`.
+`--preflight` is only an environment plan, not proof of replacement, and
+`--install` repeats first-only detection. Both stay read-only except `--install`,
+read no hardware, system daemon, or session owner, and `--yes` skips only the
+summary. Native package builds passed on exact Ubuntu 22.04.5, Fedora 44, and
+openSUSE TW 20261009 (see the native table in
+[local native installer](release-notes.md#local-native-installer-ubuntudebian-fedora-opensuse));
+live install, DKMS, service, desktop, and hardware passes are not claimed, and named
+Debian/Leap were not smoked.
+
 ## Installer checksums and older releases
 
 The new installer requires the selected exact release tag's
@@ -84,16 +109,20 @@ is recommended.
 
 Before an upgrade, **quit the GUI and release held controls**. The new installer
 validates app bytes and all required app/rule/helper downloads first, runs the
-optional helper's read-only `--preflight` when opted in, then asks
+optional helper's read-only `--preflight` when opted in or when the Arch or named
+native absent offer is accepted, then asks
 before gracefully stopping an active **Naga-only** user service. Remapping stops
 temporarily. Default refusal or non-TTY execution cancels without replacement;
 `--restart-service` is explicit consent, not consent to package conflict prompts.
 It never kills GUI/OpenRazer processes. A synchronous stop must finish with
 `ActiveState=inactive`; active/deactivating/failed remnants abort replacement.
 
-App-only success starts/enables Naga. Opt-in checks the helper's install-environment
-prerequisites before stop consent, so missing Python/headers/tools/session support
-leaves the old running Naga and its files unchanged. A helper lacking
+App-only success starts/enables Naga. Opt-in or an accepted absent offer checks
+the helper's install-environment
+prerequisites before stop consent, so blocking missing Python/session/manager or
+unsupported native flavor leaves the old running Naga and its files unchanged with
+no automatic app stop until opt-in. Planned missing matched headers/build tools are
+provisioned only after consented Naga stop. A helper lacking
 `--preflight` support fails closed with no legacy fallback; only explicit opt-in
 needs that helper. The actual package/helper install runs after consented Naga
 stop and verified app bytes, then enables **without starting**.
@@ -194,15 +223,24 @@ held-ALT down/up checks with one transport and the precautions in
    string proves support. Inspect `systemctl --user status
    openrazer-daemon.service` and its user journal. Do not blindly restart a new
    daemon against a module left loaded from an older package cohort.
-3. Ordinary app installation never repairs/replaces OpenRazer. Experimental
-   Arch/pacman users can explicitly permit replacement with
+3. Ordinary app installation never repairs/replaces an existing OpenRazer backend.
+   On eligible Arch/pacman and exact named Ubuntu/Debian/Fedora/openSUSE hosts
+   with an entirely absent backend it offers consented first-install setup;
+   declining or ineligible hosts stay app-only with hardware prerequisites
+   reported as not ready. Native routes stay first-install only even when explicit.
+   Experimental Arch/pacman users can explicitly permit replacement with
    `bash scripts/install_openrazer.sh --version <release-tag> --install` or the
-   app installer's `--install-openrazer`. See
-   [prerequisites and rollback](release-notes.md#required-openrazer) first.
+   app installer's `--install-openrazer`. Named Deb/RPM/Fedora/openSUSE hosts use
+   `bash scripts/install_openrazer_native.sh --family fedora --check` for inventory
+   and the same helper with `--preflight` or `--install` from a checkout; if no
+   backend is present, retry the compact normal command or add `--install-openrazer`,
+   and with `=0` the result stays app-only. See
+   [prerequisites and rollback](release-notes.md#required-openrazer) and
+   [local native installer](release-notes.md#local-native-installer-ubuntudebian-fedora-opensuse) first.
    Package/Python validation and user-unit failures are non-success; after a
    post-transaction failure, inspect inventory before activation. Group consent
    is separate; reboot/re-login and runtime verification remain required. Other
-   distributions need matching-source native packages, not pacman commands.
+   hosts need matching-source native packages, not pacman or native-helper commands.
 4. Driver mode regression: clicks working without special-button mappings can
    indicate mode `0:0`, but this is not proof of its cause. Capture the app
    snapshot/journal before recovery. With compatible activated OpenRazer and no

@@ -57,6 +57,8 @@ def _candidate(fake: InstallerHarness, path: Path, kind: str) -> None:
 
 def test_path_ldconfig_is_preferred_over_both_fixed_paths(tmp_path: Path) -> None:
     fake, script, fixed = ldconfig_harness(tmp_path)
+    # Isolate this FUSE-discovery test from optional backend inspection.
+    fake.environment["NAGA_CONTROL_INSTALL_OPENRAZER"] = "0"
     preferred = fake.root / "bin/ldconfig"
     write_ldconfig(fake, preferred)
     for fallback in fixed:

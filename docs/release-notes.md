@@ -187,9 +187,18 @@ daemon version string alone is not proof of support.
 Release packaging provides an optional set of three experimental Arch packages
 (`openrazer-driver-dkms-local`, `openrazer-daemon-local`, and
 `python-openrazer-local`) and `openrazer-arch-packages.sha256`. Older releases
-may lack these assets or the helper. Ordinary app installation works without
-the optional helper and **never** offers or modifies OpenRazer. Explicit opt-in
+may lack these assets or the helper, and no published Deb/RPM assets or signatures
+are introduced. Ordinary installation on main/checkouts offers consented first-install
+setup only when the backend is entirely absent on eligible Arch/pacman hosts and on
+exact named Ubuntu/Debian/Fedora/openSUSE hosts via local native builds from the same
+pinned source; existing, partial, manual, or unknown backends are left unchanged and
+other hosts stay app-only. `NAGA_CONTROL_INSTALL_OPENRAZER` unset offers when
+entirely absent; `=1` is explicit opt-in; `=0` skips even with `--install-openrazer`;
+any other value is an error. Native routes
+are first-install only even when explicit; only Arch keeps a reviewed explicit reinstall
+path. Explicit opt-in
 to a release lacking prerequisites fails visibly; it does not report success.
+Published v0.5 scripts/body are immutable; the new default applies to main/checkouts only.
 
 ### Experimental Arch/pacman installer
 
@@ -250,7 +259,7 @@ Only explicit opt-in requires this helper support; app-only/older bootstrap
 operation remains independent of the optional helper. Setting
 `NAGA_CONTROL_INSTALL_OPENRAZER=1` opts in but does **not** bypass confirmation.
 `=0` overrides install flags as a hard skip; any other set value is invalid.
-Standalone `--check` stays read-only even with install flags or `=1`.
+Standalone `--check` stays read-only even with install flags or explicit opt-in.
 Standalone `--yes` opts in and skips **only** the helper's summary confirmation,
 never pacman's conflict/replacement prompts. Group addition requires separate
 consent (`--add-openrazer-group` or its separate terminal prompt) and uses the
@@ -319,6 +328,105 @@ driver/daemon activation; re-login refreshes group/session permissions. Do not
 restart the new daemon against an old loaded module. Reloading udev rules alone
 does not prove permissions on existing nodes.
 
+### Local native installer (Ubuntu/Debian, Fedora, openSUSE)
+
+This route covers only exact named Ubuntu/Debian with apt/dpkg, Fedora with
+dnf/rpm, and openSUSE Leap/TW with zypper/rpm, using system Python >= 3.10.
+Leap 15.6 default 3.6 is not ready and is never replaced automatically. Manager
+or `ID_LIKE` alone never proves binary compatibility: Mint, RHEL, SLES, and
+unknown-ID derivatives get no automated native install; Arch-compatible
+derivatives keep the existing conditional Arch path. Other hosts stay app-only
+and continue generically when capabilities are present. Backend system-Python
+need is separate from the bundled Naga Python 3.12; the broad AppImage distro
+range and this narrow backend matrix are different, with no universal Linux claim.
+Arch prebuilt assets and their System Python 3.14 cohort are unchanged.
+
+The offer runs only when the backend is confidently entirely absent: successful
+DB lookup plus system-Python path-finder absence of root/client/daemon modules
+plus no OpenRazer daemon launcher. Existing, partial, manual, or unknown backends
+stay app-only with no automatic replacement. Native install is first-install only,
+even when explicit; an existing or partial backend needs operator manual migration
+to a matching cohort, not a one-command reinstall. Only Arch keeps a reviewed
+explicit reinstall path. Decline, EOF, or no TTY stays app-only with a success
+report that hardware prerequisites are not ready. `--install-openrazer` selects
+the distro helper; `NAGA_CONTROL_INSTALL_OPENRAZER` unset offers when entirely
+absent; `=1` is explicit opt-in; `=0` skips even with `--install-openrazer`;
+any other value is an error.
+
+Local packages are built on the host OS for its target minor from an exact fresh
+clean pinned GIT checkout at `26b0eeb5ed70d638fa3528851adcd5e58369a7f5`
+(branch `naga-v3-pro-compat`, tag `naga-v3-pro-compat-v1`,
+`3.12.1.pr2904.fix2-1`), as three local roles `openrazer-driver-dkms-local`,
+`openrazer-daemon-local`, and `python-openrazer-local`. No published Deb/RPM
+assets or signatures are introduced; local checksums are corruption checks, not
+signed-release authentication. Distro version, cohort, or daemon version alone
+never proves mouse capability; actual OpenRazer, runtime, and hardware checks in
+[Hardware Validation](hardware-validation.md) stay authoritative.
+
+OS prerequisites, group consent, and package-manager prompts stay separate.
+Prerequisite and local-package transactions are separately previewed/consented;
+group addition has separate consent. The summary plans active-kernel headers/build
+tools and shows the cohort; headers are installed only if missing, and the manager
+can no-op already-installed runtime (no kernel upgrade, external repos, module
+autoload, old-backend removal, or Secure Boot key changes). Source building stays
+unprivileged. Native `--yes` skips only the summary, never prerequisite/package/group
+prompts; avoid automation. Preflight runs before any Naga stop; a running GUI must
+quit and a graceful Naga-only stop needs consent (`--restart-service` keeps its
+app-only meaning). No automatic app stop happens until opt-in. Opt-in success or
+failure leaves Naga stopped with deferred activation and never enables user daemon
+units with `--now`, starts daemons, restarts modules, or activates on unsafe failure.
+Partial prerequisite/package failure needs manual inventory; profiles are left
+alone and system packages have no automatic rollback. Naga uninstall retains
+OpenRazer.
+
+From a checkout, read-only inventory and environment plan need no network,
+device, daemon, or session-owner access:
+
+```bash
+bash scripts/install_openrazer_native.sh --family debian --check
+bash scripts/install_openrazer_native.sh --family debian --preflight
+```
+
+`--check` is backend inventory; `--preflight` is only an environment plan, not
+proof of first-install replacement. `--install` repeats first-only detection
+before any change. Outer `install.sh --ref` or `NAGA_CONTROL_BOOTSTRAP_REF`
+selects the Naga helper/builder source; standalone helper uses `--code-ref`,
+and `--version` only selects the AppImage release tag separately (native packages
+stay on the fixed OpenRazer SHA/cohort). If no backend is present, retry the
+compact normal command or add `--install-openrazer`; with `=0` the result stays
+app-only. The helper reads no hardware, system daemon, or session owner.
+
+Bootstrap and pinning: with no `--version`, the installer resolves the latest
+published AppImage release separately from the code checkout. Default `main`
+bootstrap/help plus native builder scripts are trusted HTTPS code; the native
+helper/builder source follows the effective `--ref` or
+`NAGA_CONTROL_BOOTSTRAP_REF` by fetching the resolved full Naga source commit
+when remote (not AppImage v0.5.0 release assets, which have no native payload).
+`main` claims no reproducibility; a local checkout runs its local helper/builder.
+Historical published scripts are unchanged. For reproducible native code, fetch the
+outer bootstrap from the full Naga code commit containing the change and pass `--ref`
+for that same full code SHA, plus `--version` for the published AppImage tag
+separately; published v0.5 has no native helper/builder. The Arch prebuilt path still uses
+the selected AppImage release; published v0.5 tag/body/assets stay immutable
+history. Externally fetched code runs only with consent and claims no
+SLSA/signed-native proof.
+
+Native package builds passed rootless from pinned source
+`26b0eeb5ed70d638fa3528851adcd5e58369a7f5` (`3.12.1.pr2904.fix2-1`); no OpenRazer
+install, DKMS compile/load, service, GUI, device, or hardware run:
+
+| Environment | Python | Native build |
+| --- | --- | --- |
+| Ubuntu 22.04.5 | 3.10.12 (dpkg-deb 1.21.1) | PASS |
+| Fedora 44 | 3.14.8 (RPM 6.0.2) | PASS |
+| openSUSE TW 20261009 | 3.13.15 (RPM 4.20.1) | PASS |
+
+This proves native package build only, not live install, kernel/DKMS, Secure Boot,
+runtime, or blanket distro certification. Named Debian and Leap were not smoked;
+the table records the exact three tested environments. Debian uses concrete
+`dbus-user-session`; SUSE `python3-*` names are evidenced only on TW, not on Leap
+with default 3.6.
+
 ### Verification, upgrades, and removal
 
 After reboot/re-login, repeat `--check` and an actual host import check:
@@ -348,7 +456,9 @@ set** only after its released capabilities and recovery behavior for `00E7` and
 
 ### Other distributions: manual matching-source native build
 
-No automated Debian/Fedora prerequisite install is provided or claimed tested.
+Exact named Ubuntu/Debian, Fedora, and openSUSE Leap/TW hosts use the automated
+local native route above; this manual route remains for Mint, RHEL, SLES,
+unknown-ID derivatives, and any other host outside that narrow matrix.
 Obtain your distribution's OpenRazer source-package recipe and adapt **all**
 components to the same immutable source. Start with this concrete source and
 unprivileged staging route (not a root installation command):

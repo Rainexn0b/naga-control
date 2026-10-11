@@ -21,8 +21,10 @@ frontend and it does not reimplement OpenRazer's HID protocol.
 Requires an unprivileged Linux x86_64 desktop session, user systemd/session
 D-Bus, FUSE2 library/runtime support, `curl`, `sudo`, and the standard tools
 listed under [installer prerequisites](docs/troubleshooting.md#installer-prerequisites).
-OpenRazer must already provide the [Naga baseline](docs/release-notes.md).
-No missing OS prerequisites are automatically installed.
+Hardware use needs the OpenRazer [Naga baseline](docs/release-notes.md#required-openrazer);
+app-only install succeeds without it and reports the missing backend as not ready.
+No missing OS prerequisites are installed silently: Naga FUSE setup stays manual
+and any OpenRazer setup needs explicit consent, see below.
 Managed service/desktop integration always requires FUSE; leave
 `APPIMAGE_EXTRACT_AND_RUN` unset (or `0`). Extraction is manual launch-only,
 not a supported FUSEless managed installation.
@@ -48,7 +50,11 @@ https://raw.githubusercontent.com/Rainexn0b/naga-control/<tag>/install.sh -o
 install.sh && bash install.sh --ref <tag> --version <tag>`. Running only
 `bash install.sh --ref <tag> --version <tag>` on a file downloaded from `main`
 is not a pinned bootstrap. From a
-checkout, run `./install.sh` (same latest-published default).
+checkout, run `./install.sh` (same latest-published default). That tag pin covers
+the AppImage only; current native helper/builder need the outer bootstrap from the
+full Naga code commit containing the change with `--ref` for that same SHA, plus
+`--version` for the published AppImage tag separately; published v0.5 has no native
+helper/builder.
 
 Upgrades rerun the same command with the existing stop consent. By default
 the current `main` installer replaces a mismatched local image with the
@@ -88,9 +94,19 @@ Notes:
   Require `status` = `available` and perform physical F13/F14 DPI-stage and
   F17 held-ALT down/up checks. These are not automatically established by
   installation.
-- The ordinary install is **app-only**: it never offers, downloads,
-  installs, or replaces OpenRazer. Explicit opt-in is an advanced topic,
-  see below.
+- The ordinary install is **app-only by default**: on eligible Arch/pacman and
+  exact named Ubuntu/Debian/Fedora/openSUSE hosts with an entirely absent
+  backend it offers consented first-install setup of the pinned cohort from
+  local native builds (Arch uses optional prebuilt release assets; named
+  Deb/RPM hosts build local unsigned `openrazer-*-local` packages from the
+  same pinned source); existing, partial, manual, or unknown backends are left
+  unchanged and other hosts stay app-only. Declining, EOF, or no TTY stays
+  app-only with a success report that hardware prerequisites are not ready.
+  `NAGA_CONTROL_INSTALL_OPENRAZER` unset offers when entirely absent; `=1` is
+  explicit opt-in; `=0` skips even with `--install-openrazer`; any other value
+  is an error. Native routes
+  are first-install only even when explicit; only Arch keeps a reviewed
+  explicit reinstall path, see below.
 
 ### Run
 
@@ -105,14 +121,38 @@ terminal:
 
 <details><summary><b>Advanced install topics</b></summary>
 
-OpenRazer opt-in is for experimental Arch/pacman hosts only: append
-`--install-openrazer` to the same bash command, or set
-`NAGA_CONTROL_INSTALL_OPENRAZER=1`. `NAGA_CONTROL_INSTALL_OPENRAZER=0` is a
-hard skip even with the flag; any other value is an error. Activation is
-deferred: units are enabled without starting them, so reboot or re-login
-and verify OpenRazer first. Read [required
-OpenRazer](docs/release-notes.md#required-openrazer) before opting in, and
-never fetch and execute the Arch helper directly.
+Default offer is for eligible Arch/pacman and exact named Ubuntu/Debian/Fedora/openSUSE
+hosts with an entirely absent backend only: it prompts with the pinned cohort,
+sudo/package/group and reboot/re-login implications and needs a terminal;
+declining, EOF, or no TTY stays app-only with hardware prerequisites reported
+as not ready. Existing, partial, manual/source, or unknown backends are never
+automatically replaced. Native routes are first-install only even when explicit;
+only Arch keeps a reviewed explicit reinstall/partial path.
+OpenRazer opt-in selects the distro helper: append `--install-openrazer` to the
+same bash command, or set `NAGA_CONTROL_INSTALL_OPENRAZER=1`.
+`NAGA_CONTROL_INSTALL_OPENRAZER` unset offers when entirely absent; `=1` is
+explicit opt-in; `=0` skips even with `--install-openrazer`; any other value
+is an error. Activation is deferred: units are enabled
+without starting them, so reboot or re-login and verify OpenRazer first. Read
+[required OpenRazer](docs/release-notes.md#required-openrazer) before opting in, and
+never fetch and execute a helper directly (`scripts/install_openrazer.sh` or
+`scripts/install_openrazer_native.sh`). Mint/RHEL/SLES/unknown-ID derivatives
+get no automated native install; Arch-compatible derivatives keep the existing
+conditional path. Other hosts stay app-only and continue generically when
+capabilities are present.
+The bundled AppImage target stays Ubuntu 22.04/glibc 2.35 floor on x86_64 where its
+requirements are met; the
+backend matrix stays narrow (Arch with prebuilt assets and unchanged System Python
+3.14 cohort, plus named Ubuntu/Debian via apt/dpkg, Fedora via dnf/rpm, and
+openSUSE Leap/TW via zypper/rpm with system Python >= 3.10; Leap 15.6 default 3.6
+is not ready and is never replaced automatically).
+System Python for the backend is separate from the bundled Naga Python 3.12;
+no universal Linux backend claim is made. OS prerequisites, group consent, and
+package-manager prompts stay separate, and only missing active-kernel headers
+are reported (no kernel upgrade, external repos, autoload, old-backend removal,
+or Secure Boot key changes). `--yes` on a native helper skips only the summary,
+never prerequisite/package/group prompts; avoid automation. After reboot/re-login
+verify DKMS/module, Secure Boot state, and runtime capabilities before Naga startup.
 
 Manual FUSE2 library references (verified 2026-10-08; you run these yourself,
 the installer never installs packages):
@@ -220,11 +260,13 @@ OpenRazer build while
 [PR #2904](https://github.com/openrazer/openrazer/pull/2904) remains unmerged.
 This is a project prerequisite, not a development blocker. The pinned baseline
 is fork commit `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` on branch
-`test-pr-2904-edualb`, packaged as `3.12.1.pr2904.fix2-1`. Release packaging
-provides these optional prebuilt pinned Arch assets; older tags may lack them.
-Installation is strictly
-opt-in and restricted to experimental compatible Arch/pacman/Python hosts;
-other distributions require a native matching-source build. Exact-pin natural
+`test-pr-2904-edualb`, packaged as `3.12.1.pr2904.fix2-1`. Published releases provide
+optional prebuilt pinned Arch assets; older tags may lack them and no published
+Deb/RPM assets or signatures are introduced. On current main/checkouts,
+installation is strictly opt-in: Arch/pacman uses those prebuilt assets on
+compatible Python hosts, while exact named Ubuntu/Debian/Fedora/openSUSE hosts
+build local unsigned `openrazer-*-local` packages from the same pinned source;
+other hosts stay app-only. Exact-pin natural
 idle/wake acceptance remains open; older baseline passes do not establish fix2
 hardware acceptance. See
 [integration findings](docs/integration-findings.md) for the tested baselines,
@@ -320,7 +362,12 @@ kernel module, daemon, and client must come from the same compatible build.
 
 `openrazer.client` is a system integration dependency and is deliberately not
 declared as a PyPI dependency. The OpenRazer kernel module, daemon, and client
-must come from the same compatible build.
+must come from the same compatible build. The bundled AppImage targets Ubuntu
+22.04/glibc 2.35 floor on x86_64 where its requirements are met; this does not
+certify all Linux desktops. The backend matrix is narrow (Arch plus exact named
+Ubuntu/Debian, Fedora, and openSUSE Leap/TW with system Python >= 3.10; Leap 15.6
+default 3.6 is not ready and is never replaced automatically). No universal Linux
+backend claim is made.
 
 ## Development
 

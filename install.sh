@@ -21,8 +21,12 @@ Usage:
 Bootstrap (curl installs): downloads scripts/ from GitHub raw at the pinned
 ref (default: ${BOOTSTRAP_REF}); override with --ref or
 NAGA_CONTROL_BOOTSTRAP_REF. From a checkout, always runs the local scripts.
-App-only by default. Forward --install-openrazer to explicitly opt in to the
-selected release's prerequisites; NAGA_CONTROL_INSTALL_OPENRAZER=0 hard skips.
+App-only by default; offers consented OpenRazer setup if absent on eligible Arch
+or named Ubuntu/Debian, Fedora, openSUSE Leap/Tumbleweed, existing/manual/unknown
+unchanged. Forward --install-openrazer for explicit first-install setup
+(reviewed reinstall or partial inventory only on Arch; existing, partial,
+manual, or unknown native backends need manual matching-cohort migration);
+NAGA_CONTROL_INSTALL_OPENRAZER=0 hard skips, =1 opts in.
 
 Examples:
   (umask 077; d=\$(mktemp -d) && trap 'rm -rf "\$d"' EXIT && trap 'exit 130' INT && trap 'exit 143' HUP TERM && curl -fsSL https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/v0.4.0/install.sh -o "\$d/install.sh" && bash "\$d/install.sh" --ref v0.4.0 --version v0.4.0)
@@ -42,6 +46,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 [ -n "$REF_OVERRIDE" ] && BOOTSTRAP_REF="$REF_OVERRIDE"
+export NAGA_CONTROL_BOOTSTRAP_REF="$BOOTSTRAP_REF"
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -80,7 +85,8 @@ bootstrap_and_run() {
   curl -fsSL "$base/scripts/uninstall.sh" -o "$BOOTSTRAP_TMP/scripts/uninstall.sh" \
     || die "could not bootstrap uninstall.sh from $BOOTSTRAP_REF"
   # The optional prerequisite helper is fetched by install_user.sh only on
-  # explicit opt-in, from the selected release tag (not this bootstrap ref).
+  # explicit opt-in or consented offer, from the selected release tag for Arch
+  # and from the source bootstrap ref for native (not the AppImage version).
   # Preserve terminal stdin even for the owned child used to relay interruption.
   # Signal only this installer child, never GUI/daemon processes or arbitrary PIDs.
   exec 8<&0

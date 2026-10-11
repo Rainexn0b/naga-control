@@ -22,6 +22,10 @@ USER_FILES = (
 
 def app_harness(tmp_path: Path, *, helper: str | None = None) -> tuple[InstallerHarness, Path]:
     fake = harness(tmp_path)
+    # Default to a present backend so general app-only tests do not trigger
+    # the new native offer prompt; absence coverage explicitly overrides all
+    # state fields via make_absent/make_native_absent.
+    fake.configure(python_client=True, python_daemon=True)
     return fake, stage_app_installer(fake, helper=helper)
 
 
