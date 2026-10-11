@@ -383,6 +383,30 @@ resolve_bootstrap_ref() {
     die "invalid code ref"
   fi
 }
+# Arch-only missing-DKMS preparation. DKMS-only scope: no base-devel,
+# headers, clang, or kernel upgrades. Separate default-no consent; never
+# implied by --restart-service, --install-openrazer, or env=1.
+ensure_arch_dkms_ready() {
+  if command -v dkms >/dev/null 2>&1; then
+    return 0
+  fi
+  log "OpenRazer driver build needs the DKMS tool, which is not installed"
+  log "This separate prerequisite step would run: sudo pacman -S --needed dkms (pacman's own prompts remain; DKMS only, no base-devel/headers/clang or kernel upgrades; no hardware acceptance)"
+  if [ ! -t 0 ]; then
+    die "DKMS prerequisite needs a terminal for separate consent; install Arch dkms manually, then rerun the consented OpenRazer setup; Naga unchanged"
+  fi
+  local answer=""
+  read -r -p "Install the missing DKMS prerequisite now via sudo pacman -S --needed dkms? [y/N] " answer || true
+  case "$answer" in
+    [yY]|[yY][eE][sS]) ;;
+    *) die "DKMS prerequisite declined; install Arch dkms manually before opting in; Naga unchanged; no packages/groups/images changed" ;;
+  esac
+  sudo pacman -S --needed dkms 9>&- \
+    || die "DKMS prerequisite install failed; possible partial package changes; Naga unchanged; inspect pacman inventory before retrying"
+  hash -r 2>/dev/null || true
+  command -v dkms >/dev/null 2>&1 \
+    || die "DKMS still missing after the prerequisite transaction; install Arch dkms manually before opting in; Naga unchanged"
+}
 ensure_arch_helper() {
   OPENRAZER_INSTALLER="$SCRIPT_DIR/install_openrazer.sh"
   if [ ! -f "$OPENRAZER_INSTALLER" ]; then
@@ -945,6 +969,7 @@ if [ "$INSTALL_OPENRAZER" -eq 1 ]; then
     OPENRAZER_HELPER_KIND="arch"
     ensure_arch_helper
     HELPER_BASE_ARGS=(--version "$VERSION")
+    ensure_arch_dkms_ready
     log "checking optional OpenRazer install prerequisites before Naga stop consent"
     bash "$OPENRAZER_INSTALLER" "${HELPER_BASE_ARGS[@]}" --preflight 9>&- \
       || die "OpenRazer prerequisite preflight failed; Naga unchanged; opt-in requires a helper supporting --preflight (no legacy fallback)"
@@ -1036,6 +1061,7 @@ else
             OPENRAZER_HELPER_KIND="arch"
             ensure_arch_helper
             HELPER_BASE_ARGS=(--version "$VERSION")
+            ensure_arch_dkms_ready
             log "checking optional OpenRazer install prerequisites before Naga stop consent"
             bash "$OPENRAZER_INSTALLER" "${HELPER_BASE_ARGS[@]}" --preflight 9>&- \
               || die "OpenRazer prerequisite preflight failed; Naga unchanged; opt-in requires a helper supporting --preflight (no legacy fallback)"

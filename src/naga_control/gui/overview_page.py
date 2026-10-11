@@ -1,12 +1,17 @@
 """Connection summary with optional service diagnostics and safe actions."""
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFormLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QFormLayout, QGroupBox, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from naga_control.gui.models import ServiceModel
 from naga_control.gui.presenter import GuiPresenter
 from naga_control.gui.profile_mode_view import DEVICE_MODE_HELP, device_mode_view
 from naga_control.gui.worker import Runner
+
+_OPENRAZER_GUIDE = (
+    "https://github.com/Rainexn0b/naga-control/blob/main/docs/release-notes.md#required-openrazer"
+)
 
 
 class OverviewPage(QWidget):
@@ -51,6 +56,23 @@ class OverviewPage(QWidget):
         self.refresh_button = QPushButton("Refresh")
         self.release_button = QPushButton("Release generated outputs")
 
+        self.openrazer_setup = QGroupBox("OpenRazer setup required")
+        setup_layout = QVBoxLayout(self.openrazer_setup)
+        self.openrazer_help_label = QLabel(
+            "The mouse is detected, but hardware settings and software remapping need "
+            "OpenRazer. The AppImage installs Naga Control only. Use the project's "
+            "compatible OpenRazer build with Naga V3 Pro support; ordinary upstream "
+            "packages are not a substitute. Follow the guide for your distribution "
+            "and reboot or re-login after installation. No packages are installed automatically."
+        )
+        self.openrazer_help_label.setWordWrap(True)
+        setup_layout.addWidget(self.openrazer_help_label)
+        self.openrazer_guide_button = QPushButton("Open OpenRazer installation guide")
+        setup_layout.addWidget(self.openrazer_guide_button)
+        self.openrazer_guide_button.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl(_OPENRAZER_GUIDE))
+        )
+
         form = QFormLayout()
         form.addRow("Service", self.connection_label)
         form.addRow("Software remapping", self.status_label)
@@ -90,6 +112,7 @@ class OverviewPage(QWidget):
         column = QVBoxLayout(self)
         column.setContentsMargins(0, 0, 0, 0)
         column.setAlignment(Qt.AlignmentFlag.AlignTop)
+        column.addWidget(self.openrazer_setup)
         column.addLayout(form)
         column.addWidget(self.diagnostics_button)
         column.addWidget(self.diagnostics_widget)
@@ -121,6 +144,19 @@ class OverviewPage(QWidget):
         self.requested_mode_label.setText(mode.requested)
         self.mode_label.setText(mode.observed)
         self.mode_error_label.setText(mode.error or "none")
+        setup_required = bool(
+            connection.reachable
+            and snapshot
+            and snapshot.status != "available"
+            and snapshot.error_code in {"openrazer_not_installed", "prerequisite_unavailable"}
+        )
+        self.openrazer_setup.setVisible(setup_required)
+        if setup_required:
+            self.openrazer_setup.setTitle(
+                "OpenRazer not installed"
+                if snapshot and snapshot.error_code == "openrazer_not_installed"
+                else "OpenRazer client needs repair"
+            )
         self.calibrate_button.setEnabled(not (snapshot and snapshot.desired_mode == "firmware"))
         self.transport_label.setText(
             snapshot.transport if snapshot and snapshot.transport else "none"

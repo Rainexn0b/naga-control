@@ -141,6 +141,17 @@ elif name == "pacman":
         print(args[1] + " " + version)
 elif name == "sudo":
     if args[0] == "pacman":
+        if args[1] == "-S":
+            assert args == ["pacman", "-S", "--needed", "dkms"], args
+            failure = state.get("dkms_pacman_failure", 0)
+            if failure:
+                sys.exit(failure)
+            if not state.get("dkms_no_executable"):
+                dkms_path = root / "bin/dkms"
+                if not dkms_path.is_file():
+                    shutil.copyfile(Path(sys.argv[0]), dkms_path)
+                    dkms_path.chmod(0o755)
+            sys.exit(0)
         assert args[1] == "-U", args
         assert len(args) == 5, args
         assert all(Path(arg).is_file() for arg in args[2:]), args

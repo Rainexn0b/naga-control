@@ -34,6 +34,15 @@ installing or upgrading.
   (`scripts/install_openrazer.sh` or `scripts/install_openrazer_native.sh`;
   Arch keeps a reviewed reinstall path). Other hosts use the manual matching-source route. Published v0.5
   scripts/body are unchanged.
+- Eligible Arch/pacman pinned OpenRazer opt-in now offers missing `dkms`
+  separately before helper preflight/Naga stop: present `dkms` needs no extra
+  prompt; absent `dkms` needs a terminal default-no consent for interactive
+  `sudo pacman -S --needed dkms` (DKMS only, pacman's prompts remain, no
+  `--noconfirm`, no base-devel/headers/clang or kernel upgrades). Decline, EOF,
+  non-TTY, pacman failure, or still-missing aborts before stop with Naga
+  unchanged (pacman failures may leave partial package changes with no package
+  rollback). `=0`, declined offer, present/partial/unknown backends, and
+  native/ineligible routes never prompt DKMS; other preflight gates stay manual.
 
 ### Changed
 
@@ -46,6 +55,12 @@ installing or upgrading.
   names used at publication; this rename claims no new hardware validation.
 
 ### Fixed
+
+- Missing OpenRazer now reports an explicit prerequisite error instead of a
+  generic mode error. The Device tab shows a setup notice and installation-guide
+  button, distinguishes missing clients from broken or incompatible imports,
+  and explains that the AppImage does not install OpenRazer. No automatic
+  installation or new hardware acceptance is implied.
 
 - Main bootstrap and checkout installer upgrades now replace an unverified
   previous image with the strictly verified new image instead of failing

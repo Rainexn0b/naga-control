@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -149,6 +150,8 @@ def test_verify_output_dir_rejects_root_group_writable_ancestor(
     output.mkdir()
     owner = output.stat().st_uid
     real_stat = Path.stat
+    real_tmp_uid = tmp_path.stat().st_uid
+    real_tmp_mode = stat.S_IMODE(tmp_path.stat().st_mode)
 
     class _Stat:
         def __init__(self, wrapped: os.stat_result, mode: int, uid: int) -> None:
@@ -156,8 +159,13 @@ def test_verify_output_dir_rejects_root_group_writable_ancestor(
             self.st_mode = mode
             self.st_uid = uid
 
-    def _fake_stat(self: Path) -> os.stat_result:  # type: ignore[return]
-        result = real_stat(self)
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._wrapped, name)
+
+    def _fake_stat(  # type: ignore[return]
+        self: Path, *, follow_symlinks: bool = True
+    ) -> os.stat_result:
+        result = real_stat(self, follow_symlinks=follow_symlinks)
         if self == tmp_path:
             mode = (result.st_mode & ~0o777) | 0o775
             return _Stat(result, mode, 0)  # type: ignore[return-value]
@@ -166,6 +174,28 @@ def test_verify_output_dir_rejects_root_group_writable_ancestor(
     monkeypatch.setattr(Path, "stat", _fake_stat)
     with pytest.raises(ValueError, match=r"ancestor|permissions|writable"):
         validation.verify_output_dir(output, source, owner)
+    # Regression for Python 3.12 pathlib, which calls Path.stat with an
+    # explicit follow_symlinks keyword (Path.lstat and Path.exists both
+    # delegate to stat). Without the keyword the fake raises TypeError and
+    # pytest failure formatting crashes with INTERNALERROR, hiding the
+    # real result. Exercise both spellings so Python 3.14 catches it too.
+    for faked in (
+        tmp_path.stat(),
+        tmp_path.stat(follow_symlinks=True),
+        tmp_path.stat(follow_symlinks=False),
+    ):
+        assert faked.st_uid == 0
+        assert stat.S_IMODE(faked.st_mode) & 0o020 != 0
+    # Untargeted paths must delegate with either spelling.
+    assert output.stat(follow_symlinks=True).st_uid == owner
+    assert output.stat(follow_symlinks=False).st_uid == owner
+    assert source.stat(follow_symlinks=False).st_uid == owner
+    # The global Path.stat patch must not leak past this test.
+    monkeypatch.undo()
+    assert Path.stat is real_stat
+    assert tmp_path.stat().st_uid == real_tmp_uid
+    assert stat.S_IMODE(tmp_path.stat().st_mode) == real_tmp_mode
+    assert tmp_path.stat(follow_symlinks=False).st_uid == real_tmp_uid
 
 
 def test_audit_payload_stages_valid_and_modes(tmp_path: Path) -> None:
