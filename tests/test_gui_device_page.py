@@ -95,6 +95,7 @@ def test_device_groups_and_only_selected_plate_selector(qapp: QApplication) -> N
         "Power",
         "Software profiles",
         "Updates",
+        "OpenRazer setup required",
     }
     assert page.findChildren(QComboBox) == [page.profiles.profiles_box, page.profiles.plate_box]
     assert not hasattr(page.overview, "profiles_box")

@@ -109,6 +109,11 @@ def _remapping_status(snapshot: ServiceSnapshotView | None, online: bool) -> str
         return "Unknown (no mode status)"
     if snapshot.calibrating:
         return "Off (calibration passthrough)"
+    if snapshot.status != "available":
+        if snapshot.error_code == "openrazer_not_installed":
+            return "Not ready (OpenRazer not installed)"
+        if snapshot.error_code == "prerequisite_unavailable":
+            return "Not ready (OpenRazer client needs repair)"
     if snapshot.mode_error:
         return "Not ready (mode error)"
     if snapshot.status != "available":
