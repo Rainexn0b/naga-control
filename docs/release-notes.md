@@ -318,6 +318,18 @@ Supply all other intended kernels' headers/toolchains yourself and inspect
 pacman's DKMS hook output and native DKMS status/logs. `--check`/default inventory
 does not require these build prerequisites.
 
+On eligible Arch/pacman pinned opt-in (explicit `--install-openrazer`/`=1` or
+an accepted absent-backend offer), a missing `dkms` executable now has a
+separate default-no terminal consent for interactive
+`sudo pacman -S --needed dkms` before helper `--preflight` and before any Naga
+stop (DKMS only, pacman's prompts remain, no `--noconfirm`, no
+base-devel/headers/clang or kernel upgrades; no hardware acceptance). Present
+`dkms` needs no extra prompt. Decline, EOF, non-TTY, pacman failure, or
+still-missing aborts before stop with Naga unchanged; pacman failures may leave
+partial package changes with no package rollback. `=0`, a declined offer,
+present/partial/unknown backends, and native/ineligible routes never prompt
+DKMS. Other active-kernel headers/toolchain gates stay manual and read-only.
+
 The helper configures only `systemctl --user daemon-reload` and
 `systemctl --user enable openrazer-daemon.service`, never a system daemon or a
 live restart. Configuration failure exits nonzero even after packages install.

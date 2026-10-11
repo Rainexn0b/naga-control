@@ -106,7 +106,10 @@ Notes:
   explicit opt-in; `=0` skips even with `--install-openrazer`; any other value
   is an error. Native routes
   are first-install only even when explicit; only Arch keeps a reviewed
-  explicit reinstall path, see below.
+  explicit reinstall path, see below. On eligible Arch/pacman pinned opt-in,
+  missing `dkms` alone has a separate default-no consent for interactive
+  `sudo pacman -S --needed dkms` before helper preflight/Naga stop (DKMS only;
+  headers/toolchain stay manual).
 
 ### Run
 
@@ -150,7 +153,9 @@ System Python for the backend is separate from the bundled Naga Python 3.12;
 no universal Linux backend claim is made. OS prerequisites, group consent, and
 package-manager prompts stay separate, and only missing active-kernel headers
 are reported (no kernel upgrade, external repos, autoload, old-backend removal,
-or Secure Boot key changes). `--yes` on a native helper skips only the summary,
+or Secure Boot key changes), except eligible Arch missing `dkms` has a separate
+default-no consent for `sudo pacman -S --needed dkms` before preflight/stop.
+`--yes` on a native helper skips only the summary,
 never prerequisite/package/group prompts; avoid automation. After reboot/re-login
 verify DKMS/module, Secure Boot state, and runtime capabilities before Naga startup.
 

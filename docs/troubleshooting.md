@@ -46,6 +46,14 @@ Clang kernels, `clang llvm lld` tools. These checks cover **only the running
 kernel**. Supply headers/toolchains for all other intended kernels yourself;
 Secure Boot signing and DKMS hook success remain operator responsibilities.
 See [exact prerequisites](release-notes.md#experimental-archpacman-installer).
+On eligible Arch/pacman pinned opt-in, missing `dkms` alone has a separate
+default-no terminal consent for interactive `sudo pacman -S --needed dkms`
+before helper `--preflight` and before any Naga stop (DKMS only, pacman's
+prompts remain, no `--noconfirm`, no base-devel/headers/clang or kernel
+upgrades). Present `dkms` needs no extra prompt; decline, EOF, non-TTY, pacman
+failure, or still-missing aborts before stop with Naga unchanged (possible
+partial package changes, no package rollback). Other headers/toolchain gates
+stay manual.
 Standalone default/`--check` remains read-only inventory without build gating.
 For a separate read-only install-environment check, use
 `bash scripts/install_openrazer.sh --preflight`. It checks the Python minimum,
