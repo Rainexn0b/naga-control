@@ -2,9 +2,12 @@
 
 `pin.conf` is the canonical data-only pin for builds, validation and generated
 release prerequisites. The authorized source is `Rainexn0b/openrazer` commit
-`26b0eeb5ed70d638fa3528851adcd5e58369a7f5`, branch `test-pr-2904-edualb`, packaged
-as `3.12.1.pr2904.fix2-1`. Parsing rejects unknown/duplicate fields and shell
-expansion before any environment export; do not manually `source pin.conf`.
+`26b0eeb5ed70d638fa3528851adcd5e58369a7f5`, branch `naga-v3-pro-compat`, tagged
+`naga-v3-pro-compat-v1`, and packaged as `3.12.1.pr2904.fix2-1`. The branch was
+formerly `test-pr-2904-edualb`; renaming it does not change the commit or package
+versions. The tag is a source-baseline label, not an additional pin field;
+builds still use the full commit SHA. Parsing rejects unknown/duplicate fields
+and shell expansion before any environment export; do not manually `source pin.conf`.
 The recipe checks the exact Git HEAD before the known Arch group-name transform.
 
 The recipe and helpers originated in the fork's `packaging/arch-canonical/`.

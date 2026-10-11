@@ -272,7 +272,8 @@ latency.
 
 ## Existing Baseline Evidence
 
-The custom OpenRazer `add-razer-naga-v3-pro-support` baseline at commit
+The custom OpenRazer `naga-v3-pro-legacy` baseline (then named
+`add-razer-naga-v3-pro-support`) at commit
 `2416bfebf0175db6aae519a450f55fe9eba255e9` was tested as package version
 `3.12.4.nagav3.1-9`. Relevant results:
 

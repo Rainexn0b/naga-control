@@ -95,12 +95,21 @@ def test_optional_dot_prefix_and_directory_suffix_are_normalized(tmp_path: Path)
 
 
 @pytest.mark.parametrize(
-    "branch", ["feature/recipe-1", "release_safe.1", "bad..branch", "../bad", "bad+branch"]
+    "branch",
+    [
+        "naga-v3-pro-compat",
+        "test-pr-2904-edualb",  # Pins from already published releases remain valid.
+        "feature/recipe-1",
+        "release_safe.1",
+        "bad..branch",
+        "../bad",
+        "bad+branch",
+    ],
 )
 def test_branch_grammar_matches_canonical_pin_parser(tmp_path: Path, branch: str) -> None:
     fake = harness(tmp_path)
     path = fake.remote / "pin.conf"
-    path.write_text(path.read_text().replace("test-pr-2904-edualb", branch))
+    path.write_text(path.read_text().replace("naga-v3-pro-compat", branch))
     accepted = ".." not in branch and "+" not in branch
     if accepted:
         assert read_pin(path)["OPENRAZER_BRANCH"] == branch

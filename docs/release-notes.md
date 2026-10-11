@@ -179,10 +179,20 @@ before upgrading; a partial opt-in transaction leaves Naga stopped.
 
 The prerequisite is the custom baseline at commit
 `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` (fork branch
-`test-pr-2904-edualb`), packaged as `3.12.1.pr2904.fix2-1`. No released
+`naga-v3-pro-compat`, source tag
+[`naga-v3-pro-compat-v1`](https://github.com/Rainexn0b/openrazer/tree/naga-v3-pro-compat-v1)),
+packaged as `3.12.1.pr2904.fix2-1`. No released
 upstream OpenRazer minimum replaces this baseline. The kernel module, daemon,
 Python client, udev rules, and metadata must come from a compatible build; a
 daemon version string alone is not proof of support.
+
+The branch was formerly `test-pr-2904-edualb`; the earlier custom baseline is
+retained as `naga-v3-pro-legacy` (formerly `add-razer-naga-v3-pro-support`).
+The source tag labels this exact OpenRazer baseline, not a Naga Control release.
+The full commit pin and package versions are unchanged; use the SHA rather than
+a moving branch tip for builds. Historical release entries retain their original
+branch names. See [Integration Findings](integration-findings.md#openrazer-baseline)
+for the branch mapping and earlier baseline evidence.
 
 Release packaging provides an optional set of three experimental Arch packages
 (`openrazer-driver-dkms-local`, `openrazer-daemon-local`, and

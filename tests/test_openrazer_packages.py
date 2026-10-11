@@ -22,7 +22,7 @@ def test_pin_exact_authorized_baseline_and_safe_export(tmp_path: Path) -> None:
     assert pin == {
         "OPENRAZER_FORK_REPO": "Rainexn0b/openrazer",
         "OPENRAZER_COMMIT": "26b0eeb5ed70d638fa3528851adcd5e58369a7f5",
-        "OPENRAZER_BRANCH": "test-pr-2904-edualb",
+        "OPENRAZER_BRANCH": "naga-v3-pro-compat",
         "OPENRAZER_PKGVER": "3.12.1.pr2904.fix2",
         "OPENRAZER_PKGREL": "1",
     }

@@ -35,6 +35,16 @@ installing or upgrading.
   Arch keeps a reviewed reinstall path). Other hosts use the manual matching-source route. Published v0.5
   scripts/body are unchanged.
 
+### Changed
+
+- OpenRazer branch tracking now uses `naga-v3-pro-compat` (formerly
+  `test-pr-2904-edualb`) for the active baseline and `naga-v3-pro-legacy`
+  (formerly `add-razer-naga-v3-pro-support`) for the earlier custom baseline.
+  The active source is tagged `naga-v3-pro-compat-v1`; its full commit pin
+  `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` and package version
+  `3.12.1.pr2904.fix2-1` are unchanged. Historical release entries retain the
+  names used at publication; this rename claims no new hardware validation.
+
 ### Fixed
 
 - Main bootstrap and checkout installer upgrades now replace an unverified

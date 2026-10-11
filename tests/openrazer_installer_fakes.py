@@ -117,7 +117,7 @@ def harness(tmp_path: Path) -> InstallerHarness:
     (remote / "openrazer-arch-packages.sha256").write_text("".join(rows))
     (remote / "pin.conf").write_text(
         f'OPENRAZER_FORK_REPO="Rainexn0b/openrazer"\nOPENRAZER_COMMIT="{PIN}"\n'
-        'OPENRAZER_BRANCH="test-pr-2904-edualb"\n'
+        'OPENRAZER_BRANCH="naga-v3-pro-compat"\n'
         'OPENRAZER_PKGVER="3.12.1.pr2904.fix2"\nOPENRAZER_PKGREL="1"\n'
     )
     state: dict[str, object] = {

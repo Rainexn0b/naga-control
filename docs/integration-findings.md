@@ -20,13 +20,28 @@ the daemon's reported version, which remains `3.12.1`.
 
 The current host baseline is `3.12.1.pr2904.fix2-1` at fork commit
 `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` (branch
-`test-pr-2904-edualb`), which adds probe/mouse-activity lifetime fixes over
-the PR head `7a6d39784cfc22c07205a8e43f5f64cf03399710`. This is the revision
+`naga-v3-pro-compat`, tag `naga-v3-pro-compat-v1`), which adds probe/mouse-activity
+lifetime fixes over the PR head `7a6d39784cfc22c07205a8e43f5f64cf03399710`.
+This is the revision
 pinned in `buildpython/openrazer_packages/pin.conf` for optional CI-built Arch
 release assets; older release tags may lack them. Earlier complete
-hardware validation used the custom `add-razer-naga-v3-pro-support` branch at
+hardware validation used the custom `naga-v3-pro-legacy` branch (then named
+`add-razer-naga-v3-pro-support`) at
 known-good commit `2416bfebf0175db6aae519a450f55fe9eba255e9`, packaged as
 `3.12.4.nagav3.1-9`.
+
+The fork branches were renamed on 2026-10-10 without changing their history:
+
+| Current branch | Former name | Role |
+| --- | --- | --- |
+| [`naga-v3-pro-compat`](https://github.com/Rainexn0b/openrazer/tree/naga-v3-pro-compat) | `test-pr-2904-edualb` | Active Naga Control compatibility baseline |
+| [`naga-v3-pro-legacy`](https://github.com/Rainexn0b/openrazer/tree/naga-v3-pro-legacy) | `add-razer-naga-v3-pro-support` | Earlier custom baseline and historical validation |
+
+The annotated OpenRazer source tag
+[`naga-v3-pro-compat-v1`](https://github.com/Rainexn0b/openrazer/tree/naga-v3-pro-compat-v1)
+identifies the current full commit above; it is not a Naga Control application
+release or an upstream OpenRazer release. Branch tips may advance, so builds
+remain pinned by full SHA. Package versions and hardware acceptance are unchanged.
 
 Using a custom OpenRazer baseline is intentional for this project. Therefore:
 

@@ -260,7 +260,9 @@ OpenRazer build while
 [PR #2904](https://github.com/openrazer/openrazer/pull/2904) remains unmerged.
 This is a project prerequisite, not a development blocker. The pinned baseline
 is fork commit `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` on branch
-`test-pr-2904-edualb`, packaged as `3.12.1.pr2904.fix2-1`. Published releases provide
+`naga-v3-pro-compat`, tagged
+[`naga-v3-pro-compat-v1`](https://github.com/Rainexn0b/openrazer/tree/naga-v3-pro-compat-v1),
+and packaged as `3.12.1.pr2904.fix2-1`. Published releases provide
 optional prebuilt pinned Arch assets; older tags may lack them and no published
 Deb/RPM assets or signatures are introduced. On current main/checkouts,
 installation is strictly opt-in: Arch/pacman uses those prebuilt assets on

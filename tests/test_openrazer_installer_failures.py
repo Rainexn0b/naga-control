@@ -102,7 +102,7 @@ def test_pin_is_validated_data_never_executed(tmp_path: Path, problem: str) -> N
     elif problem == "duplicate":
         text += 'OPENRAZER_PKGREL="1"\n'
     elif problem == "missing-branch":
-        text = text.replace('OPENRAZER_BRANCH="test-pr-2904-edualb"\n', "")
+        text = text.replace('OPENRAZER_BRANCH="naga-v3-pro-compat"\n', "")
     else:
         text = text.replace('OPENRAZER_PKGREL="1"\n', "")
     pin.write_text(text)
