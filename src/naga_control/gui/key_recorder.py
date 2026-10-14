@@ -47,6 +47,24 @@ _RIGHT_KEYSYMS: dict[int, int] = {
     Qt.Key.Key_Shift: 0xFFE2,
     Qt.Key.Key_Meta: 0xFFEC,
 }
+# Qt reports shifted digit-row keys by their level-2 symbol on Latin layouts
+# (e.g. Ctrl+Shift+8 arrives as Key_Asterisk, not Key_8). Map only symbols
+# whose base key is in the supported output vocabulary; all other symbols stay
+# unsupported so the recorder fails closed. Applied only when Shift is held.
+_SHIFTED_SYMBOLS: dict[int, str] = {
+    Qt.Key.Key_Exclam: "1",
+    Qt.Key.Key_At: "2",
+    Qt.Key.Key_NumberSign: "3",
+    Qt.Key.Key_Dollar: "4",
+    Qt.Key.Key_Percent: "5",
+    Qt.Key.Key_AsciiCircum: "6",
+    Qt.Key.Key_Ampersand: "7",
+    Qt.Key.Key_Asterisk: "8",
+    Qt.Key.Key_ParenLeft: "9",
+    Qt.Key.Key_ParenRight: "0",
+    Qt.Key.Key_Underscore: "minus",
+    Qt.Key.Key_Plus: "equal",
+}
 _MODIFIERS = (
     (Qt.KeyboardModifier.ControlModifier, Qt.Key.Key_Control, "left_ctrl"),
     (Qt.KeyboardModifier.AltModifier, Qt.Key.Key_Alt, "left_alt"),
@@ -122,6 +140,8 @@ class KeyRecorder(QPushButton):
             self._held_modifiers[event.key()] = modifier
         else:
             token = _key_token(event.key())
+            if token is None and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                token = _SHIFTED_SYMBOLS.get(event.key())
             if token is None:
                 self._invalid_key = True
                 self.setText("Unsupported key")

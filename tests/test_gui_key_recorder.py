@@ -209,3 +209,90 @@ def test_shift_left_brace_records_shift_left_brace_combo(
     )
 
     assert recorded == [("key_combo", "left_shift+left_brace")]
+
+
+def test_ctrl_shift_asterisk_records_ctrl_shift_8(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    modifiers = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
+    _key(qapp, recorder, QEvent.Type.KeyPress, Qt.Key.Key_Asterisk, modifiers)
+
+    assert recorded == [("key_combo", "left_ctrl+left_shift+8")]
+
+
+def test_bare_shift_asterisk_records_shift_8(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Asterisk,
+        Qt.KeyboardModifier.ShiftModifier,
+    )
+
+    assert recorded == [("key_combo", "left_shift+8")]
+
+
+def test_shift_plus_records_shift_equal(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Plus,
+        Qt.KeyboardModifier.ShiftModifier,
+    )
+
+    assert recorded == [("key_combo", "left_shift+equal")]
+
+
+def test_shift_underscore_records_shift_minus(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Underscore,
+        Qt.KeyboardModifier.ShiftModifier,
+    )
+
+    assert recorded == [("key_combo", "left_shift+minus")]
+
+
+def test_asterisk_without_shift_stays_unsupported(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Asterisk,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+    assert recorded == []
+    assert recorder.text() == "Unsupported key"
+
+
+def test_shift_question_stays_unsupported(qapp: QApplication) -> None:
+    recorder = KeyRecorder()
+    recorded = _recorded(recorder)
+    recorder.click()
+    _key(
+        qapp,
+        recorder,
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Question,
+        Qt.KeyboardModifier.ShiftModifier,
+    )
+
+    assert recorded == []
+    assert recorder.text() == "Unsupported key"
