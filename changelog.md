@@ -204,6 +204,28 @@ button key handling and mapping artwork clarity, and release-pipeline safety.
   finished-artifact static gate leaves the extraction staging child absent for
   the trusted extractor while keeping the private parent directory and
   fail-closed checks.
+- Bracket keys now record, normalize in the editor, and emit through the
+  virtual keyboard as `left_brace`/`right_brace` with explicit
+  `KEY_LEFTBRACE`/`KEY_RIGHTBRACE` aliases (#3).
+- Qt `Key_Backtab` now records as `tab`, so Shift+Tab-family chords capture
+  correctly (#4).
+- Manually typed modifier chords under the `key` action now infer
+  `key_combo`, sync the action selector on edit completion, and normalize
+  literal keys (`=`, `-`, `[`, `]`); rejected input reports the offending
+  row, value, and accepted syntax (#5).
+- The domain now owns `OUTPUT_KEY_TOKENS` and rejects unemittable key tokens
+  at construction (editor, TOML, IPC), so a saved-but-unusable binding can
+  no longer tear down the remapping session on first press (#6).
+- Recording shifted digit-row symbols (for example Ctrl+Shift+8 arriving as
+  `Key_Asterisk`) now resolves to the base key instead of reporting an
+  Unsupported key (#5).
+- Recording no longer loses Shift+Tab alone to Qt focus traversal: the
+  recorder installs an application event filter while active, which consumes
+  key events before the window layer's traversal decision (#7).
+- Numeric-keypad keys now record and emit with their own identity (`kp_0`-
+  `kp_9`, `kp_plus`, `kp_minus`, `kp_asterisk`, `kp_slash`, `kp_enter`,
+  `kp_dot`, mapped to the real `KEY_KP*` codes) instead of collapsing onto
+  main-row tokens or failing (#7).
 
 ### Known Limitations
 

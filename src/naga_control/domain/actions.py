@@ -64,6 +64,13 @@ OUTPUT_KEY_TOKENS: frozenset[str] = MODIFIER_KEYS | frozenset(
         "page_up",
         "page_down",
         *(f"f{number}" for number in range(1, 13)),
+        *(f"kp_{digit}" for digit in range(10)),
+        "kp_dot",
+        "kp_plus",
+        "kp_minus",
+        "kp_asterisk",
+        "kp_slash",
+        "kp_enter",
     }
 )
 

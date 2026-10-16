@@ -1,8 +1,10 @@
 """Focused keyboard shortcut capture for the binding editor."""
 
-from PySide6.QtCore import Qt, Signal
+from typing import cast
+
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtGui import QFocusEvent, QKeyEvent
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton
 
 _KEYS: dict[int, str] = {
     Qt.Key.Key_Minus: "minus",
@@ -65,6 +67,27 @@ _SHIFTED_SYMBOLS: dict[int, str] = {
     Qt.Key.Key_Underscore: "minus",
     Qt.Key.Key_Plus: "equal",
 }
+# Keypad keys keep their own identity: consulted only when the KeypadModifier
+# flag is set, before the plain _key_token lookup, so keypad digits/operators
+# never collapse onto main-row tokens.
+_KEYPAD_KEYS: dict[int, str] = {
+    Qt.Key.Key_Plus: "kp_plus",
+    Qt.Key.Key_Minus: "kp_minus",
+    Qt.Key.Key_Asterisk: "kp_asterisk",
+    Qt.Key.Key_Slash: "kp_slash",
+    Qt.Key.Key_Enter: "kp_enter",
+    Qt.Key.Key_Period: "kp_dot",
+    Qt.Key.Key_0: "kp_0",
+    Qt.Key.Key_1: "kp_1",
+    Qt.Key.Key_2: "kp_2",
+    Qt.Key.Key_3: "kp_3",
+    Qt.Key.Key_4: "kp_4",
+    Qt.Key.Key_5: "kp_5",
+    Qt.Key.Key_6: "kp_6",
+    Qt.Key.Key_7: "kp_7",
+    Qt.Key.Key_8: "kp_8",
+    Qt.Key.Key_9: "kp_9",
+}
 _MODIFIERS = (
     (Qt.KeyboardModifier.ControlModifier, Qt.Key.Key_Control, "left_ctrl"),
     (Qt.KeyboardModifier.AltModifier, Qt.Key.Key_Alt, "left_alt"),
@@ -99,6 +122,7 @@ class KeyRecorder(QPushButton):
     def __init__(self) -> None:
         super().__init__("Record")
         self._recording = False
+        self._filter_installed = False
         self._held_modifiers: dict[int, str] = {}
         self._invalid_key = False
         self.setToolTip(
@@ -114,12 +138,38 @@ class KeyRecorder(QPushButton):
             self._recording = True
             self.setText("Press keys…")
             self.setFocus(Qt.FocusReason.MouseFocusReason)
+            # Application event filters run inside notify_helper before the
+            # target object (including QWidgetWindow) processes the event, so
+            # consuming Backtab here stops Qt focus traversal from stealing
+            # the chord. A keyboard grab cannot do that: traversal pre-empts
+            # both the focus widget and the grabber.
+            app = QApplication.instance()
+            if app is not None:
+                app.installEventFilter(self)
+                self._filter_installed = True
 
     def cancel(self) -> None:
+        if self._filter_installed:
+            app = QApplication.instance()
+            if app is not None:
+                app.removeEventFilter(self)
+            self._filter_installed = False
         self._recording = False
         self._held_modifiers.clear()
         self._invalid_key = False
         self.setText("Record")
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if not self._recording:
+            return False
+        event_type = event.type()
+        if event_type == QEvent.Type.KeyPress:
+            self._handle_key_press(cast(QKeyEvent, event))
+            return True
+        if event_type == QEvent.Type.KeyRelease:
+            self._handle_key_release(cast(QKeyEvent, event))
+            return True
+        return False
 
     def focusOutEvent(self, event: QFocusEvent) -> None:
         self.cancel()
@@ -129,6 +179,15 @@ class KeyRecorder(QPushButton):
         if not self._recording:
             super().keyPressEvent(event)
             return
+        self._handle_key_press(event)
+
+    def keyReleaseEvent(self, event: QKeyEvent) -> None:
+        if not self._recording:
+            super().keyReleaseEvent(event)
+            return
+        self._handle_key_release(event)
+
+    def _handle_key_press(self, event: QKeyEvent) -> None:
         if event.isAutoRepeat():
             event.accept()
             return
@@ -139,7 +198,11 @@ class KeyRecorder(QPushButton):
             assert modifier is not None
             self._held_modifiers[event.key()] = modifier
         else:
-            token = _key_token(event.key())
+            token: str | None = None
+            if event.modifiers() & Qt.KeyboardModifier.KeypadModifier:
+                token = _KEYPAD_KEYS.get(event.key())
+            if token is None:
+                token = _key_token(event.key())
             if token is None and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
                 token = _SHIFTED_SYMBOLS.get(event.key())
             if token is None:
@@ -165,10 +228,7 @@ class KeyRecorder(QPushButton):
                 )
         event.accept()
 
-    def keyReleaseEvent(self, event: QKeyEvent) -> None:
-        if not self._recording:
-            super().keyReleaseEvent(event)
-            return
+    def _handle_key_release(self, event: QKeyEvent) -> None:
         token = self._held_modifiers.pop(event.key(), _modifier_token(event))
         if token is not None and not self._held_modifiers and not self._invalid_key:
             self.cancel()

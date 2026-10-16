@@ -103,7 +103,7 @@ def test_fixed_key_aliases_and_capabilities_use_linux_constants(
         "f12": 88,
     }
     assert {token: codes[token] for token in expected} == expected
-    assert len(codes) == len(set(codes.values())) == 75
+    assert len(codes) == len(set(codes.values())) == 91
     output = keyboard.create_virtual_keyboard()
     assert factory.calls[0]["events"] == {1: tuple(sorted(codes.values()))}
     assert factory.calls[0]["bustype"] == 6

@@ -90,6 +90,13 @@ def test_parse_key_infers_complete_modifier_chord() -> None:
     assert parse_action("key", "left_ctrl+t") == KeyComboAction(modifiers=("left_ctrl",), key="t")
 
 
+def test_parse_key_accepts_keypad_tokens() -> None:
+    assert parse_action("key", "kp_plus") == KeyAction(key="kp_plus")
+    assert parse_action("key_combo", "left_ctrl+kp_enter") == KeyComboAction(
+        modifiers=("left_ctrl",), key="kp_enter"
+    )
+
+
 def test_parse_key_infers_literal_final_token() -> None:
     assert parse_action("key", "left_ctrl+=") == KeyComboAction(
         modifiers=("left_ctrl",), key="equal"

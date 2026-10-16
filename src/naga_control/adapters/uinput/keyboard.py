@@ -46,6 +46,22 @@ _ECODES_ALIASES = {
     "page_down": "KEY_PAGEDOWN",
     "left_brace": "KEY_LEFTBRACE",
     "right_brace": "KEY_RIGHTBRACE",
+    "kp_0": "KEY_KP0",
+    "kp_1": "KEY_KP1",
+    "kp_2": "KEY_KP2",
+    "kp_3": "KEY_KP3",
+    "kp_4": "KEY_KP4",
+    "kp_5": "KEY_KP5",
+    "kp_6": "KEY_KP6",
+    "kp_7": "KEY_KP7",
+    "kp_8": "KEY_KP8",
+    "kp_9": "KEY_KP9",
+    "kp_dot": "KEY_KPDOT",
+    "kp_plus": "KEY_KPPLUS",
+    "kp_minus": "KEY_KPMINUS",
+    "kp_asterisk": "KEY_KPASTERISK",
+    "kp_slash": "KEY_KPSLASH",
+    "kp_enter": "KEY_KPENTER",
 }
 
 

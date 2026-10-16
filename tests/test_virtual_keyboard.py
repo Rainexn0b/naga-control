@@ -173,7 +173,17 @@ def test_key_tokens_cover_default_bindings_and_modifiers() -> None:
 
 def test_key_tokens_match_the_domain_vocabulary_without_drift() -> None:
     assert set(keyboard.KEY_TOKENS) == OUTPUT_KEY_TOKENS
-    assert len(keyboard.KEY_TOKENS) == len(set(keyboard.KEY_TOKENS)) == 75
+    assert len(keyboard.KEY_TOKENS) == len(set(keyboard.KEY_TOKENS)) == 91
+
+
+def test_keypad_tokens_resolve_to_real_keypad_codes() -> None:
+    codes = keyboard.resolve_key_codes(import_module("evdev.ecodes"))
+    assert codes["kp_plus"] == 78
+    assert codes["kp_enter"] == 96
+    assert codes["kp_5"] == 76
+    keypad = {token for token in codes if token.startswith("kp_")}
+    assert len(keypad) == 16
+    assert len({codes[token] for token in keypad}) == 16
 
 
 def test_resolve_key_codes_fails_closed_for_a_missing_ecode() -> None:

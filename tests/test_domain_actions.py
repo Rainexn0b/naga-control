@@ -38,8 +38,22 @@ def test_key_action_rejects_a_typo_token() -> None:
 
 def test_every_vocabulary_token_constructs_and_covers_modifiers() -> None:
     assert MODIFIER_KEYS <= OUTPUT_KEY_TOKENS
-    assert len(OUTPUT_KEY_TOKENS) == 75
+    assert len(OUTPUT_KEY_TOKENS) == 91
     for token in OUTPUT_KEY_TOKENS:
+        assert KeyAction(token).key == token
+
+
+def test_keypad_tokens_construct_valid_key_actions() -> None:
+    expected = {f"kp_{digit}" for digit in range(10)} | {
+        "kp_dot",
+        "kp_plus",
+        "kp_minus",
+        "kp_asterisk",
+        "kp_slash",
+        "kp_enter",
+    }
+    assert expected <= OUTPUT_KEY_TOKENS
+    for token in expected:
         assert KeyAction(token).key == token
 
 

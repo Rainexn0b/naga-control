@@ -596,6 +596,41 @@ See [AppImage Shutdown Investigation](appimage-shutdown-investigation.md) for
 core evidence, reproduction commands, and verification scope. This finding is
 separate from the unproven trigger for the mouse's device-mode regression.
 
+## Key Coverage And Editor Validation (2026-10-14, HyperSpeed, 12-button)
+
+Owner-driven manual GUI validation of the key-coverage fixes from `1daa514`
+(recorder, editor, and virtual-keyboard agreement for #3-#6) plus the
+shifted digit-row follow-up in `e081598`, using a local development AppImage
+built from `e081598` via `buildpython` step 14 and installed over the
+running 0.5.0 image (rollback copy retained). HyperSpeed transport, driver
+mode `3:0`; the service snapshot stayed `available` with no settings
+failures throughout.
+
+Validated live by the owner, closing #3-#6: typed chords
+(`left_ctrl+left_shift+8`, `left_ctrl+left_shift+tab`) infer `key_combo`
+and apply; recording shifted digit-row chords (Ctrl+Shift+8) works after
+`e081598`; Ctrl+Shift+Tab records; bracket keys record alone and with
+modifiers; `f13` is rejected in the editor with `unsupported key token
+'f13'` naming the row.
+
+Two residuals from that pass were recorded as #7: Shift+Tab alone was
+consumed by Qt focus traversal, and unshifted symbol keys (numeric keypad
+`+`) reported Unsupported key. Both are fixed in the current tree (an
+application event filter installed while the recorder is active; sixteen
+`kp_*` tokens end to end with real `KEY_KP*` output codes), verified by
+offscreen tests including a real window-path harness that reproduced the
+traversal failure before the fix. **Live GUI validation of the #7 fixes is
+pending the next build** and is tracked as an open item; no pass is
+claimed here.
+
+During the image swap, a one-off non-fatal evdev `EBADF` mapping to an
+`InvalidStateError` startup burst was observed; the service recovered
+immediately and the journal stayed clean after startup. It is under
+separate investigation and is unrelated to the key-coverage work.
+
+These editor-level checks exercised no grabs or device writes beyond normal
+service operation.
+
 ## Exit Criteria For First Slice
 
 The first vertical slice is complete only when:
