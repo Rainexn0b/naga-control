@@ -63,6 +63,17 @@ Receipt for the Oct 17 F17 failure, code fix, local install, and manual port-mov
 - Reconnect latency characterization and natural idle/wake checks; the separate evdev `EBADF` callback race.
 - See [architecture](architecture.md), [hardware validation](hardware-validation.md), [troubleshooting](troubleshooting.md), and [implementation plan](implementation-plan.md).
 
+## Subsequent callback resolution pointer (2026-10-17, 0.5.1 candidate)
+
+- The separate `EBADF`/`InvalidStateError` callback race noted in Startup note
+  above is now fixed by the adapter-owned async reader and scoped-accepted on
+  the local 0.5.1 HyperSpeed candidate with no burst; see
+  [evdev callback investigation](evdev-callback-investigation-2026-10-17.md) and
+  [Manual 0.5.1 Candidate Acceptance](hardware-validation.md#manual-051-candidate-acceptance-2026-10-17-hyperspeed-12-button).
+  The original initial-fail then later-success port-move history and its
+  eventual (not instant/30s, delay not captured) latency above are retained
+  unchanged.
+
 ## Safety overlay integration
 
 - The six Oct 14 reader-failure and cleanup-barrier overlays are now integrated into main with exact deployed bytes. Product hashes `c17ab059`, `9256a05e`, `3bd27e74`, `04712e75`, `dea98e32`, `dc335bca` match the verified mounted candidate. The existing `ENODEV` adapter fix remains unchanged and now recovers cleanly through the strict forwarder instead of latching. No public IPC, schema, or required-protocol change; no GUI change.

@@ -14,6 +14,22 @@ installing or upgrading.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.5.1] - 2026-10-17
+
+This release adds an optional tray login-startup checkbox and a confirmed
+Naga-only background-service restart to the GUI, records the key-recorder
+coverage committed since v0.5.0, hardens evdev removal and reader-failure
+handling, and extends build validation to the native installer helpers.
+Owner HyperSpeed manual checks covered startup, receiver reconnect, UI
+restart, and Shift+Tab/keypad recording; see hardware validation for scope
+and limits.
+
+### Added
+
 - Committed installs keep one verified rollback after commit: the newest
   verified pair is retained and older verified pairs plus all owned
   quarantines are removed; failed installs still preserve recovery files
@@ -43,6 +59,24 @@ installing or upgrading.
   unchanged (pacman failures may leave partial package changes with no package
   rollback). `=0`, declined offer, present/partial/unknown backends, and
   native/ineligible routes never prompt DKMS; other preflight gates stay manual.
+- Device > Application now offers an optional `Start Naga Control at login (tray)`
+  checkbox, default off. It manages only the user-owned XDG autostart file
+  `org.nagacontrol.NagaControl.desktop` (absolute `XDG_CONFIG_HOME/autostart`
+  else `~/.config/autostart`, owned marker, mode 0600, atomic replace);
+  foreign files, symlinks, and directories are never overwritten. The launcher
+  is the stable current location (`$APPIMAGE gui --start-hidden` for AppImage
+  runs, `sys.executable -m naga_control.gui.app --start-hidden` for source
+  runs); `naga-control-gui --start-hidden` stays hidden only when the tray is
+  available and otherwise shows the window so the app is never stranded.
+  Background mapping-service enablement is unchanged.
+- Device > Application now offers a confirmed `Restart background service`
+  control that restarts only `naga-control.service` via the fixed command
+  `systemctl --user restart naga-control.service`; OpenRazer is never restarted.
+  Confirmation defaults to No and declining does nothing. Restart is refused
+  while a profile, settings, or scroll apply is in flight (and applies refuse
+  while a restart is pending) with drafts preserved and editing disabled;
+  timeout or unverified cleanup reports outcome uncertain and never claims
+  success. No new IPC method is added.
 
 ### Changed
 
@@ -53,6 +87,12 @@ installing or upgrading.
   `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` and package version
   `3.12.1.pr2904.fix2-1` are unchanged. Historical release entries retain the
   names used at publication; this rename claims no new hardware validation.
+- Build validation now includes `scripts/install_openrazer_native.sh` and
+  `scripts/distro_report.sh` in ShellCheck and requires the eight native
+  builder modules plus the native builder README in repo validation, with
+  fake-only tests asserting each entry. No package upgrades, no new release
+  binaries, and no release-asset layout change; installers are not bundled in
+  the AppImage.
 
 ### Fixed
 
@@ -61,7 +101,6 @@ installing or upgrading.
   button, distinguishes missing clients from broken or incompatible imports,
   and explains that the AppImage does not install OpenRazer. No automatic
   installation or new hardware acceptance is implied.
-
 - Main bootstrap and checkout installer upgrades now replace an unverified
   previous image with the strictly verified new image instead of failing
   the old verification gate, holding the old bytes as a private
@@ -71,6 +110,91 @@ installing or upgrading.
   Only a failed replacement with an unverified previous image leaves Naga
   stopped and disabled for manual repair; verified rollback and resume
   behavior is unchanged.
+- Buttons key handling committed since v0.5.0 (`e081598`/`ea84670`, refs #5/#7):
+  recording shifted digit-row symbols resolves to the base key while Shift is
+  held (for example Ctrl+Shift+8 arriving as `Key_Asterisk` records `8` with
+  Shift retained; symbols without an emittable base, or pressed without Shift,
+  still fail closed); Shift+Tab records as `tab` without losing focus to Qt
+  traversal via an application event filter active only while recording;
+  numeric-keypad keys record and emit with their own `kp_0`-`kp_9`, `kp_plus`,
+  `kp_minus`, `kp_asterisk`, `kp_slash`, `kp_enter`, and `kp_dot` identity
+  mapped to the real `KEY_KP*` codes instead of collapsing onto main-row tokens
+  or failing; a complete modifier chord typed under `key` becomes `key_combo`
+  with the selector kept in sync and literal `[`, `]`, `=`, `-` normalized to
+  token names, and rejected input reports the row, value, and accepted syntax.
+  Owner manual verification on HyperSpeed confirmed Shift+Tab recording
+  without focus loss and keypad keys recording with correct Cancel/no Apply
+  behavior; see hardware validation. This is owner-desktop HyperSpeed only,
+  not full transport or distro certification.
+- Single-instance reuse and Plasma taskbar identity shipped in v0.4.0 (`77adc9b`)
+  were verified on the owner desktop with no new GUI patch in 0.5.1: a second
+  launch reuses/restores the existing visible, minimized, or tray-hidden window
+  with no second service client, and Plasma groups the app under Naga Control
+  rather than `python3`. This verification is owner-desktop only and claims no
+  new fix, no reporter-distro acceptance, and no general focus guarantee.
+- Physically removed evdev nodes no longer latch recovery: `ungrab` ignores only
+  `ENODEV` as disconnected input and the descriptor is still closed; other
+  ungrab/close errors propagate unchanged and the close flag is set only after
+  successful `device.close`. An owner-observed HyperSpeed receiver port move
+  recovered eventually without restart after the fix; this proves eventual
+  autonomous reconnect recovery by manual observation, not instantaneous or
+  within-30-seconds latency, and claims no historical trigger.
+- Any unexpected reader end (raised error, read-result error, clean end-of-file,
+  unexpected cancel) is now a once-only session failure: the failing reader
+  cleans up first, the session fences the worker synchronously before sibling
+  and global teardown, releases held outputs, and stops through one owned
+  shielded barrier. Intentional stop and startup rollback are not failures.
+  Forwarder and source cleanup attempt every release despite one ordinary
+  `Exception`, cache the first such failure with exact identity, and keep the
+  session unsafe until operator recovery; ordinary errors with clean cleanup
+  still autorecover through the existing poll path. Failure warnings carry only
+  a fixed `00`/`01`/`02` interface, outcome `EOF`/`cancel`/`error`, class, and
+  exact builtin `int` errno `1..4095`, with no identifiers, paths, or `eventN`.
+- Evdev async readiness is now adapter-owned: one `loop.add_reader`
+  registration per source whose callback only signals an owned guarded event
+  while the reading coroutine performs the existing nonblocking `device.read`
+  itself, with exactly one active iterator, no task per event, and no retained
+  upstream futures. Detach retires with the stored fd/loop token before close,
+  stays idempotent, ignores stale callbacks, never removes a fresh registration
+  after fd reuse, wakes explicit close without manufacturing `EBADF`, rejects
+  concurrent readers, and preserves the first detach identity with exact cause
+  while keeping the primary read result or cancellation. Lazy `EAGAIN` rearms
+  without busy loop or EOF; other errors keep identity. This avoids the
+  cancelled lazy-callback `EBADF`/`InvalidStateError` race without vendoring
+  the dependency or swallowing genuine `EBADF`. Owner manual verification on
+  HyperSpeed covered normal startup and receiver-port reconnect with F17
+  holds/releases plus pointer, click, scroll, and move and no
+  `InvalidStateError`/`EBADF` burst; exact latency was not measured. Natural
+  idle/wake remains open; no historical cause is claimed.
+- Uninstall now removes only the owned GUI login-startup autostart entry
+  (`org.nagacontrol.NagaControl.desktop` under absolute
+  `XDG_CONFIG_HOME/autostart` else `~/.config/autostart`, `Type=Application`
+  plus `X-NagaControl-Owned=true` in `[Desktop Entry]`), independent of
+  `--purge-config`; profiles follow the existing preserve-unless-purge policy.
+  Foreign files, symlinks, directories, and unsafe entries are preserved, the
+  autostart directory and other apps are never removed, and an uncleanable
+  owned entry reports incomplete without claiming success.
+
+### Known Limitations
+
+- Requires the custom OpenRazer baseline at `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` (fork `Rainexn0b/openrazer`, branch `naga-v3-pro-compat`, Arch packages `3.12.1.pr2904.fix2-1` attached to this release); no released upstream minimum replaces it. Use compatible kernel module, daemon, Python client, udev rules, and metadata. The temporary Arch prerequisite bridge is explicitly opt-in; source pinning is not an indefinite security freeze.
+- Only Razer Naga V3 Pro wired `1532:00E7` and HyperSpeed `1532:00E8` are supported, one transport at a time. Bluetooth and other devices are excluded.
+- Do not run the GUI or service as root.
+- Firmware/driver mode handoff stays UI-gated: held-output ordering, natural
+  wireless sleep/wake, recovery from a real device-mode drift, exact reconnect
+  latency, and representative distro install/upgrade/uninstall checks remain
+  unverified. Wired 6- and 2-button plate signatures remain uncaptured and are
+  not enabled. Manual AppImage extraction remains launch-only, not a managed
+  FUSEless installation. The static gate plus Ubuntu 22.04 baseline and 24.04
+  userspace launch checks do not certify installer, distro, desktop, or hardware
+  support; native package builds prove build only, not live install, DKMS,
+  Secure Boot, or runtime.
+- Evidence for this release is fake suites plus owner-observed HyperSpeed
+  manual startup, receiver reconnect, UI restart, and Shift+Tab/keypad checks;
+  exact reconnect latency was not measured and no instant or 30-second latency
+  is claimed. Natural idle/wake, held-output ordering beyond the checked holds,
+  wired alternate-plate signatures, representative distro install/upgrade/
+  uninstall, and portable certification remain open.
 
 ## [0.5.0] - 2026-10-10
 

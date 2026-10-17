@@ -621,7 +621,10 @@ application event filter installed while the recorder is active; sixteen
 offscreen tests including a real window-path harness that reproduced the
 traversal failure before the fix. **Live GUI validation of the #7 fixes is
 pending the next build** and is tracked as an open item; no pass is
-claimed here.
+claimed here. That pending status is phase history; subsequent owner manual
+acceptance on the 0.5.1 candidate is recorded in
+[Manual 0.5.1 Candidate Acceptance](#manual-051-candidate-acceptance-2026-10-17-hyperspeed-12-button)
+below.
 
 During the image swap, a one-off non-fatal evdev `EBADF` mapping to an
 `InvalidStateError` startup burst was observed; the service recovered
@@ -666,6 +669,79 @@ does not touch `src/naga_control/gui/`.
   full safety suite was still running at the time of this GUI check;
   its later 4170-test pass is recorded in the
   [F17 investigation receipt](f17-investigation-2026-10-17.md).
+
+## Manual 0.5.1 Candidate Acceptance (2026-10-17, HyperSpeed, 12-button)
+
+Owner manual acceptance of the local 0.5.1 candidate on HyperSpeed with the
+12-button plate. This is owner-desktop HyperSpeed only, not full transport,
+distro, or portable certification. Exact reconnect latency was not measured;
+no instant or within-30-seconds claim is made. No serials, USB port paths, or
+absolute home paths are recorded here.
+
+- Local candidate: source version 0.5.1 built with the standard builder on
+  host CPython 3.14.8 in 16.5s; runtime versions match the installed baseline.
+  This is a localhost-only build, not portable certification. Image sha256
+  `db9a2fcced4dd68be1067c015079d78c892a28415e954d9d9efa8dd730e7cd85`,
+  size 107194872. Actual extraction verified 105/105 Python files plus 4 GUI
+  assets byte-equal to the reviewed source; new `async_reader` plus all new
+  GUI helpers present; source installer/native payload and tag set present
+  (new uninstaller helper is 339 lines in source/tag only, not an AppImage
+  helper). Eight integration payload files carry `KillMode=mixed`. The older
+  `16ee...` candidate is outdated and is not used as acceptance. Atomic local
+  install kept a persistent rollback of the previous 0.5.0 local image
+  (`a4b947...`) with no existing inode overwrite. Installed tag metadata stays
+  `v0.5.0`; local candidate version is 0.5.1. This does not imply a published
+  canonical image is installed. Local receipt is
+  `~/.local/share/naga-control/local-0.5.1-candidate-20261017.json`.
+- Startup: operator-approved safeguards (GUI Quit, all buttons released,
+  backup keyboard, single HyperSpeed). Normal Naga-only stop/start at
+  16:59:37, ready at 16:59:42 PID 966912 generation 2 software/software
+  `mode_ready` true with no failures. OpenRazer PID 1478 unchanged. Saved
+  configuration document sha
+  `25504df68ae1c465dc25649cc185cdd39d03aa107012ecad2b5c3491a8a0923e`
+  unchanged, rev24 `ring_finger` to `right_ctrl`. Running mounted files
+  (105) matched the reviewed source before and after the UI restart.
+- Reconnect: owner explicitly confirmed `Works before and after` for F17
+  holds/releases to RightCtrl plus pointer, click, scroll, and move without
+  restart. Journal at 17:03:44 showed the expected interface `00` reader
+  `ENODEV` to clean `absent`; at 17:03:48 a transient `unsupported` then
+  `available` generation 6 on the same PID, with no `InvalidStateError`/`EBADF`
+  callback burst and no permanent cleanup failure. Exact latency was not
+  measured. No attended hardware pytest or device observer was run; normal
+  service plus manual operator only. Normal startup may reapply the existing
+  mode/profile through the existing startup path.
+- UI restart and recorder: owner confirmed the checkbox on/off behavior, Quit
+  then `~/.local/bin/naga-control.AppImage gui --start-hidden` tray-only
+  startup, and normal launcher restore of the existing window. Restart No did
+  nothing. The first post-check PID was still 966912, so the investigator did
+  not accept the restart yet and asked for an explicit repeat Yes; the UI then
+  answered `Background service restarted` and the actual service PID changed
+  to 969822 at 17:15:11, ready at 17:15:16 generation 2 with no errors.
+  OpenRazer 1478 unchanged. The new PID log had zero warnings/errors. The
+  owner then explicitly confirmed F17 still works after the actual restart and
+  recording Shift+Tab/keypad was correct with Cancel and no Apply. Startup
+  user preference ON was verified as the owned regular entry mode 0600 using
+  the actual store load; it was not silently enabled by the installer. No TOML
+  changes were made. No permission changes or backend upgrade were performed;
+  normal startup may still apply the existing mode/profile settings.
+- Local fake-suite final receipt (not CI publication): `.venv/bin/ruff check .`
+  PASS; `.venv/bin/ruff format --check .` PASS (500 files);
+  `.venv/bin/pyright` 0 errors; final `.venv/bin/pytest -q` 4324 passed,
+  2 coverage-unavailable skips, 5 hardware deselected,
+  7 `dbus_next` deprecation warnings. Earlier 4303/4305 runs predate the last
+  uninstall cases and are not final; phase-time 4117/4170 receipts above are
+  retained unchanged. Full-profile build `python --profile full --skip-steps
+  Pytest --verbose` 8/8 PASS; explicit `--run-steps ShellCheck --verbose`
+  1/1 PASS covering all 8 shell scripts. Final extracted-candidate checks
+  passed 189 by supervisor and 189 by worker with origins asserted. Release
+  preparation (155 tests plus `prepare_release` for v0.5.1) validated. All
+  Python files stay at or below 400 physical lines.
+- Limits: natural idle/wake, held-output ordering beyond the checked holds,
+  wired alternate-plate signatures, representative distro
+  install/upgrade/uninstall, and portable canonical rebuild remain open. Mode
+  handoff stays UI-gated. This section claims no CI green, no publication, and
+  no general desktop guarantee. Public pipeline verification remains with the
+  parent after commit/push/CI/tag.
 
 ## Exit Criteria For First Slice
 

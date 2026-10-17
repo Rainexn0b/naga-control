@@ -1,12 +1,67 @@
 # Release Notes
 
 The root [changelog.md](../changelog.md) is the authoritative versioned release
-history. It contains Unreleased and the dated 0.5.0, 0.4.0, 0.3.0, 0.2.0,
-and 0.1.4 entries. See GitHub releases for current publication status.
+history. It contains Unreleased and the dated 0.5.1, 0.5.0, 0.4.0, 0.3.0,
+0.2.0, and 0.1.4 entries. See GitHub releases for current publication status.
 Release publishing extracts only the
 matching version section via `scripts/prepare_release.py`, not this overview
-or the entire changelog. The v0.5.0 GitHub body is the
+or the entire changelog. The v0.5.1 GitHub body will be the
+matching `## [0.5.1]` section of the root changelog; the v0.5.0 GitHub body is the
 matching `## [0.5.0]` section of the root changelog.
+
+## v0.5.1
+
+The release body is the matching
+`## [0.5.1]` section in [changelog.md](../changelog.md),
+extracted by `scripts/prepare_release.py`. This overview is not the release
+body, and the checkout installer notes below are not retroactive to already
+published tags. See
+[GitHub releases](https://github.com/Rainexn0b/naga-control/releases) for
+current publication status.
+
+### Changes in 0.5.1 (summary)
+
+- GUI Application controls on Device: optional login-startup tray checkbox
+  (user-owned XDG file, default off, mapping-service enablement unchanged,
+  stable AppImage/source launcher, hidden fallback when no tray) and a
+  confirmed Naga-only background-service restart (never OpenRazer, with
+  draft-preserving pending guard and uncertain-outcome reporting).
+- Key-recorder coverage committed since v0.5.0 (`e081598`/`ea84670`):
+  shifted digit-row recording, Shift+Tab without focus theft, keypad
+  `kp_*` identity with real `KEY_KP*` output, and key-chord agreement;
+  owner manual verification on HyperSpeed confirmed Shift+Tab and keypad
+  recording with correct Cancel/no Apply behavior. Owner-desktop
+  verification of the v0.4.0 single-instance and Plasma identity fixes is
+  noted with no new code.
+- Input hardening: `ENODEV` on ungrab after close recovers cleanly with
+  ordinary barriers intact; unexpected reader ends trigger once-only
+  fail-open recovery with held-output release; true cleanup failures stay
+  latched; adapter-owned async fd readiness avoids the cancelled
+  lazy-callback race without vendoring or `EBADF` swallowing. Owner manual
+  verification on HyperSpeed covered startup and receiver reconnect; natural
+  idle/wake remains open and no historical cause is claimed.
+- Build validation now covers the native installer and distro-report
+  ShellCheck plus the required native payload; no package upgrades, no new
+  release binaries, and no asset-layout change. The existing Unreleased
+  installer items (verified-upgrade quarantine, one verified rollback,
+  missing-OpenRazer diagnostics, absent-backend consented first-install,
+  DKMS default-no, branch rename with exact SHA/version unchanged) move
+  unchanged into `## [0.5.1]`. Source/tag helper fetch versus AppImage
+  payload stays distinct; installers are not bundled in the image.
+
+### Known limits for 0.5.1 (summary)
+
+- Requires the custom OpenRazer baseline at
+  `26b0eeb5ed70d638fa3528851adcd5e58369a7f5`
+  (fork `Rainexn0b/openrazer`, branch `naga-v3-pro-compat`,
+  `3.12.1.pr2904.fix2-1`); only `1532:00E7`/`1532:00E8` one transport at a
+  time; do not run the GUI or service as root. See the matching changelog
+  section for the full prerequisite and limitation list.
+- Mode handoff stays UI-gated; natural idle/wake, exact reconnect latency,
+  and representative distro install checks remain unverified. Evidence is
+  fake suites plus owner-observed HyperSpeed manual startup, receiver
+  reconnect, UI restart, and Shift+Tab/keypad checks (no instant/30s claim);
+  exact latency was not measured.
 
 ## v0.5.0
 

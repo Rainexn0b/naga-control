@@ -50,11 +50,12 @@ https://raw.githubusercontent.com/Rainexn0b/naga-control/<tag>/install.sh -o
 install.sh && bash install.sh --ref <tag> --version <tag>`. Running only
 `bash install.sh --ref <tag> --version <tag>` on a file downloaded from `main`
 is not a pinned bootstrap. From a
-checkout, run `./install.sh` (same latest-published default). That tag pin covers
-the AppImage only; current native helper/builder need the outer bootstrap from the
-full Naga code commit containing the change with `--ref` for that same SHA, plus
-`--version` for the published AppImage tag separately; published v0.5 has no native
-helper/builder.
+checkout, run `./install.sh` (same latest-published default). The v0.5.1 source tag
+includes the native helper/builder; the v0.5.0 tag does not. Native helper code
+follows `--ref`, resolved to a full commit before download, independently of the
+AppImage selected by `--version`. To test an unreleased helper with a published
+AppImage, download the outer bootstrap from the full Naga code commit, use
+`--ref` for that same SHA, and select the published AppImage tag with `--version`.
 
 Upgrades rerun the same command with the existing stop consent. By default
 the current `main` installer replaces a mismatched local image with the
@@ -121,6 +122,11 @@ terminal:
 ```
 
 `naga-control` alone works when `~/.local/bin` is in `PATH`.
+
+Under **Device > Application**, enable **Start Naga Control at login (tray)**
+to launch the GUI at login without changing mapping-service startup. The
+**Restart background service** button restarts only Naga, after confirmation;
+it does not restart OpenRazer.
 
 <details><summary><b>Advanced install topics</b></summary>
 
