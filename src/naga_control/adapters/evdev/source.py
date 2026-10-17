@@ -2,12 +2,21 @@
 
 import errno
 import os
-from collections.abc import AsyncIterator, Callable, Collection, Iterator, Mapping, Sequence
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Callable,
+    Collection,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from importlib import import_module
 from typing import Protocol, cast
 
+from naga_control.adapters.evdev.async_reader import OwnedEvdevReadiness
 from naga_control.adapters.evdev.discovery import EventNode, resolve_event_node
 from naga_control.adapters.evdev.frames import FrameParser, ParsedFrame, RawInputEvent
 from naga_control.ports.forwarding import ForwardingProxySpec
@@ -94,6 +103,10 @@ class EvdevSource:
         self._identity_resolver = identity_resolver
         self._device_number_resolver = device_number_resolver
         self._closed = False
+        self._readiness: OwnedEvdevReadiness[InputEventLike] = OwnedEvdevReadiness(
+            get_fd=lambda: device.fd,
+            do_read=lambda: device.read(),
+        )
         capabilities = _filtered_capabilities(device.capabilities(absinfo=True))
         self._abs_axes = _abs_axis_codes(capabilities.get(EV_ABS, ()))
         info = device.info
@@ -113,8 +126,8 @@ class EvdevSource:
     def node(self) -> EventNode:
         return self._node
 
-    def async_read_loop(self) -> AsyncIterator[InputEventLike]:
-        return self._device.async_read_loop()
+    def async_read_loop(self) -> AsyncGenerator[InputEventLike, None]:
+        return self._readiness.iterate()
 
     def active_keys(self) -> Collection[int]:
         return self._device.active_keys()
@@ -147,9 +160,28 @@ class EvdevSource:
 
     def close(self) -> None:
         if self._closed:
+            cached = self._readiness.detach_error
+            if cached is not None:
+                raise cached
             return
-        self._device.close()
-        self._closed = True
+        detach_error: Exception | None = None
+        try:
+            self._readiness.request_close()
+        except Exception as exc:
+            detach_error = exc
+        device_error: Exception | None = None
+        try:
+            self._device.close()
+        except Exception as exc:
+            device_error = exc
+        if device_error is None:
+            self._closed = True
+        if detach_error is not None:
+            if device_error is not None:
+                raise detach_error from device_error
+            raise detach_error
+        if device_error is not None:
+            raise device_error
 
 
 def open_evdev_source(

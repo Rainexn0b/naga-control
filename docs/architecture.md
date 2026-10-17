@@ -61,6 +61,22 @@ on the evdev read path or D-Bus event-loop callback. Serialize them through a
 bounded worker queue. Recreate OpenRazer client objects after daemon ownership
 or device-list changes; `DeviceManager` is a snapshot, not a live collection.
 
+### Evdev Async Ownership
+
+Each physical source owns one `loop.add_reader` registration. The readiness
+callback only signals an owned guarded `asyncio.Event`; the reading coroutine
+performs the existing nonblocking `device.read` call itself. Exactly one
+active iterator exists per source, with no task per event and no retained
+upstream futures. Detachment retires and unregisters with the stored fd/loop
+token before `device.close`, stays idempotent, ignores stale callbacks, and
+never removes a fresh registration after fd reuse. Cancel while waiting
+completes promptly, explicit close wakes the waiter without manufacturing
+`EBADF`, concurrent readers are rejected, and no read runs on a closed source.
+`EAGAIN` from either the immediate call or the lazy batch rearms without busy
+loop or EOF; other `OSError` values keep exact identity. The first ordinary
+detach failure is cached with exact identity and surfaced through close/stop
+while the primary read result or cancellation is preserved.
+
 ## Device Discovery And Identity
 
 Enumerate initialized `input` devices with pyudev. For each `event*` node:
