@@ -1,6 +1,7 @@
 """Tabbed main window for the service pages; owns no business logic."""
 
 import logging
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
 from naga_control.config import parse_toml
 from naga_control.domain.errors import ConfigValidationError
 from naga_control.domain.profiles import ScrollMode
+from naga_control.gui.autostart import AutostartStore
 from naga_control.gui.buttons_page import ButtonsPage
 from naga_control.gui.device_page import DevicePage
 from naga_control.gui.editors import set_scroll
@@ -26,6 +28,8 @@ from naga_control.gui.models import ServiceModel
 from naga_control.gui.mouse_settings_page import MouseSettingsPage
 from naga_control.gui.presenter import ApplyOutcome, GuiPresenter
 from naga_control.gui.profile_mode_view import is_software_verified
+from naga_control.gui.service_action_controller import ServiceActionGuard
+from naga_control.gui.service_restart import RestartResult
 from naga_control.gui.tray_icon import TrayIcon
 from naga_control.gui.worker import Runner
 
@@ -44,7 +48,16 @@ class MainWindow(QMainWindow):
     profile_switch_finished = Signal(object)
     scroll_change_finished = Signal(object)
 
-    def __init__(self, presenter: GuiPresenter, model: ServiceModel, run: Runner) -> None:
+    def __init__(
+        self,
+        presenter: GuiPresenter,
+        model: ServiceModel,
+        run: Runner,
+        *,
+        autostart: AutostartStore | None = None,
+        restarter: Callable[[], Awaitable[RestartResult]] | None = None,
+        application_confirm: Callable[[], bool] | None = None,
+    ) -> None:
         super().__init__()
         self.presenter = presenter
         self.model = model
@@ -54,6 +67,10 @@ class MainWindow(QMainWindow):
         self._profile_switching = False
         self._profile_discard_pending = False
         self._scroll_switching = False
+        self._restart_guard = ServiceActionGuard(
+            is_apply_busy=self._is_apply_busy,
+            set_editors_enabled=self._set_restart_editors,
+        )
         self.profile_switch_finished.connect(
             self._finish_profile_switch, Qt.ConnectionType.QueuedConnection
         )
@@ -66,7 +83,15 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(str(app_icon_path())))
 
         self.tabs = QTabWidget()
-        self.device = DevicePage(presenter, model, run)
+        self.device = DevicePage(
+            presenter,
+            model,
+            run,
+            autostart=autostart,
+            restarter=restarter,
+            application_confirm=application_confirm,
+            restart_guard=self._restart_guard,
+        )
         self.buttons = ButtonsPage(presenter, model, run)
         self.settings = MouseSettingsPage(presenter, model, run)
         self.device.profiles.confirm_profile_change = self._confirm_and_discard
@@ -107,6 +132,20 @@ class MainWindow(QMainWindow):
         if not self._tray.available:
             logger.info("system tray unavailable; closing the window will quit")
 
+    def _is_apply_busy(self) -> bool:
+        return bool(
+            self._profile_switching
+            or self._scroll_switching
+            or self.model.apply_status == "applying…"
+        )
+
+    def _set_restart_editors(self, enabled: bool) -> None:
+        for editor in (self.device, self.buttons, self.settings):
+            editor.setEnabled(enabled)
+        if self._tray is not None:
+            self._tray.set_profile_switching(not enabled)
+            self._tray.set_scroll_switching(not enabled)
+
     def _update_header(self) -> None:
         self.statusBar().showMessage(self.model.apply_status or "")
 
@@ -135,6 +174,7 @@ class MainWindow(QMainWindow):
         if (
             self._profile_switching
             or self._scroll_switching
+            or self._restart_guard.restart_busy
             or not self.model.connection.reachable
             or document is None
             or not is_software_verified(self.model)
@@ -159,6 +199,7 @@ class MainWindow(QMainWindow):
         if (
             self._profile_switching
             or self._scroll_switching
+            or self._restart_guard.restart_busy
             or not self.model.connection.reachable
             or document is None
             or not is_software_verified(self.model)
@@ -224,6 +265,7 @@ class MainWindow(QMainWindow):
         if (
             self._scroll_switching
             or self._profile_switching
+            or self._restart_guard.restart_busy
             or self.model.apply_status == "applying…"
             or not self.model.connection.reachable
             or document is None
@@ -251,6 +293,7 @@ class MainWindow(QMainWindow):
             if (
                 self._scroll_switching
                 or self._profile_switching
+                or self._restart_guard.restart_busy
                 or self.model.apply_status == "applying…"
                 or not self.model.connection.reachable
                 or document is None
