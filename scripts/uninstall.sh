@@ -87,6 +87,115 @@ safe_path() {
     path="$(dirname "$path")" || die "could not inspect cleanup ancestor"
   done
 }
+# Owned GUI login-startup entry only. Resolved exactly like the GUI:
+# absolute XDG_CONFIG_HOME/autostart else HOME/.config/autostart.
+# Ownership is the Desktop Entry marker, never the Exec path, so a moved
+# image is still recognized. Interpreter-free: bash builtins plus the
+# required tools above; no Python, AppImage, or integration commands.
+AUTOSTART_NAME="org.nagacontrol.NagaControl.desktop"
+if [ -n "${XDG_CONFIG_HOME:-}" ]; then
+  case "${XDG_CONFIG_HOME}" in
+    /*)
+      _XDG_TRIMMED="${XDG_CONFIG_HOME%/}"
+      [ -n "$_XDG_TRIMMED" ] || die "XDG_CONFIG_HOME must be an absolute directory without dot components"
+      [[ "$_XDG_TRIMMED" != / && "$_XDG_TRIMMED" != *//* && ! "$_XDG_TRIMMED" =~ (^|/)\.\.?(/|$) ]] \
+        || die "XDG_CONFIG_HOME must be an absolute directory without dot components"
+      CONFIG_ROOT="$_XDG_TRIMMED"
+      ;;
+    *)
+      CONFIG_ROOT="$HOME/.config"
+      ;;
+  esac
+else
+  CONFIG_ROOT="$HOME/.config"
+fi
+AUTOSTART_FILE="$CONFIG_ROOT/autostart/$AUTOSTART_NAME"
+trim_space() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+autostart_is_owned() {
+  local file="$1" line trimmed key value in_group=0 type_val="" owned_val=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    trimmed="$(trim_space "$line")"
+    [ -n "$trimmed" ] || continue
+    case "$trimmed" in
+      \#*) continue ;;
+      \[*\])
+        if [ "$trimmed" = "[Desktop Entry]" ]; then
+          in_group=1
+        else
+          in_group=0
+        fi
+        continue
+        ;;
+    esac
+    if [ "$in_group" -eq 1 ]; then
+      case "$trimmed" in
+        *=*)
+          key="${trimmed%%=*}"
+          value="${trimmed#*=}"
+          key="$(trim_space "$key")"
+          value="$(trim_space "$value")"
+          if [ "$key" = "Type" ]; then
+            type_val="$value"
+          elif [ "$key" = "X-NagaControl-Owned" ]; then
+            owned_val="$value"
+          fi
+          ;;
+      esac
+    fi
+  done < "$file"
+  [ "$type_val" = "Application" ] && [ "$owned_val" = "true" ]
+}
+autostart_no_symlink_ancestors_ok() {
+  local path
+  path="$(dirname "$1")" || return 1
+  while :; do
+    [ ! -L "$path" ] || return 1
+    [ "$path" != / ] || break
+    path="$(dirname "$path")" || return 1
+  done
+  return 0
+}
+autostart_parent_dirs_ok() {
+  local dir stop path mode
+  dir="$(dirname "$AUTOSTART_FILE")" || return 1
+  if [[ "$AUTOSTART_FILE" == "$HOME/"* ]]; then
+    stop="$HOME"
+  else
+    stop="$CONFIG_ROOT"
+  fi
+  path="$dir"
+  while :; do
+    if [ -e "$path" ]; then
+      [ -d "$path" ] || return 1
+      [ -O "$path" ] || return 1
+      [ -w "$path" ] && [ -x "$path" ] || return 1
+      [ ! -L "$path" ] || return 1
+      mode="$(stat -Lc '%a' "$path")" || return 1
+      case "$mode" in
+        ''|*[!0-7]*) return 1 ;;
+      esac
+      if ! [[ "$mode" =~ ^[0-7]{3,4}$ ]]; then
+        return 1
+      fi
+      if (( (8#$mode & 0022) != 0 )); then
+        return 1
+      fi
+    fi
+    if [ "$path" = "$stop" ]; then
+      break
+    fi
+    if [ "$path" = / ]; then
+      return 1
+    fi
+    path="$(dirname "$path")" || return 1
+  done
+  return 0
+}
 no_symlinks "$HOME"
 safe_directory "$HOME"
 safe_path "$STATE_DIR" directory
@@ -113,6 +222,30 @@ for backup in "$STATE_DIR"/rollback.*; do
 done
 no_symlinks "$UDEV_DST"
 [ ! -e "$UDEV_DST" ] || [ -f "$UDEV_DST" ] || die "udev rule is not a regular file: $UDEV_DST"
+
+# Autostart preflight before any service change or file removal. Owned-only
+# validation; foreign, symlink, directory, non-regular, or missing entries
+# are preserved later without error. Owned-but-unsafe entries fail here with
+# files retained and no service call.
+if ! autostart_no_symlink_ancestors_ok "$AUTOSTART_FILE"; then
+  die "symlink cleanup destination/ancestor: $AUTOSTART_FILE"
+fi
+if [ -L "$AUTOSTART_FILE" ]; then
+  :
+elif [ -d "$AUTOSTART_FILE" ]; then
+  :
+elif [ ! -e "$AUTOSTART_FILE" ]; then
+  :
+elif [ ! -f "$AUTOSTART_FILE" ]; then
+  :
+elif [ ! -r "$AUTOSTART_FILE" ]; then
+  die "autostart entry is unreadable; retained without changes; fix permissions manually: $AUTOSTART_FILE"
+else
+  if autostart_is_owned "$AUTOSTART_FILE"; then
+    [ -O "$AUTOSTART_FILE" ] || die "autostart entry is not owned by the desktop user; retained without changes: $AUTOSTART_FILE"
+    autostart_parent_dirs_ok || die "autostart directory is unsafe; retained without changes; fix permissions manually: $AUTOSTART_FILE"
+  fi
+fi
 
 recovery() { die "$*; files retained. Quit the GUI, stop Naga manually and verify it is inactive, then rerun uninstall (manual recovery required)"; }
 active_state() { systemctl --user show naga-control.service --property=ActiveState --value 9>&-; }
@@ -145,6 +278,32 @@ ensure_stopped
 remove_file() { rm -f -- "$1" || die "could not remove $1; uninstall incomplete, earlier removals are not rolled back"; }
 for path in "$APPIMAGE_DST" "$WRAPPER_DST" "$STATE_DIR/installed-tag"; do remove_file "$path"; done
 for path in "${USER_FILES[@]}"; do remove_file "$HOME/$path"; done
+# Remove only the owned autostart entry, independent of --purge-config.
+# Never the autostart directory or other apps. Missing, foreign, symlink,
+# directory, or non-regular entries are preserved without following targets.
+if ! autostart_no_symlink_ancestors_ok "$AUTOSTART_FILE"; then
+  die "symlink cleanup destination/ancestor: $AUTOSTART_FILE; uninstall incomplete, earlier removals are not rolled back"
+fi
+if [ -L "$AUTOSTART_FILE" ]; then
+  log "retained autostart symlink without following target: $AUTOSTART_FILE"
+elif [ -d "$AUTOSTART_FILE" ]; then
+  log "retained autostart directory without changes: $AUTOSTART_FILE"
+elif [ ! -e "$AUTOSTART_FILE" ]; then
+  :
+elif [ ! -f "$AUTOSTART_FILE" ]; then
+  log "retained non-regular autostart entry without changes: $AUTOSTART_FILE"
+elif [ ! -r "$AUTOSTART_FILE" ]; then
+  die "autostart entry is unreadable; uninstall incomplete, earlier removals are not rolled back: $AUTOSTART_FILE"
+else
+  if autostart_is_owned "$AUTOSTART_FILE"; then
+    [ -O "$AUTOSTART_FILE" ] || die "autostart entry is not owned by the desktop user; uninstall incomplete, earlier removals are not rolled back: $AUTOSTART_FILE"
+    autostart_parent_dirs_ok || die "autostart directory is unsafe; uninstall incomplete, earlier removals are not rolled back: $AUTOSTART_FILE"
+    remove_file "$AUTOSTART_FILE"
+    log "removed owned autostart entry: $AUTOSTART_FILE"
+  else
+    log "retained foreign autostart entry without changes: $AUTOSTART_FILE"
+  fi
+fi
 for backup in "${BACKUPS[@]}"; do
   for path in "${BACKUP_FILES[@]}"; do remove_file "$backup/$path"; done
   remaining=("$backup"/*)
