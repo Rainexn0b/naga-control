@@ -1,9 +1,8 @@
-"""USB removal teardown: ENODEV ungrab must not poison strict cleanup.
+"""USB removal teardown: ENODEV ungrab recovers cleanly through strict cleanup.
 
-Repo `SourceForwarder` suppresses cleanup errors, unlike the installed strict
-barrier. These tests use a fake strict wrapper that mirrors the installed
-ordering (release, ungrab, source-close, proxy-close, cache first Exception)
-so the adapter contract is verified without claiming repo forwarding is strict.
+Repo `SourceForwarder` caches the first ordinary cleanup failure and re-raises
+the same object. `EvdevSource.ungrab` ignores only `ENODEV`, so removal plus a
+successful close is clean recovery, while `EIO`/`EBADF` remain a barrier.
 """
 
 import errno
@@ -61,6 +60,9 @@ class RemovalFakeDevice:
         assert not verbose
         return (1,)
 
+    def read(self) -> object:
+        raise BlockingIOError(errno.EAGAIN, "no pending frames")
+
     def capabilities(
         self, verbose: bool = False, absinfo: bool = True
     ) -> Mapping[int, Sequence[object]]:
@@ -109,25 +111,65 @@ def _source(device: RemovalFakeDevice, node: EventNode | None = None) -> EvdevSo
     )
 
 
-def strict_teardown(source: EvdevSource, proxy: FakeProxy, release: list[str]) -> None:
-    """Mirror the installed strict order: release, ungrab, closes, first error wins."""
-    first: Exception | None = None
+def _started_forwarder(device: RemovalFakeDevice, proxy: FakeProxy, release: list[str]) -> object:
+    from naga_control.service.source_forwarding import SourceForwarder
 
-    def attempt(operation: object) -> None:
-        nonlocal first
-        try:
-            if callable(operation):
-                operation()
-        except Exception as exc:
-            if first is None:
-                first = exc
+    source = _source(device)
+    forwarder = SourceForwarder(source, lambda: proxy, lambda: release.append("release"))  # type: ignore[arg-type]
+    forwarder.start()
+    release.clear()
+    device.ungrab_calls = 0
+    device.close_calls = 0
+    proxy.close_calls = 0
+    return forwarder
 
-    attempt(lambda: release.append("release"))
-    attempt(source.ungrab)
-    attempt(source.close)
-    attempt(proxy.close)
-    if first is not None:
-        raise first
+
+def test_real_forwarder_enodev_recovers_cleanly() -> None:
+    device = RemovalFakeDevice(ungrab_error=OSError(errno.ENODEV, "no such device"))
+    proxy = FakeProxy()
+    release: list[str] = []
+    forwarder = _started_forwarder(device, proxy, release)  # type: ignore[assignment]
+    from naga_control.service.source_forwarding import SourceForwarder as Real
+
+    assert isinstance(forwarder, Real)
+    forwarder.stop()  # type: ignore[attr-defined]
+    assert release == ["release"]
+    assert device.close_calls == 1
+    assert proxy.close_calls == 1
+    forwarder.stop()  # type: ignore[attr-defined]
+    assert release == ["release"]
+    assert device.close_calls == 1
+
+
+def test_real_forwarder_genuine_ungrab_is_a_barrier() -> None:
+    genuine = OSError(errno.EIO, "genuine ungrab failure")
+    device = RemovalFakeDevice(ungrab_error=genuine)
+    proxy = FakeProxy()
+    release: list[str] = []
+    forwarder = _started_forwarder(device, proxy, release)  # type: ignore[assignment]
+    with pytest.raises(OSError) as caught:
+        forwarder.stop()  # type: ignore[attr-defined]
+    assert caught.value is genuine
+    assert release == ["release"]
+    assert device.close_calls == 1
+    assert proxy.close_calls == 1
+    with pytest.raises(OSError) as cached:
+        forwarder.stop()  # type: ignore[attr-defined]
+    assert cached.value is genuine
+    assert device.close_calls == 1
+
+
+def test_real_forwarder_close_error_is_a_barrier_after_enodev() -> None:
+    close_error = OSError(errno.EIO, "close failed")
+    device = RemovalFakeDevice(
+        ungrab_error=OSError(errno.ENODEV, "no such device"),
+        close_errors=(close_error,),
+    )
+    proxy = FakeProxy()
+    forwarder = _started_forwarder(device, proxy, [])  # type: ignore[assignment]
+    with pytest.raises(OSError) as caught:
+        forwarder.stop()  # type: ignore[attr-defined]
+    assert caught.value is close_error
 
 
 def test_normal_ungrab_still_works() -> None:
@@ -246,47 +288,3 @@ def test_old_source_cannot_be_reused_after_close() -> None:
     assert device.close_calls == 1
     with pytest.raises(OSError, match="closed descriptor"):
         source.grab()
-
-
-def test_strict_wrapper_enodev_does_not_reach_barrier() -> None:
-    device = RemovalFakeDevice(ungrab_error=OSError(errno.ENODEV, "no such device"))
-    source = _source(device)
-    proxy = FakeProxy()
-    release: list[str] = []
-
-    strict_teardown(source, proxy, release)
-
-    assert release == ["release"]
-    assert device.close_calls == 1
-    assert proxy.close_calls == 1
-
-
-def test_strict_wrapper_genuine_ungrab_error_reaches_barrier() -> None:
-    genuine = OSError(errno.EIO, "genuine ungrab failure")
-    device = RemovalFakeDevice(ungrab_error=genuine)
-    source = _source(device)
-    proxy = FakeProxy()
-    release: list[str] = []
-
-    with pytest.raises(OSError) as caught:
-        strict_teardown(source, proxy, release)
-
-    assert caught.value is genuine
-    # Strict cleanup still attempts later closes despite the primary failure.
-    assert device.close_calls == 1
-    assert proxy.close_calls == 1
-
-
-def test_strict_wrapper_close_error_reaches_barrier() -> None:
-    close_error = OSError(errno.EIO, "close failed")
-    device = RemovalFakeDevice(
-        ungrab_error=OSError(errno.ENODEV, "no such device"),
-        close_errors=(close_error,),
-    )
-    source = _source(device)
-    proxy = FakeProxy()
-
-    with pytest.raises(OSError) as caught:
-        strict_teardown(source, proxy, [])
-
-    assert caught.value is close_error

@@ -60,5 +60,12 @@ Receipt for the Oct 17 F17 failure, code fix, local install, and manual port-mov
 
 ## Still pending
 
-- Reconnect latency characterization and natural idle/wake checks; the separate evdev `EBADF` callback race; integrating the six missing source overlays before release.
+- Reconnect latency characterization and natural idle/wake checks; the separate evdev `EBADF` callback race.
 - See [architecture](architecture.md), [hardware validation](hardware-validation.md), [troubleshooting](troubleshooting.md), and [implementation plan](implementation-plan.md).
+
+## Safety overlay integration
+
+- The six Oct 14 reader-failure and cleanup-barrier overlays are now integrated into main with exact deployed bytes. Product hashes `c17ab059`, `9256a05e`, `3bd27e74`, `04712e75`, `dea98e32`, `dc335bca` match the verified mounted candidate. The existing `ENODEV` adapter fix remains unchanged and now recovers cleanly through the strict forwarder instead of latching. No public IPC, schema, or required-protocol change; no GUI change.
+- Fake regressions cover unexpected reader ends, once-only session failure, held-output release, fenced worker teardown, first-error cleanup barrier with primary preservation, and redacted warnings. The manual port-move observation above and its latency limits are retained unchanged; no new hardware acceptance is claimed here. No release, tag, or version change was made.
+- Removal regressions now exercise the real strict forwarder rather than the earlier test mirror. Independent baseline RED checks reproduced phantom-healthy readers and swallowed cleanup failures with pytest exit 1; current-code focused checks passed 301 tests.
+- Final integrated-source checks: `ruff check .`, `ruff format --check .` (478 files), and `pyright` passed. `.venv/bin/pytest -q` exited 0: 4170 passed, 2 coverage-unavailable skips, 5 hardware deselected, 7 dependency deprecation warnings, 651.85s. All Python files remain within 400 physical lines; all six product hashes still match the deployed safeguards.

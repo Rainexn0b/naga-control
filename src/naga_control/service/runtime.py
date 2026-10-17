@@ -52,6 +52,7 @@ class NagaService:
         self._sessions = SessionLifecycle(self._fence_session)
         self._stop_task: asyncio.Task[Exception | None] | None = None
         self._cleanup_tasks: set[asyncio.Task[None]] = set()
+        self._input_failure_session: RemappingSession | None = None
 
     async def start(self) -> HardwareState:
         starting = False
@@ -89,8 +90,10 @@ class NagaService:
                     if self._needs_rescan or not self._mode_write_failed:
                         try:
                             await self._apply_topology(self._discover())
-                        except Exception:
-                            logger.debug("periodic topology recovery failed", exc_info=True)
+                        except Exception as exc:
+                            logger.warning(
+                                "periodic topology recovery failed: %s", type(exc).__name__
+                            )
                     continue
                 if state.status != "available":
                     continue
@@ -132,7 +135,7 @@ class NagaService:
                     self._observed_mode = None
                     self._mode_error = str(exc)
                     await self._sessions.stop()
-                    logger.debug("periodic state refresh failed", exc_info=True)
+                    logger.warning("periodic state refresh failed: %s", type(exc).__name__)
 
     async def apply_topology(self, connections: tuple[NagaConnection, ...]) -> HardwareState:
         async with self._lock:
@@ -309,6 +312,20 @@ class NagaService:
                 self._observed_mode = None
                 self._mode_error = "device action lost hardware access"
                 self._schedule_stop()
+
+    def record_input_failure(self, session: RemappingSession) -> None:
+        if not self._started or self._stop_task is not None:
+            return
+        if self._sessions.current is not session:
+            return
+        if self._input_failure_session is session:
+            return
+        self._input_failure_session = session
+        self._fence_session()
+        self._topology_epoch += 1
+        self._observed_mode = None
+        self._mode_error = "input forwarding stopped unexpectedly; recovery pending"
+        self._schedule_stop()
 
     def configuration_document(self) -> str:
         return self._config.document()

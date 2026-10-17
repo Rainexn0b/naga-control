@@ -1,6 +1,7 @@
 """Compose and run physically discovered sources for the first remapping slice."""
 
 import asyncio
+import logging
 from collections.abc import Callable
 from contextlib import suppress
 from typing import Protocol
@@ -23,6 +24,26 @@ from naga_control.service.frame_planner import FramePlanner
 from naga_control.service.source_forwarding import ManagedSource
 from naga_control.service.source_frame_consumer import SourceFrameConsumer
 from naga_control.service.source_reader import SourceReader
+
+logger = logging.getLogger(__name__)
+
+
+def _sanitized_interface(value: object) -> str:
+    if type(value) is str:
+        if value == "00":
+            return "00"
+        if value == "01":
+            return "01"
+        if value == "02":
+            return "02"
+    return "unknown"
+
+
+def _sanitized_errno(error: BaseException | None) -> int | None:
+    raw = getattr(error, "errno", None)
+    if type(raw) is int and 1 <= raw <= 4095:
+        return raw
+    return None
 
 
 class PreparedSource(AsyncInputSource, ManagedSource, Protocol):
@@ -103,6 +124,8 @@ class FirstSliceSession:
         proxy_factory: ForwardingProxyFactory,
         readiness_waiter: SourceProxyReadinessWaiter,
         reader_factory: SourceReaderFactory = create_source_reader,
+        *,
+        on_failure: Callable[["FirstSliceSession"], None] | None = None,
     ) -> None:
         self._connection = connection
         self._profile = profile
@@ -113,12 +136,15 @@ class FirstSliceSession:
         self._proxy_factory = proxy_factory
         self._readiness_waiter = readiness_waiter
         self._reader_factory = reader_factory
+        self._on_failure = on_failure
         self._tasks: list[asyncio.Task[object]] = []
         self._readers: list[RunningSourceReader] = []
         self._errors: list[BaseException] = []
         self._started = False
         self._stopped = False
         self._stop_task: asyncio.Task[None] | None = None
+        self._task_interfaces: dict[asyncio.Task[object], str] = {}
+        self._failure_notified = False
 
     @property
     def errors(self) -> tuple[BaseException, ...]:
@@ -127,8 +153,13 @@ class FirstSliceSession:
 
     @property
     def running(self) -> bool:
-        """Whether any reader task is still reading its source."""
-        return any(not task.done() for task in self._tasks)
+        """Whether the full pipeline is still reading every source."""
+        return (
+            self._started
+            and not self._stopped
+            and bool(self._tasks)
+            and all(not task.done() for task in self._tasks)
+        )
 
     async def start(self) -> None:
         if self._stopped:
@@ -158,7 +189,9 @@ class FirstSliceSession:
                     raise
                 self._readers.append(reader)
                 reader.start()
-                self._tasks.append(asyncio.create_task(reader.run()))
+                task = asyncio.create_task(reader.run())
+                self._tasks.append(task)
+                self._task_interfaces[task] = _sanitized_interface(source.node.interface_number)
             for task in self._tasks:
                 task.add_done_callback(self._record_error)
         except BaseException:
@@ -167,6 +200,9 @@ class FirstSliceSession:
             raise
 
     async def stop(self) -> None:
+        await asyncio.shield(self._request_stop())
+
+    def _request_stop(self) -> asyncio.Task[None]:
         if self._stop_task is None:
             self._stopped = True
             # Cancel synchronously before yielding, including never-entered readers.
@@ -176,12 +212,13 @@ class FirstSliceSession:
             self._stop_task.add_done_callback(
                 lambda done: None if done.cancelled() else done.exception()
             )
-        await asyncio.shield(self._stop_task)
+        return self._stop_task
 
     async def _stop(self) -> None:
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks.clear()
+        self._task_interfaces.clear()
         first_error: Exception | None = None
         cleanup = [reader.stop for reader in self._readers]
         self._readers.clear()
@@ -220,13 +257,65 @@ class FirstSliceSession:
             raise first_error
 
     def _record_error(self, task: asyncio.Task[object]) -> None:
+        if self._stopped:
+            return
+        iface = self._task_interfaces.get(task, "unknown")
+        outcome = "cancel"
+        error: BaseException | None = None
         if task.cancelled():
-            return
-        if (error := task.exception()) is not None:
+            error = asyncio.CancelledError("reader cancelled unexpectedly")
             self._errors.append(error)
+        else:
+            try:
+                raised = task.exception()
+            except asyncio.CancelledError:
+                error = asyncio.CancelledError("reader cancelled unexpectedly")
+                self._errors.append(error)
+            else:
+                if raised is not None:
+                    outcome = "error"
+                    error = raised
+                    self._errors.append(raised)
+                else:
+                    read_error = getattr(task.result(), "error", None)
+                    if isinstance(read_error, BaseException):
+                        outcome = "error"
+                        error = read_error
+                        self._errors.append(read_error)
+                    else:
+                        outcome = "EOF"
+                        error = None
+        if self._stopped or self._failure_notified:
             return
-        if (read_error := getattr(task.result(), "error", None)) is not None:
-            self._errors.append(read_error)
+        self._failure_notified = True
+        name = type(error).__name__ if error is not None else "None"
+        errno = _sanitized_errno(error)
+        if errno is None:
+            logger.warning(
+                "input reader stopped unexpectedly: interface=%s outcome=%s error=%s",
+                iface,
+                outcome,
+                name,
+            )
+        else:
+            logger.warning(
+                "input reader stopped unexpectedly: interface=%s outcome=%s error=%s errno=%s",
+                iface,
+                outcome,
+                name,
+                errno,
+            )
+        try:
+            if self._on_failure is not None:
+                self._on_failure(self)
+        except Exception as exc:
+            logger.error("input failure callback cleanup failed: %s", type(exc).__name__)
+        finally:
+            try:
+                self.release_all()
+            except Exception as exc:
+                logger.error("input failure output release cleanup failed: %s", type(exc).__name__)
+            self._request_stop()
 
 
 def _proxy_preparer(

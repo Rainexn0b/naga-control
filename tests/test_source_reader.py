@@ -68,6 +68,129 @@ async def test_reader_stops_the_source_lifecycle_after_disconnect_and_reset() ->
     assert [frame.reset_controls for frame in sink.frames] == [(), ("ring_finger",)]
 
 
+class CleanSource:
+    async def async_read_loop(self) -> AsyncIterator[Event]:
+        for event in (
+            Event(EV_MSC, MSC_SCAN, 458860),
+            Event(EV_KEY, 187, 1),
+            Event(EV_SYN, SYN_REPORT, 0),
+        ):
+            yield event
+
+    def active_keys(self) -> Collection[int]:
+        return ()
+
+    def active_abs_values(self) -> Mapping[int, int]:
+        return {}
+
+
+async def test_clean_eof_with_cleanup_failure_raises_cleanup() -> None:
+    import pytest
+
+    sink = Sink()
+    cleanup = OSError("cleanup close failed")
+
+    def failing_stop() -> None:
+        sink.events.append("stop")
+        raise cleanup
+
+    sink.stop = failing_stop  # type: ignore[method-assign]
+    reader = SourceReader(CleanSource(), _parser(), sink)  # type: ignore[arg-type]
+    with pytest.raises(OSError) as raised:
+        await reader.run()
+    assert raised.value is cleanup
+    with pytest.raises(OSError) as cached:
+        reader.stop()
+    assert cached.value is cleanup
+    with pytest.raises(OSError) as blocked:
+        reader.start()
+    assert blocked.value is cleanup
+
+
+async def test_read_error_result_is_preserved_when_cleanup_fails() -> None:
+    import pytest
+
+    sink = Sink()
+    cleanup = OSError("cleanup failed")
+    original_stop = sink.stop
+
+    def failing_stop() -> None:
+        original_stop()
+        raise cleanup
+
+    sink.stop = failing_stop  # type: ignore[method-assign]
+    reader = SourceReader(Source(), _parser(), sink)
+    result = await reader.run()
+    assert result.error is not None
+    assert str(result.error) == "source disconnected"
+    with pytest.raises(OSError) as cached:
+        reader.stop()
+    assert cached.value is cleanup
+
+
+async def test_raised_primary_is_preserved_when_cleanup_fails() -> None:
+    import pytest
+
+    primary = RuntimeError("primary read failed")
+
+    class FailingSource:
+        async def async_read_loop(self) -> AsyncIterator[Event]:
+            raise primary
+            yield Event(0, 0, 0)
+
+        def active_keys(self) -> Collection[int]:
+            return ()
+
+        def active_abs_values(self) -> Mapping[int, int]:
+            return {}
+
+    sink = Sink()
+    cleanup = OSError("cleanup failed")
+    original_stop = sink.stop
+
+    def failing_stop() -> None:
+        original_stop()
+        raise cleanup
+
+    sink.stop = failing_stop  # type: ignore[method-assign]
+    reader = SourceReader(FailingSource(), _parser(), sink)  # type: ignore[arg-type]
+    with pytest.raises(RuntimeError) as raised:
+        await reader.run()
+    assert raised.value is primary
+    with pytest.raises(OSError) as cached:
+        reader.stop()
+    assert cached.value is cleanup
+
+
+def test_reader_owns_stop_when_sink_start_raises() -> None:
+    import pytest
+
+    from naga_control.adapters.evdev.frames import ParsedFrame as Frame
+
+    primary = RuntimeError("sink start failed")
+
+    class FailingSink:
+        def __init__(self) -> None:
+            self.stops = 0
+
+        def start(self) -> None:
+            raise primary
+
+        def consume(self, frame: Frame) -> None:
+            raise AssertionError("must not consume")
+
+        def stop(self) -> None:
+            self.stops += 1
+
+    sink = FailingSink()
+    reader = SourceReader(Source(), _parser(), sink)  # type: ignore[arg-type]
+    with pytest.raises(RuntimeError) as raised:
+        reader.start()
+    assert raised.value is primary
+    reader.stop()
+    assert sink.stops == 1
+
+
 def _parser() -> FrameParser:
     node = EventNode(
         event_path="/dev/input/event5",

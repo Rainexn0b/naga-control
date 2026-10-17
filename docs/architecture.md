@@ -163,6 +163,34 @@ shutdown:
 If forwarding safety cannot be established, fail open by releasing grabs. Loss
 of remapping is preferable to loss of ordinary mouse input.
 
+Forwarding cleanup is a strict barrier. A forwarder attempts release, ungrab,
+source close, and proxy close despite any ordinary `Exception`, caches the
+first such failure, and re-raises the same object on every later stop without
+retrying operations. Start and forward preserve their primary activation or
+forwarding error and cause; cleanup collection never masks the primary. The
+frame consumer preserves its active emit, parse, unsafe, or write primary
+while retaining the cached cleanup for the later explicit stop. A reader
+preserves a raised primary and a read-error result while still caching the
+one-shot stop; clean end-of-file with a cleanup failure raises the cleanup.
+A reader owns stop after entered sink start even when start raises, and blocks
+restart after a cached stop failure. A failed group stop therefore keeps
+`SessionLifecycle.unsafe` true as a per-service failed-cleanup barrier that
+requires operator recovery or restart after resources are safe. Ordinary
+errors with clean cleanup still autorecover through the existing poll path.
+
+Any unexpected reader end (raised error, read-result error, clean
+end-of-file, unexpected cancel) is a once-only session failure. Intentional
+stop and startup rollback are not failures. The failing reader cleans up
+first; the session then fences the worker synchronously before sibling and
+global teardown, releases held outputs, and stops through one owned shielded
+barrier. Duplicate and late failures from an old session are ignored, and no
+extra task is created per input event. `ENODEV` on ungrab with a successful
+close is clean recovery; `EIO`, `EBADF`, and other genuine failures remain a
+barrier. New failure warnings carry only a fixed `00`/`01`/`02` interface
+(else `unknown`), outcome `EOF`/`cancel`/`error`, exception class, and exact
+builtin `int` errno `1..4095` only, with no `exc_info`, raw messages, chains,
+serials, USB paths, or `eventN`.
+
 ## OpenRazer Adapter
 
 The adapter selects devices by exact VID/PID and verifies capabilities through

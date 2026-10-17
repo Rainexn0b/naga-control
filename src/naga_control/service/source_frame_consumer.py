@@ -1,6 +1,7 @@
 """Synchronous composition of a parsed source frame into safe output operations."""
 
 from collections.abc import Callable
+from contextlib import suppress
 
 from naga_control.adapters.evdev.frames import ParsedFrame
 from naga_control.ports.forwarding import ForwardingProxy
@@ -48,7 +49,8 @@ class SourceFrameConsumer:
                 self._device_actions.submit(intent)
         except Exception:
             self._failed = True
-            self._forwarder.stop()
+            with suppress(Exception):
+                self._forwarder.stop()
             raise
 
     def stop(self) -> None:

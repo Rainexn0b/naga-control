@@ -1,7 +1,6 @@
 """Fail-open lifecycle for a physical source and its prepared forwarding proxy."""
 
 from collections.abc import Callable, Collection
-from contextlib import suppress
 from typing import Protocol
 
 from naga_control.adapters.evdev.frames import EV_SYN, SYN_REPORT
@@ -42,8 +41,11 @@ class SourceForwarder:
         self._proxy: ForwardingProxy | None = None
         self._grabbed = False
         self._active = False
+        self._cleanup_error: Exception | None = None
 
     def start(self) -> None:
+        if self._cleanup_error is not None:
+            raise self._cleanup_error
         if self._active:
             raise RuntimeError("source forwarding is already active")
         try:
@@ -62,6 +64,8 @@ class SourceForwarder:
             raise SourceActivationError("could not safely activate source forwarding") from exc
 
     def forward(self, plan: ForwardingPlan) -> None:
+        if self._cleanup_error is not None:
+            raise self._cleanup_error
         if not self._active or self._proxy is None:
             raise RuntimeError("source forwarding is not active")
         if plan.unsafe:
@@ -78,24 +82,46 @@ class SourceForwarder:
             raise
 
     def stop(self) -> None:
+        if self._cleanup_error is not None:
+            raise self._cleanup_error
         if self._active or self._grabbed or self._proxy is not None:
             self._cleanup()
+            if self._cleanup_error is not None:
+                raise self._cleanup_error
 
     def _require_no_held_keys(self, phase: str) -> None:
         if held := tuple(self._source.active_keys()):
             raise SourceActivationError(f"physical keys are held {phase}: {held}")
 
     def _cleanup(self) -> None:
+        """Attempt every release once; cache first ordinary failure without raising."""
+        if self._cleanup_error is not None:
+            self._active = False
+            self._grabbed = False
+            self._proxy = None
+            return
         self._active = False
-        with suppress(Exception):
+        try:
             self._release_generated_outputs()
+        except Exception as exc:
+            if self._cleanup_error is None:
+                self._cleanup_error = exc
         if self._grabbed:
-            with suppress(Exception):
+            try:
                 self._source.ungrab()
+            except Exception as exc:
+                if self._cleanup_error is None:
+                    self._cleanup_error = exc
         self._grabbed = False
-        with suppress(Exception):
+        try:
             self._source.close()
-        if self._proxy is not None:
-            with suppress(Exception):
-                self._proxy.close()
-        self._proxy = None
+        except Exception as exc:
+            if self._cleanup_error is None:
+                self._cleanup_error = exc
+        proxy, self._proxy = self._proxy, None
+        if proxy is not None:
+            try:
+                proxy.close()
+            except Exception as exc:
+                if self._cleanup_error is None:
+                    self._cleanup_error = exc

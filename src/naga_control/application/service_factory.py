@@ -38,6 +38,10 @@ def create_service(
         if service is not None:
             service.record_hardware_state(state)
 
+    def record_input_failure(session: FirstSliceSession) -> None:
+        if service is not None:
+            service.record_input_failure(session)
+
     if load_configuration is None:
         store = TomlConfigStore(default_config_path(environ or os.environ, home or Path.home()))
         config_loader: Callable[[], Configuration | None] = store.load
@@ -48,7 +52,8 @@ def create_service(
         discover,
         config_loader,
         active_worker,
-        session_factory or create_session_factory(active_worker, record_hardware_state),
+        session_factory
+        or create_session_factory(active_worker, record_hardware_state, record_input_failure),
         store,
     )
     return service
@@ -57,6 +62,7 @@ def create_service(
 def create_session_factory(
     worker: HardwareWorker,
     on_state: Callable[[HardwareState], None] | None = None,
+    on_failure: Callable[[FirstSliceSession], None] | None = None,
 ) -> Callable[[NagaConnection, Configuration], FirstSliceSession]:
     def create(connection: NagaConnection, configuration: Configuration) -> FirstSliceSession:
         profile = configuration.profile(configuration.active_profile)
@@ -73,6 +79,7 @@ def create_session_factory(
                 open_evdev_source,
                 UInputForwardingProxyFactory(),
                 create_proxy_readiness_waiter(),
+                on_failure=on_failure,
             )
         except BaseException:
             for output in (keyboard, mouse):

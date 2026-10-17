@@ -105,12 +105,15 @@ def test_release_failures_do_not_prevent_source_and_proxy_cleanup(
     rig = ConsumerRig(monkeypatch, failures)
     rig.consumer.start()
     assert rig.source.grabbed
+    expected = rig.errors[failures[0]]
 
     if exit_path == "unsafe":
         with pytest.raises(SourceActivationError, match="unsafe frame"):
             rig.consumer.consume(_unsafe_frame())
     else:
-        rig.consumer.stop()
+        with pytest.raises(RuntimeError) as raised:
+            rig.consumer.stop()
+        assert raised.value is expected
 
     assert rig.calls == [*RELEASES, *CLOSES]
     assert not rig.source.grabbed
@@ -118,7 +121,9 @@ def test_release_failures_do_not_prevent_source_and_proxy_cleanup(
     assert rig.proxy.closed
     assert rig.proxy.events == []
     assert caplog.records == []
-    rig.consumer.stop()
+    with pytest.raises(RuntimeError) as cached:
+        rig.consumer.stop()
+    assert cached.value is expected
     rig.consumer.consume(ParsedFrame((RawInputEvent(EV_KEY, 30, 1),), ()))
     assert rig.calls == [*RELEASES, *CLOSES]
     assert rig.proxy.events == []
@@ -136,12 +141,15 @@ def test_ordinary_descriptor_cleanup_errors_do_not_skip_later_attempts(
 ) -> None:
     rig = ConsumerRig(monkeypatch, failures + (RELEASES if release_fails else ()))
     rig.consumer.start()
+    expected = rig.errors[RELEASES[0] if release_fails else failures[0]]
 
     if exit_path == "unsafe":
         with pytest.raises(SourceActivationError, match="unsafe frame"):
             rig.consumer.consume(_unsafe_frame())
     else:
-        rig.consumer.stop()
+        with pytest.raises(Exception) as raised:
+            rig.consumer.stop()
+        assert raised.value is expected
 
     # A failed attempt is not evidence that the underlying resource was released.
     assert rig.calls == [*RELEASES, *CLOSES]
@@ -149,7 +157,9 @@ def test_ordinary_descriptor_cleanup_errors_do_not_skip_later_attempts(
     assert rig.proxy.closed == ("proxy-close" not in failures)
     assert rig.source.grabbed == ("ungrab" in failures)
     assert caplog.records == []
-    rig.consumer.stop()
+    with pytest.raises(Exception) as cached:
+        rig.consumer.stop()
+    assert cached.value is expected
     assert rig.calls == [*RELEASES, *CLOSES]
 
 
