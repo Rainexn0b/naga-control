@@ -27,8 +27,8 @@ management; the installer never invokes apt/pacman for an ordinary app install:
   and session D-Bus (Debian/Ubuntu: systemd user support and `dbus-user-session`;
   Arch/Fedora: systemd and dbus desktop session integration). Do not use sudo
   for the installer or borrow another user's bus credentials.
-- FUSE2: an x86_64 `libfuse.so.2` library. Use the README's
-  [exact-release package references](../README.md#install), not package guesses
+- FUSE2: an x86_64 `libfuse.so.2` library. Use the
+  [exact-release package references](installation.md#fuse2-runtime-manual-per-release-references), not package guesses
   inherited from another release or derivative. Also provide FUSE runtime/kernel
   support and access to `/dev/fuse` through your normal distribution/session policy.
   Preflight discovers the library and checks runtime **metadata only**; it never

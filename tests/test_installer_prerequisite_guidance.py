@@ -1,4 +1,10 @@
-"""FUSE prerequisite guidance: SONAME diagnostic plus exact manual references."""
+"""Prerequisite guidance: installer diagnostics plus doc relocation invariants.
+
+The installer one-liner and essential prerequisite links stay in README.md.
+Exact per-release FUSE references, pinning detail, and portability scope
+live in docs/installation.md, linked from README.md and
+docs/troubleshooting.md.
+"""
 
 from pathlib import Path
 
@@ -49,12 +55,27 @@ def test_kernel_failure_keeps_generic_capability_remedy(tmp_path: Path) -> None:
     assert not installed_image(fake).exists()
 
 
-def test_readme_lists_exact_verified_fuse_references() -> None:
+def test_readme_keeps_compact_install_essentials() -> None:
     text = (ROOT / "README.md").read_text()
+    text.encode("ascii")
+    assert "main/install.sh -o install.sh && bash install.sh" in text
+    assert "app-only" in text
+    for link in (
+        "docs/troubleshooting.md#installer-prerequisites",
+        "docs/troubleshooting.md#installer-upgrades-and-rollback",
+        "docs/release-notes.md#required-openrazer",
+        "docs/installation.md",
+    ):
+        assert link in text, link
+
+
+def test_installation_guide_lists_exact_verified_fuse_references() -> None:
+    text = (ROOT / "docs/installation.md").read_text()
     text.encode("ascii")
     assert "main/install.sh -o install.sh && bash install.sh" in text
     assert "--ref <tag> --version <tag>" in text
     assert "app-only" in text and "--install-openrazer" in text
+    assert "2026-10-08" in text
     for token in (
         "Ubuntu 22.04",
         "Ubuntu 24.04",
@@ -71,9 +92,16 @@ def test_readme_lists_exact_verified_fuse_references() -> None:
     ):
         assert token in text, token
     normalized = " ".join(text.split())
-    assert "finished-artifact static gate" in normalized
-    assert "208 objects" in normalized
-    assert "22.04 baseline plus 24.04 userspace smoke checks" in normalized
+    assert "Only these four package references are verified" in normalized
+    assert (
+        "not a claim of complete prerequisites, AppImage launch, install, "
+        "or hardware support" in normalized
+    )
+
+
+def test_installation_guide_states_portability_scope_and_links() -> None:
+    text = (ROOT / "docs/installation.md").read_text()
+    normalized = " ".join(text.split())
     assert (
         "Scope is bundled runtime imports, offscreen QApplication, CLI `--help`, and "
         "temporary integration payload only;" in normalized
@@ -82,11 +110,7 @@ def test_readme_lists_exact_verified_fuse_references() -> None:
         "no full install, upgrade, remove, FUSE, user units, D-Bus, sudo, udev, "
         "desktop, service, or hardware certification is claimed" in normalized
     )
-    assert "Only these four package references are verified" in normalized
-    assert (
-        "not a claim of complete prerequisites, AppImage launch, install, "
-        "or hardware support" in normalized
-    )
+    assert "distro-portability-plan.md" in text
 
 
 def _anchors(path: Path) -> set[str]:
@@ -95,19 +119,21 @@ def _anchors(path: Path) -> set[str]:
         stripped = line.strip()
         if not stripped.startswith("#"):
             continue
-        slug = "".join(
-            char if char.isalnum() else "-" for char in stripped.lstrip("#").strip().lower()
-        )
-        while "--" in slug:
-            slug = slug.replace("--", "-")
-        anchors.add(slug.strip("-"))
+        heading = stripped.lstrip("#").strip().lower()
+        kept = "".join(char for char in heading if char.isalnum() or char in (" ", "-"))
+        anchors.add("-".join(kept.split()))
     return anchors
 
 
-def test_readme_prerequisite_anchors_resolve_locally() -> None:
-    text = (ROOT / "README.md").read_text()
-    assert "docs/troubleshooting.md#installer-prerequisites" in text
-    assert "docs/troubleshooting.md#installer-upgrades-and-rollback" in text
+def test_troubleshooting_prerequisite_anchors_resolve_locally() -> None:
     anchors = _anchors(ROOT / "docs/troubleshooting.md")
     assert "installer-prerequisites" in anchors
     assert "installer-upgrades-and-rollback" in anchors
+
+
+def test_troubleshooting_fuse_reference_points_to_guide() -> None:
+    text = (ROOT / "docs/troubleshooting.md").read_text()
+    assert "installation.md#fuse2-runtime-manual-per-release-references" in text
+    assert "../README.md#install" not in text
+    anchors = _anchors(ROOT / "docs/installation.md")
+    assert "fuse2-runtime-manual-per-release-references" in anchors
