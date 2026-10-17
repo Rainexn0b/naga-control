@@ -1,5 +1,6 @@
 """Read physical evdev sources into ordered parsed frames without grabbing."""
 
+import errno
 import os
 from collections.abc import AsyncIterator, Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import suppress
@@ -92,6 +93,7 @@ class EvdevSource:
         self._device = device
         self._identity_resolver = identity_resolver
         self._device_number_resolver = device_number_resolver
+        self._closed = False
         capabilities = _filtered_capabilities(device.capabilities(absinfo=True))
         self._abs_axes = _abs_axis_codes(capabilities.get(EV_ABS, ()))
         info = device.info
@@ -137,10 +139,17 @@ class EvdevSource:
         self._device.grab()
 
     def ungrab(self) -> None:
-        self._device.ungrab()
+        try:
+            self._device.ungrab()
+        except OSError as exc:
+            if exc.errno != errno.ENODEV:
+                raise
 
     def close(self) -> None:
+        if self._closed:
+            return
         self._device.close()
+        self._closed = True
 
 
 def open_evdev_source(
