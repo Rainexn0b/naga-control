@@ -631,6 +631,42 @@ separate investigation and is unrelated to the key-coverage work.
 These editor-level checks exercised no grabs or device writes beyond normal
 service operation.
 
+## Desktop GUI Acceptance (#1/#2, 2026-10-17)
+
+Owner manual verification on the local desktop for single-instance reuse
+(#1) and KDE Plasma/Wayland taskbar identity (#2). Fixes already in
+`77adc9b` (v0.4.0); current HEAD `b8dc75d` plus in-progress safety work
+does not touch `src/naga_control/gui/`.
+
+- #1: normal desktop launcher reuses/restores the existing visible,
+  minimized, or tray-hidden window; no second independent GUI. Uses a
+  per-UID `QLocalServer`/`QLocalSocket` rendezvous.
+- #2: `QApplication.setDesktopFileName`
+  (`org.nagacontrol.NagaControl`) runs before `QApplication` construction
+  so Plasma groups the app under Naga Control, not `python3`.
+- Prompt: launch again while visible/minimized/hidden and check single
+  Naga taskbar grouping/icon vs `python3`. Owner answer: `Both work
+  correctly`.
+- Tested installed `LOCAL UNRELEASED 0.5.0` image (base `e081598` + six
+  Oct-14 safety patches + adapter `ENODEV`); candidate
+  `a4b94786221db9067c5828e405e318ded201ea83d2a244eb6a705a5053dddc57`.
+  Installed `app.py`, `single_instance.py`, and `main_window.py` are
+  byte-equal to the current tree. No new GUI patch required.
+- Safe offscreen/fake gate (not desktop acceptance):
+  `.venv/bin/pytest -q tests/test_gui_single_instance.py
+  tests/test_gui_app.py tests/test_integration_cli.py
+  tests/test_appimage_build.py` -> `69 passed`, 7 `dbus_next`
+  deprecation warnings, exit 0.
+- Scope limits: owner-desktop verification only, not reporter Debian
+  13/MX Linux source-venv acceptance and not a general Wayland
+  focus-stealing guarantee. Public issues #1/#2 were closed after this
+  verification with the environment limits stated. No device-node/hardware
+  pytest, service/daemon restart,
+  or settings changes in this check; the owner launched the GUI. The
+  full safety suite was still running at the time of this GUI check;
+  its later 4170-test pass is recorded in the
+  [F17 investigation receipt](f17-investigation-2026-10-17.md).
+
 ## Exit Criteria For First Slice
 
 The first vertical slice is complete only when:
