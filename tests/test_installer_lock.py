@@ -80,6 +80,9 @@ def test_signal_cleans_unique_staging_and_releases_lock(tmp_path: Path, dispatch
     if dispatcher:
         shutil.copyfile(script, fake.remote / "install_user.sh")
         (fake.remote / "uninstall.sh").write_text("exit 0\n")
+        (fake.remote / "session_service.sh").write_text(
+            (ROOT / "scripts/session_service.sh").read_text()
+        )
         script = fake.root / "install.sh"
         shutil.copyfile(ROOT / "install.sh", script)
     first = _start_at_barrier(fake, script)

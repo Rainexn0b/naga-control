@@ -47,9 +47,24 @@ if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/scripts/uninstall.sh" ]; then
 fi
 
 command -v curl >/dev/null || die "curl is required for curl installs"
-tmp="$(mktemp -d)"
+tmp="$(mktemp -d)" || die "could not create bootstrap directory"
 trap 'rm -rf "$tmp"' EXIT
 curl -fsSL \
   "https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BOOTSTRAP_REF}/scripts/uninstall.sh" \
   -o "$tmp/uninstall.sh" || die "could not bootstrap uninstall.sh from $BOOTSTRAP_REF"
-exec bash "$tmp/uninstall.sh" ${args+"${args[@]}"}
+[ -s "$tmp/uninstall.sh" ] || die "could not bootstrap uninstall.sh from $BOOTSTRAP_REF"
+# Shared session-helper marker: new inner scripts require the same-ref
+# sibling helper. Old tags/stubs without the marker keep compatibility by
+# skipping the helper fetch (their helper may not exist at that ref).
+# Local checkouts use the sibling file directly with no network.
+if [[ "$(<"$tmp/uninstall.sh")" == *"# NAGA_SESSION_HELPER_REQUIRED"* ]]; then
+  curl -fsSL \
+    "https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BOOTSTRAP_REF}/scripts/session_service.sh" \
+    -o "$tmp/session_service.sh" || die "could not bootstrap session_service.sh from $BOOTSTRAP_REF"
+  [ -s "$tmp/session_service.sh" ] || die "could not bootstrap session_service.sh from $BOOTSTRAP_REF"
+fi
+# Run without exec so the EXIT trap cleans the private temp directory.
+# Standard input is inherited for confirmation prompts.
+bash "$tmp/uninstall.sh" ${args+"${args[@]}"}
+rc=$?
+exit "$rc"

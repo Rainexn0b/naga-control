@@ -1,13 +1,58 @@
 # Release Notes
 
 The root [changelog.md](../changelog.md) is the authoritative versioned release
-history. It contains Unreleased and the dated 0.5.1, 0.5.0, 0.4.0, 0.3.0,
+history. It contains Unreleased and the dated 0.5.2, 0.5.1, 0.5.0, 0.4.0, 0.3.0,
 0.2.0, and 0.1.4 entries. See GitHub releases for current publication status.
 Release publishing extracts only the
 matching version section via `scripts/prepare_release.py`, not this overview
 or the entire changelog. The v0.5.1 GitHub body will be the
 matching `## [0.5.1]` section of the root changelog; the v0.5.0 GitHub body is the
 matching `## [0.5.0]` section of the root changelog.
+
+## v0.5.2 (candidate, pending artifact and attended validation)
+
+Candidate v0.5.2 is prepared in source and changelog only, pending portable
+artifact checks and attended Devuan/hardware validation. It is not published;
+see [GitHub releases](https://github.com/Rainexn0b/naga-control/releases) for
+current publication status. The candidate body would be the matching
+`## [0.5.2]` section in [changelog.md](../changelog.md), extracted by
+`scripts/prepare_release.py`. This overview is not the release body, and the
+checkout installer notes below are not retroactive to already published tags.
+
+### Changes in 0.5.2 (candidate summary)
+
+- Non-systemd session support (source-only, experimental, pending attended
+  Devuan validation): managed installer `--service-manager auto|systemd|session`
+  (default `auto`, usable user systemd preferred on fresh installs, persisted
+  mode wins, legacy missing mode means `systemd`, explicit mode change refused
+  with manual-migration guidance); unprivileged session process with direct
+  session D-Bus activation plus service login entry
+  `org.nagacontrol.Service.desktop`, no user unit and no root boot service;
+  canonical `~/.local/share/naga-control/service-manager` and
+  `session-service.sh status|start|stop|restart` controls with GUI restart
+  branching and no fallback on malformed mode/missing helper; safe
+  `PrepareShutdown`/`Exit` lifecycle on `org.nagacontrol.Service1` with the
+  existing seven methods unchanged; install/update/removal fence with owned
+  blocker and `ReloadConfig` before clean stop.
+- Fresh installs prefer systemd else explicit live bus; docs distinguish
+  systemd/session paths, including the `dbus-send` snapshot form. No root SysV
+  init or bootstrap service start is used.
+
+### Known limits for 0.5.2 (candidate summary)
+
+- Requires the custom OpenRazer baseline at
+  `26b0eeb5ed70d638fa3528851adcd5e58369a7f5`
+  (fork `Rainexn0b/openrazer`, branch `naga-v3-pro-compat`,
+  `3.12.1.pr2904.fix2-1`); only `1532:00E7`/`1532:00E8` one transport at a
+  time; do not run the GUI or service as root. See the matching changelog
+  section for the full prerequisite and limitation list.
+- Session mode is experimental, pending attended Devuan validation; no verified
+  Devuan or general non-systemd claim is made. It needs a shared live session
+  D-Bus, unchanged FUSE2/x86_64, verified seat ACLs, and manual matching
+  OpenRazer with no automatic backend offer.
+- Evidence is source validation only (fake suites); no portable artifact,
+  Devuan install, or hardware pass is claimed. These notes will be reviewed
+  after human checks by the primary.
 
 ## v0.5.1
 

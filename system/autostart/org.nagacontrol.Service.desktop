@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Naga Control background service
+Exec=/usr/bin/env naga-control-service
+Hidden=false
+X-NagaControl-Service=true

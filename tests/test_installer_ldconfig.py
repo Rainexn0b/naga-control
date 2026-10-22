@@ -19,8 +19,17 @@ def _assert_preflight_failure(
 ) -> list[list[str]]:
     before_home = home_snapshot(fake)
     before_state = (fake.root / "state.json").read_bytes()
+    # Intentional fixture pins the legacy backend to isolate the FUSE gate:
+    # explicit systemd bypasses fresh auto session fallback and keeps the
+    # Version-only systemctl whitelist valid for these preflight boundaries.
     result, commands = fake.run(
-        "--version", TAG, "--install-openrazer", "--restart-service", script=script
+        "--version",
+        TAG,
+        "--install-openrazer",
+        "--restart-service",
+        "--service-manager",
+        "systemd",
+        script=script,
     )
     assert result.returncode == 1, result.stderr
     assert message in result.stderr

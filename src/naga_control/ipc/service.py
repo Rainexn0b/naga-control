@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Coroutine, Mapping
 from typing import Protocol
 
 from dbus_next.errors import DBusError
@@ -46,8 +46,27 @@ class NagaControlInterface(ServiceInterface):
         self._service = service
         self._ready = asyncio.Event()
         self._unavailable = False
+        self._shutdown_prepare: Callable[[], Coroutine[None, None, None]] | None = None
+        self._shutdown_request_exit: Callable[[], None] | None = None
+        self._prepare_succeeded = False
+        self._prepare_task: asyncio.Task[None] | None = None
+        self._shutdown_lock = asyncio.Lock()
         if ready:
             self._ready.set()
+
+    def set_shutdown_callbacks(
+        self,
+        prepare: Callable[[], Coroutine[None, None, None]],
+        request_exit: Callable[[], None],
+    ) -> None:
+        """Bind CLI-owned graceful-stop controls after construction.
+
+        Kept as a setter so the existing constructor signature stays valid
+        for tests that monkeypatch it. Interfaces without these callbacks
+        reject the new shutdown methods with the fixed unavailable error.
+        """
+        self._shutdown_prepare = prepare
+        self._shutdown_request_exit = request_exit
 
     def mark_ready(self) -> None:
         if not self._unavailable:
@@ -63,6 +82,19 @@ class NagaControlInterface(ServiceInterface):
             raise DBusError(
                 f"{_ERROR_PREFIX}.Unavailable", "Naga Control service is unavailable."
             ) from None
+
+    def _shutdown_unavailable(self) -> DBusError:
+        return DBusError(f"{_ERROR_PREFIX}.Unavailable", "Naga Control service is unavailable.")
+
+    async def _join_prepare_task(self, task: asyncio.Task[None]) -> None:
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            raise
+        except BaseException:
+            raise self._shutdown_unavailable() from None
+        self._prepare_succeeded = True
+        return None
 
     @method()
     async def GetSnapshot(  # pyright: ignore[reportUnknownParameterType]
@@ -118,6 +150,52 @@ class NagaControlInterface(ServiceInterface):
     ) -> "b":  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnknownParameterType]
         await self._wait_ready()
         return await self.end_calibration_state()
+
+    @method()
+    async def PrepareShutdown(self) -> None:
+        """Close the readiness gate, stop resources, reply only when clean."""
+        prepare = self._shutdown_prepare
+        if prepare is None:
+            raise self._shutdown_unavailable() from None
+        if self._prepare_succeeded:
+            return None
+        existing = self._prepare_task
+        if existing is not None:
+            await self._join_prepare_task(existing)
+            return None
+        try:
+            await self._wait_ready()
+        except DBusError:
+            if self._prepare_succeeded:
+                return None
+            pending = self._prepare_task
+            if pending is not None:
+                await self._join_prepare_task(pending)
+                return None
+            raise self._shutdown_unavailable() from None
+        async with self._shutdown_lock:
+            if self._prepare_succeeded:
+                return None
+            if self._prepare_task is not None:
+                task: asyncio.Task[None] = self._prepare_task
+            else:
+                # Terminal gate close precedes resource cleanup so no new
+                # application call can enter while owners are stopping.
+                self.mark_unavailable()
+                task = asyncio.create_task(prepare())
+                self._prepare_task = task
+        await self._join_prepare_task(task)
+        return None
+
+    @method()
+    async def Exit(self) -> None:
+        """Request CLI exit; permitted only after successful prepare."""
+        if self._shutdown_request_exit is None:
+            raise self._shutdown_unavailable() from None
+        if not self._prepare_succeeded:
+            raise self._shutdown_unavailable() from None
+        self._shutdown_request_exit()
+        return None
 
     def snapshot_document(self) -> str:
         return json.dumps(self._service.snapshot(), sort_keys=True, separators=(",", ":"))

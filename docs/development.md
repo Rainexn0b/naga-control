@@ -2,7 +2,7 @@
 
 Source setup, checks, builds, and safe diagnostics for Naga Control. Default
 tests use fakes and never read, grab, or write real device nodes, start the
-live service or GUI, or touch hardware.
+live service or GUI, touch the host user session bus, or touch hardware.
 
 ## Environment
 
@@ -113,6 +113,20 @@ systemd unit directory and
 `system/dbus-1/services/org.nagacontrol.Service1.service` under the session
 D-Bus service directory, enabled after installing the scoped udev rule;
 neither the service nor the GUI runs as root.
+
+## Non-systemd session development
+
+Session support is an unreleased source feature; see
+[non-systemd sessions](non-systemd.md). The session helper lives in
+source/tag/bootstrap only (checked-out `scripts/session_service.sh`) and
+is not an AppImage binary. Default tests use fakes with no real devices
+and never start a live service/GUI, touch the host user session bus, or
+use hardware flags. A dedicated private D-Bus fixture with fake hardware
+is permitted (the runtime reply-drain worker regression uses one); never a
+real service, GUI, or device. A source/manual user runs the service in the
+foreground and uses `bash scripts/session_service.sh` controls after direct
+activation is configured. The GUI restart does not auto-detect an unmanaged
+source checkout, and broad external `HOME` path support is not promised.
 
 ## Safe diagnostics
 

@@ -6,8 +6,10 @@ Input Remapper. It is the implementation contract for v0.1.
 
 ## Decision Summary
 
-Use one long-running, unprivileged `systemd --user` service and one optional
-PySide6 GUI process. Communicate over the session D-Bus.
+Use one long-running, unprivileged mapping service and one optional
+PySide6 GUI process. Communicate over the session D-Bus. The service runs
+either as a `systemd --user` unit or, on non-systemd desktops, as a
+logged-in session process; see [non-systemd sessions](non-systemd.md).
 
 ```text
 PySide6 GUI
@@ -268,8 +270,18 @@ SelectProfile
 BeginCalibration
 EndCalibration
 ReleaseAll
+PrepareShutdown
+Exit
 ```
 
+`PrepareShutdown` and `Exit` are no-argument, no-result safe-lifecycle
+methods on the same `org.nagacontrol.Service1` interface and path.
+`PrepareShutdown` closes the application gate and joins the one-owned
+cached cleanup, then returns a clean ACK only after success while still
+owning the bus name. On failure it answers fixed `Unavailable` and `Exit`
+is not permitted. `Exit` is allowed only after success and asks the CLI
+to exit; the helper confirms both the unique and well-known names are
+gone. Broker loss after an initialized run triggers the same cleanup.
 Signals cover snapshot changes, calibration events, and actionable errors.
 There is no arbitrary event-injection, command-execution, path-access, or raw
 OpenRazer method in the IPC surface.
@@ -296,7 +308,15 @@ disconnect; secondary non-ordinary interruption during disconnect is a separate
 limit.
 
 The service unit is enabled at login so mappings work without opening the GUI.
-D-Bus activation may additionally start it when the GUI opens.
+D-Bus activation may additionally start it when the GUI opens. In session
+mode there is no user unit: direct session D-Bus activation plus the
+service login entry `org.nagacontrol.Service.desktop`
+(`X-NagaControl-Service=true`) starts the mapping service independently
+of the GUI entry. The installer-owned canonical mode file
+`~/.local/share/naga-control/service-manager` holds exactly `systemd` or
+`session` plus newline, with the session helper at
+`~/.local/share/naga-control/session-service.sh`. See
+[non-systemd sessions](non-systemd.md).
 
 ## Permissions
 
@@ -306,7 +326,10 @@ under the two target USB IDs and to `/dev/uinput`.
 
 Access to uinput allows session-wide input injection and must be documented as
 a security-sensitive permission. No component should run as root, be setuid,
-or join the broad `input` group solely for this application.
+or join the broad `input` group solely for this application. Session mode
+needs the same scoped evdev/uinput access through a compatible session
+seat/access provider; on Devuan-class systems the elogind/uaccess seat
+setup must be verified and is not provided by a systemctl shim.
 
 ## Package Layout
 

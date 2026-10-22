@@ -218,7 +218,7 @@ elif name == "stat":
         if fail == "all" or (isinstance(fail, str) and fail and len(args) > 2 and fail in args[2]):
             sys.exit(1)
         sys.exit(subprocess.run([os.environ["SAFE_STAT"], *args], check=False).returncode)
-    if args[:2] in (["-Lc", "%d:%i"], ["-Lc", "%a"], ["-c", "%u"]):
+    if args[:2] in (["-Lc", "%d:%i"], ["-Lc", "%a"], ["-c", "%u"], ["-Lc", "%s"], ["-c", "%s"]):
         sys.exit(subprocess.run([os.environ["SAFE_STAT"], *args], check=False).returncode)
     else:
         assert args[:2] == ["-c", "%F"], args
@@ -298,6 +298,39 @@ elif name in ("naga-control.AppImage", "Naga-Control-x86_64.AppImage"):
     assert actual_prefix == expected_prefix or actual_prefix.resolve() == expected_prefix.resolve(), args
     home = Path(args[args.index("--home") + 1])
     assert home.is_relative_to(root / "temporary"), args
+    manager = "systemd"
+    if "--service-manager" in args:
+        manager = args[args.index("--service-manager") + 1]
+        assert manager in ("systemd", "session"), args
+    if manager == "session" and state.get("session_unsupported"):
+        print("error: unknown argument: --service-manager", file=sys.stderr)
+        sys.exit(2)
+    if manager == "session":
+        assert "--config-home" in args, args
+        config_home = Path(args[args.index("--config-home") + 1])
+        assert config_home.is_relative_to(root / "temporary"), args
+        assert "--udev-dir" in args, args
+        udev_dir = Path(args[args.index("--udev-dir") + 1])
+        assert udev_dir.is_relative_to(root / "temporary"), args
+        prefix = str(actual_prefix)
+        dbus_target = home / ".local/share/dbus-1/services/org.nagacontrol.Service1.service"
+        dbus_target.parent.mkdir(parents=True, exist_ok=True)
+        dbus_target.write_text("[D-BUS Service]\nName=org.nagacontrol.Service1\nExec=" + prefix + " service\n")
+        dbus_target.chmod(0o644)
+        auto_target = config_home / "autostart/org.nagacontrol.Service.desktop"
+        auto_target.parent.mkdir(parents=True, exist_ok=True)
+        auto_target.write_text("[Desktop Entry]\nType=Application\nName=Naga Control background service\nExec=" + prefix + " service\nHidden=false\nX-NagaControl-Service=true\n")
+        auto_target.chmod(0o644)
+        files = [".local/share/applications/org.nagacontrol.NagaControl.desktop"]
+        files += [f".local/share/icons/hicolor/{s}x{s}/apps/org.nagacontrol.NagaControl.png" for s in (64, 128, 256, 512)]
+        for relative in files:
+            target = home / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("new fake integration\n")
+            target.chmod(0o644)
+        udev_dir.mkdir(parents=True, exist_ok=True)
+        (udev_dir / "70-naga-control.rules").write_text("fake staged rule\n")
+        sys.exit(state.get("integration_failure", 0))
     files = [".config/systemd/user/naga-control.service",
              ".local/share/dbus-1/services/org.nagacontrol.Service1.service",
              ".local/share/applications/org.nagacontrol.NagaControl.desktop"]
@@ -307,6 +340,10 @@ elif name in ("naga-control.AppImage", "Naga-Control-x86_64.AppImage"):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("new fake integration\n")
         target.chmod(0o644)
+    if "--udev-dir" in args:
+        udev_dir = Path(args[args.index("--udev-dir") + 1])
+        udev_dir.mkdir(parents=True, exist_ok=True)
+        (udev_dir / "70-naga-control.rules").write_text("fake staged rule\n")
     sys.exit(state.get("integration_failure", 0))
 else:
     raise AssertionError(name)

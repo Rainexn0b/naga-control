@@ -13,19 +13,25 @@ absent; `=1` is explicit opt-in; `=0` skips even with `--install-openrazer`; any
 other value is an error. It requires a **non-root
 Linux x86_64 desktop user**, writable HOME/`.local`/user integration trees, and
 no symlink file destinations or installation ancestors. Do not run the panel
-as root or fix this by broadening device permissions. It checks user systemd
-and session D-Bus with read-only manager/bus status queries, never by calling
-Naga/OpenRazer or automatically activating a bus name during preflight.
+as root or fix this by broadening device permissions. The systemd backend
+checks a reachable user systemd manager and session D-Bus with read-only
+manager/bus status queries; the session fallback checks only a live session
+D-Bus (`dbus-send` plus `sleep`), with no `systemctl`/`busctl` requirement.
+Neither path calls Naga/OpenRazer or automatically activates a bus name
+during preflight.
 
 Install missing prerequisites yourself using your distribution's normal package
 management; the installer never invokes apt/pacman for an ordinary app install:
 
 - Common tools: `bash`, `curl`, `sudo`, coreutils (`sha256sum`, `mktemp`, `stat`,
   `install`, `cp`, `mv`, etc.), `grep`, `cmp` (diffutils), `flock` (util-linux),
-  systemd (`systemctl`, `busctl`), udev (`udevadm`), and `ldconfig` (glibc/libc-bin).
-- Log in to a real desktop user session with a reachable user systemd manager
-  and session D-Bus (Debian/Ubuntu: systemd user support and `dbus-user-session`;
-  Arch/Fedora: systemd and dbus desktop session integration). Do not use sudo
+  udev (`udevadm`), `ldconfig` (glibc/libc-bin), and session D-Bus checks
+  (`busctl` plus `systemctl` on systemd backends; `dbus-send` plus `sleep`
+  on the session fallback).
+- Log in to a real desktop user session with session D-Bus: either a reachable
+  user systemd manager plus session D-Bus (Debian/Ubuntu: systemd user support
+  and `dbus-user-session`; Arch/Fedora: systemd and dbus desktop session
+  integration) or the session fallback with a live session bus. Do not use sudo
   for the installer or borrow another user's bus credentials.
 - FUSE2: an x86_64 `libfuse.so.2` library. Use the
   [exact-release package references](installation.md#fuse2-runtime-manual-per-release-references), not package guesses
@@ -79,6 +85,52 @@ openSUSE TW 20261009 (see the native table in
 [local native installer](release-notes.md#local-native-installer-ubuntudebian-fedora-opensuse));
 live install, DKMS, service, desktop, and hardware passes are not claimed, and named
 Debian/Leap were not smoked.
+
+## Session mode
+
+Unreleased source feature; see [non-systemd sessions](non-systemd.md).
+Older published AppImages (for example v0.5.1) may lack session
+integration and the `PrepareShutdown`/`Exit` API. A clear installer
+failure against an old binary is expected; do not work around it by
+hand-editing the mode file.
+
+- A malformed `~/.local/share/naga-control/service-manager` file or a
+  missing `~/.local/share/naga-control/session-service.sh` helper is
+  reported with no fallback to the other manager. Check the helper with:
+
+```bash
+bash ~/.local/share/naga-control/session-service.sh status
+```
+
+  `status` does not activate the service. `start` reports ownership,
+  not hardware readiness.
+- Session mode needs a live session D-Bus shared with the GUI and
+  OpenRazer, not only a system bus. Use the existing desktop-provided
+  `DBUS_SESSION_BUS_ADDRESS`. The helper fails closed before `dbus-send`
+  when the address is unset or empty, or when any autolaunch fallback
+  would apply; autolaunch would start a private bus through libdbus, so
+  no private bus is fabricated as a workaround. A missing or private bus, an
+  external `HOME` root rejected by path-ownership checks, or missing
+  seat ACLs for evdev/uinput leaves the service unable to start or
+  grab. On Devuan-class sessions verify the elogind/uaccess seat
+  setup; installing a systemctl shim does not provide it.
+- There is no automatic backend offer in session mode. Install a
+  matching custom OpenRazer module, daemon, and client manually; an
+  explicit backend opt-in fails with manual guidance.
+- A session `udev-pending` state does not start the service now.
+  Install success is not physical readiness. After login, require
+  `available` from `GetSnapshot`, then do the F13/F14/F17 checks with
+  one transport attached.
+- Session removal keeps private unique backups
+  (`.session-uninstall.activation.SUFFIX` and
+  `.session-uninstall.autostart.SUFFIX`) plus fences on uncertain failure;
+  logged paths support manual operator recovery. Only the current
+  invocation backups are deleted on success; older unknown copies are
+  preserved. See
+  [non-systemd sessions](non-systemd.md#install-update-and-removal-fence).
+- Never run the GUI or service as root and do not widen permissions
+  with the broad `input` group, chmod, or raw HID to fix a seat
+  problem.
 
 ## Installer checksums and older releases
 
@@ -200,12 +252,19 @@ the lock inode and OpenRazer, and preserves profiles
 unless `--purge-config` is explicitly requested.
 
 Completion distinguishes running service from staged prerequisites, cancellation
-and failure/rollback. A running unit is **not hardware readiness**. The installer
-prints, but does not execute, this read-only application snapshot command (it
-can D-Bus-activate Naga, so use only after prerequisites are ready):
+and failure/rollback. A running service is **not hardware readiness**. The
+installer prints, but does not execute, a read-only application snapshot
+command (it can D-Bus-activate Naga, so use only after prerequisites are
+ready). On systemd backends:
 
 ```bash
 busctl --user call org.nagacontrol.Service1 /org/nagacontrol/Service1 org.nagacontrol.Service1 GetSnapshot
+```
+
+On the session fallback without `busctl` (likewise may activate):
+
+```bash
+dbus-send --session --print-reply --dest=org.nagacontrol.Service1 /org/nagacontrol/Service1 org.nagacontrol.Service1.GetSnapshot
 ```
 
 Require `status` = `available`, then perform physical F13/F14 DPI-stage and F17
@@ -227,7 +286,8 @@ without the optional snapshot `error_code` retain their existing error display.
 
 1. Check the receiver/cable: `busctl --user call org.nagacontrol.Service1
    /org/nagacontrol/Service1 org.nagacontrol.Service1 GetSnapshot` - `status`
-   must be `available`.
+   must be `available`. Without `busctl`, use the session `dbus-send` form
+   in [upgrades and recovery](#installer-upgrades-and-rollback).
 2. Start with read-only installed inventory:
    `bash scripts/install_openrazer.sh --check`. `KNOWN PINNED COHORT` means
    consistent installed versions/source stamps, not hardware acceptance.

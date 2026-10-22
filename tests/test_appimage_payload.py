@@ -38,6 +38,42 @@ def test_real_appdir_payload_installs_without_build_sources(
     assert not (appdir / "usr/share/naga-control/packaging").exists()
 
 
+def test_bundled_dbus_service_keeps_systemd_with_direct_exec_fallback(
+    tmp_path: Path,
+) -> None:
+    appdir = tmp_path / "AppDir"
+    source = copy_assets(root=ROOT, appdir=appdir)
+    template = (source / "dbus-1/services/org.nagacontrol.Service1.service").read_text()
+    assert "Name=org.nagacontrol.Service1\n" in template
+    assert "SystemdService=naga-control.service\n" in template
+    assert "Exec=/usr/bin/env naga-control-service\n" in template
+
+    direct_home = tmp_path / "direct-home"
+    install(source, home=direct_home, udev_dir=tmp_path / "direct-udev")
+    direct = (
+        direct_home / ".local/share/dbus-1/services/org.nagacontrol.Service1.service"
+    ).read_text()
+    assert "Name=org.nagacontrol.Service1\n" in direct
+    assert "SystemdService=naga-control.service\n" in direct
+    assert "Exec=/usr/bin/env naga-control-service\n" in direct
+
+    rendered_home = tmp_path / "rendered-home"
+    image = tmp_path / "Naga-Control.AppImage"
+    install(
+        source,
+        home=rendered_home,
+        udev_dir=tmp_path / "rendered-udev",
+        exec_prefix=image,
+    )
+    rendered = (
+        rendered_home / ".local/share/dbus-1/services/org.nagacontrol.Service1.service"
+    ).read_text()
+    assert "Name=org.nagacontrol.Service1\n" in rendered
+    assert "SystemdService=naga-control.service\n" in rendered
+    assert f"Exec={image} service\n" in rendered
+    assert "/usr/bin/env naga-control-service" not in rendered
+
+
 def test_checkout_and_bundled_integrations_have_identical_contents(tmp_path: Path) -> None:
     source = copy_assets(root=ROOT, appdir=tmp_path / "AppDir")
     for name, root in (("checkout", ROOT / "system"), ("bundle", source)):

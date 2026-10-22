@@ -9,6 +9,7 @@ from tests.installer_app_fakes import (
     app_harness,
     assert_private_cleanup,
     installed_image,
+    mutations,
     quarantines,
     rollbacks,
     seed_altered_previous,
@@ -289,7 +290,14 @@ def test_ancestor_symlink_above_home_retained(tmp_path: Path) -> None:
     assert_private_cleanup(fake)
 
 
-def test_world_writable_ancestor_within_home_retained(tmp_path: Path) -> None:
+def test_world_writable_ancestor_within_home_refuses_before_trust(
+    tmp_path: Path,
+) -> None:
+    """World-writable ancestor refuses the whole operation before trust.
+
+    The rerun fails closed before reading trusted metadata while both
+    retained backups stay byte-identical.
+    """
     fake, script = app_harness(tmp_path)
     seed_previous(fake)
     result, _ = fake.run("--version", TAG, "--restart-service", script=script)
@@ -308,17 +316,46 @@ def test_world_writable_ancestor_within_home_retained(tmp_path: Path) -> None:
     second.chmod(0o700)
     before = {p.name: _snapshot(p) for p in rollbacks(fake)}
     assert len(before) == 2
+    app_path = installed_image(fake)
+    tag_path = stamp(fake)
+    mode_path = stamp(fake).parent / "service-manager"
+    before_app = (app_path.stat().st_ino, app_path.read_bytes())
+    before_tag = (tag_path.stat().st_ino, tag_path.read_bytes())
+    before_mode = (mode_path.stat().st_ino, mode_path.read_bytes())
+    baseline = len((fake.root / "commands.jsonl").read_text().splitlines())
     dotlocal = fake.root / "home" / ".local"
     old_mode = dotlocal.stat().st_mode & 0o777
     dotlocal.chmod(0o777)
     try:
-        result, _ = _run_unchanged(fake, script)
+        result, commands = _run_unchanged(fake, script)
     finally:
         dotlocal.chmod(old_mode)
-    assert result.returncode == 0, result.stderr
-    assert "retention left untrusted" in result.stdout
+    assert result.returncode == 1, result.stderr
+    assert "manager is misconfigured" in result.stderr
+    assert "app installed;" not in result.stdout
+    assert "installation staged:" not in result.stdout
+    delta = commands[baseline:]
+    assert mutations(delta) == []
+    assert not any(command[0] == ASSET for command in delta)
+    assert not any(
+        command[0]
+        in {
+            "sudo",
+            "curl",
+            "python",
+            "python3",
+            "system-python3",
+            "pacman",
+            "installer-helper",
+            "dbus-send",
+        }
+        for command in delta
+    )
     kept = rollbacks(fake)
     assert len(kept) == 2
     for kept_dir in kept:
         assert _snapshot(kept_dir) == before[kept_dir.name]
+    assert (app_path.stat().st_ino, app_path.read_bytes()) == before_app
+    assert (tag_path.stat().st_ino, tag_path.read_bytes()) == before_tag
+    assert (mode_path.stat().st_ino, mode_path.read_bytes()) == before_mode
     assert_private_cleanup(fake)

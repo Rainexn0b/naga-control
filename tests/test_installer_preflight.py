@@ -36,7 +36,12 @@ def test_preflight_failure_has_no_installation_mutations(
 ) -> None:
     fake, script = app_harness(tmp_path)
     fake.configure(**changes)
-    result, commands = fake.run("--version", TAG, script=script)
+    # Auto would fall back to session when systemd is unusable; force systemd
+    # to preserve the original failure intent for manager-specific cases.
+    args: list[str] = ["--version", TAG]
+    if "systemd_failure" in changes or "bus_failure" in changes:
+        args += ["--service-manager", "systemd"]
+    result, commands = fake.run(*args, script=script)
     assert result.returncode != 0
     assert message in result.stderr
     assert mutations(commands) == []
@@ -52,7 +57,12 @@ def test_preflight_failure_has_no_installation_mutations(
 def test_missing_app_tools_fail_without_mutations(tmp_path: Path, tool: str) -> None:
     fake, script = app_harness(tmp_path)
     (fake.root / "bin" / tool).unlink()
-    result, commands = fake.run("--version", TAG, script=script)
+    args: list[str] = ["--version", TAG]
+    # Missing busctl with auto would select session; force systemd to keep the
+    # original tool-requirement intent.
+    if tool in {"busctl", "systemctl"}:
+        args += ["--service-manager", "systemd"]
+    result, commands = fake.run(*args, script=script)
     assert result.returncode != 0
     assert tool + " is required" in result.stderr
     assert mutations(commands) == []

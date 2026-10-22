@@ -45,18 +45,60 @@ release's canonical `.sha256` sidecar and AppImage bytes before execution,
 replacement, or `sudo`, and keeps at most one verified rollback pair. See
 [upgrades and recovery](troubleshooting.md#installer-upgrades-and-rollback).
 
-A successful install enables and starts the user service, which is not
+A successful install enables and starts the mapping service, which is not
 hardware readiness: replug the target mouse after any udev reload, then
-verify with this read-only snapshot (it can D-Bus-activate the service; the
-installer only prints it):
+verify with a read-only snapshot (it can D-Bus-activate the service; the
+installer only prints it). On systemd backends:
 
 ```bash
 busctl --user call org.nagacontrol.Service1 /org/nagacontrol/Service1 org.nagacontrol.Service1 GetSnapshot
 ```
 
+On the session fallback without `busctl` (likewise may activate):
+
+```bash
+dbus-send --session --print-reply --dest=org.nagacontrol.Service1 /org/nagacontrol/Service1 org.nagacontrol.Service1.GetSnapshot
+```
+
 Require `status` = `available`, then perform physical F13/F14 DPI-stage and
 F17 held-ALT down/up checks with one transport attached. Installation alone
 establishes none of these checks.
+
+## Service manager selection
+
+The managed installer accepts:
+
+```text
+--service-manager auto|systemd|session   (default: auto)
+```
+
+On a fresh install, `auto` prefers a usable user systemd manager and
+otherwise uses `session` when a live session D-Bus is available.
+Executable `systemctl` or shim presence alone is not enough. A persisted
+mode wins over `auto`. A legacy existing image or unit with a missing mode
+file means `systemd` with no silent migration; an explicit mode change
+across a known install is refused with manual-migration guidance.
+Existing systemd stop/restart, `KillMode=mixed`, and rollback handling are
+unchanged. Details: [non-systemd sessions](non-systemd.md).
+
+The flag is installer/integration only. The core service CLI has no new
+`--service-manager` flag and AppImage `service`/`gui` commands are
+unchanged. Raw AppImage integration accepts `systemd|session` (default
+`systemd`) but does not install manager/helper metadata; the managed shell
+installer owns that metadata.
+
+Session mode is an unprivileged logged-in desktop process with direct
+session D-Bus activation plus the service login entry
+`org.nagacontrol.Service.desktop`; it uses no systemd user unit. It needs
+a live session D-Bus shared with the GUI/OpenRazer, unchanged FUSE2/x86_64
+support, and verified seat ACLs for evdev/uinput. There is no automatic
+backend offer in session mode. Installer-owned canonical files are
+`~/.local/share/naga-control/service-manager` (exactly `systemd` or
+`session` plus newline) and
+`~/.local/share/naga-control/session-service.sh` with
+`status|start|stop|restart` controls. Older published AppImages (for
+example v0.5.1) may lack this support; the installer fails clearly rather
+than pretending an old binary supports it.
 
 ## App-only default and backend opt-in
 
@@ -81,7 +123,8 @@ OpenRazer first. Never fetch and execute a helper directly
 
 Managed service and desktop integration always require FUSE: an x86_64
 `libfuse.so.2` in the `ldconfig` cache, a usable `/dev/fuse`, kernel FUSE
-support, and a normal user systemd/session D-Bus desktop session. FUSE 3
+support, and a desktop session with session D-Bus plus either a user
+systemd manager (systemd backend) or the session fallback. FUSE 3
 alone does not satisfy the FUSE 2 library check. Leave
 `APPIMAGE_EXTRACT_AND_RUN` unset (or `0`); extraction is manual launch-only,
 not a supported FUSEless managed installation.
@@ -138,11 +181,20 @@ activation file, and desktop entry install under `~/.config` and
 Under Device > Application, enable start at login (tray) to launch the GUI
 at login without changing mapping-service startup; see
 [desktop startup controls](desktop-startup-controls.md).
+`./Naga-Control-*.AppImage --install --service-manager session` supports
+session mode but does not install manager/helper metadata (the managed
+shell installer owns `service-manager` and `session-service.sh`). A
+source/manual user can run the service in the foreground and use the
+checked-out `bash scripts/session_service.sh` controls after direct
+activation is configured. See [non-systemd sessions](non-systemd.md).
 
 ## Uninstall
 
 Checkout-free removal of a standalone install (needs no AppImage and no host
-Python). It removes installer-owned app and user integration files:
+Python). It removes installer-owned app and user integration files. The
+session branch needs only generic coreutils plus `mktemp`/`mv` and
+`dbus-send`/`sleep`, with no `systemctl`, `busctl`, Python, or image
+execution:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Rainexn0b/naga-control/main/uninstall.sh -o uninstall.sh && bash uninstall.sh

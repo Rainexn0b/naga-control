@@ -33,6 +33,22 @@ and [integration findings](integration-findings.md) for ownership and scope.
   update never claims enabled, and an unreadable file keeps the last verified
   state with an explicit unknown-state error.
 
+## Service Login Entry (Session Mode)
+
+- Session mode uses a distinct service login entry
+  `org.nagacontrol.Service.desktop` with `X-NagaControl-Service=true`.
+  It starts the mapping service at login independently of the GUI.
+- The GUI tray checkbox entry above (`org.nagacontrol.NagaControl.desktop`)
+  stays optional, off by default, and unchanged. Closing the GUI does not
+  stop mappings. The service entry is managed separately from the GUI
+  checkbox: enabling or disabling the checkbox never creates or removes it.
+  UNINSTALL removes the owned service entry regardless of `--purge-config`;
+  only profiles follow the preserve-unless-purge policy.
+  See [non-systemd sessions](non-systemd.md).
+- There is no systemd user unit in session mode and no root SysV init
+  entry. There is no crash-restart guarantee; the next login starts the
+  service, while a later GUI or bus call can reactivate it sooner.
+
 ## Launch Commands
 
 - Two layers, no shell quoting. Layer 1 quotes argv per Exec spec: backslash,
@@ -61,10 +77,17 @@ and [integration findings](integration-findings.md) for ownership and scope.
 - Confirmation defaults to No and does nothing when declined. The text states that
   mappings pause briefly, held outputs are released by the normal service stop,
   and OpenRazer is not restarted.
-- Fixed command only: `systemctl --user restart naga-control.service`. No shell,
-  sudo, enable, unit parameter, or other daemon. The unit is started at most once.
+- Fixed commands only, chosen by the canonical mode file
+  `~/.local/share/naga-control/service-manager`: legacy/systemd uses
+  `systemctl --user restart naga-control.service`; canonical session uses
+  the same fixed bash helper `restart`
+  (`bash ~/.local/share/naga-control/session-service.sh restart`). No
+  `shell -c`, interpolated command, sudo, enable, unit parameter, or other
+  daemon. A malformed mode file or a
+  missing helper is reported with no fallback. Profile TOML is unchanged.
+  See [non-systemd sessions](non-systemd.md).
 - The call runs off the Qt thread with a bounded timeout and one owned shielded
-  cleanup that kills only the systemctl child and joins it boundedly. Timeout and
+  cleanup that kills only the manager/helper child and joins it boundedly. Timeout and
   unverified cleanup report outcome uncertain and ask to check status; they never
   claim success and never assert the service is unchanged. Nonzero, missing
   command, timeout, and cancel are stable without raw stderr. There is no retry.
@@ -80,12 +103,26 @@ and [integration findings](integration-findings.md) for ownership and scope.
 
 ## Uninstall Lifecycle
 
-Uninstall removes only the owned autostart file above, independent of `--purge-config`; profiles and settings follow the existing preserve-unless-purge policy. It never touches foreign files, symlinks, directories, or unsafe entries, never removes the autostart directory or other apps, and reports incomplete rather than claiming success when an owned entry cannot be honestly cleaned.
+Uninstall handles two distinct owned autostart entries separately: the GUI entry
+above and, in session mode, the service entry `org.nagacontrol.Service.desktop`.
+Both owned entries are removed regardless of `--purge-config`; profiles and
+settings follow the existing preserve-unless-purge policy. In session mode,
+removal first backs up the original activation file and the owned service
+entry to private unique state files
+(`.session-uninstall.activation.SUFFIX` and
+`.session-uninstall.autostart.SUFFIX`), blocks activation plus `Hidden=true`
+before the clean stop, and keeps backups and fences on uncertain failure for
+manual recovery; only the current invocation backups are removed on success.
+Session metadata meeting an unexpected user unit refuses with
+manual-migration guidance instead of deleting silently. It never touches
+foreign files, symlinks, directories, or unsafe entries, never removes the
+autostart directory or other apps, and reports incomplete rather than claiming
+success when an owned entry cannot be honestly cleaned.
 
 ## Testing Limits
 
 - Default tests use fakes and tmp autostart paths. They never write real
-  `~/.config`, call real `systemctl`, or touch the session bus, OpenRazer, evdev,
+  `~/.config`, call real `systemctl`, or touch the host session bus, OpenRazer, evdev,
   or device nodes.
 - Offscreen rendering verifies checkbox truth, busy, success, error, confirmation,
   guard blocking with real drafts, hidden fallback, GLib roundtrip, and bounded

@@ -1,3 +1,4 @@
 [D-BUS Service]
 Name=org.nagacontrol.Service1
 SystemdService=naga-control.service
+Exec=/usr/bin/env naga-control-service

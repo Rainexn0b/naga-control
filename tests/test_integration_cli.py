@@ -84,6 +84,36 @@ def test_packaged_unit_preserves_appimage_shutdown_order(tmp_path: Path) -> None
     assert "KillMode=mixed\n" in unit
 
 
+def test_real_dbus_service_retains_systemd_with_direct_exec_fallback(
+    tmp_path: Path,
+) -> None:
+    source = Path(__file__).resolve().parents[1] / "system"
+    template = (source / "dbus-1/services/org.nagacontrol.Service1.service").read_text()
+    assert "Name=org.nagacontrol.Service1\n" in template
+    assert "SystemdService=naga-control.service\n" in template
+    assert "Exec=/usr/bin/env naga-control-service\n" in template
+
+    direct_home = tmp_path / "direct-home"
+    install(source, home=direct_home)
+    direct = (
+        direct_home / ".local/share/dbus-1/services/org.nagacontrol.Service1.service"
+    ).read_text()
+    assert "Name=org.nagacontrol.Service1\n" in direct
+    assert "SystemdService=naga-control.service\n" in direct
+    assert "Exec=/usr/bin/env naga-control-service\n" in direct
+
+    rendered_home = tmp_path / "rendered-home"
+    image = Path("/opt/Naga.Control.AppImage")
+    install(source, home=rendered_home, exec_prefix=image)
+    rendered = (
+        rendered_home / ".local/share/dbus-1/services/org.nagacontrol.Service1.service"
+    ).read_text()
+    assert "Name=org.nagacontrol.Service1\n" in rendered
+    assert "SystemdService=naga-control.service\n" in rendered
+    assert f"Exec={image} service\n" in rendered
+    assert "/usr/bin/env naga-control-service" not in rendered
+
+
 def test_install_fails_on_missing_sources(tmp_path: Path) -> None:
     with pytest.raises(IntegrationError):
         install(tmp_path / "nowhere", home=tmp_path / "home", udev_dir=tmp_path / "udev")

@@ -51,7 +51,7 @@ def test_argv_is_fixed_user_unit_only() -> None:
     assert "sudo" not in RESTART_ARGV and "enable" not in RESTART_ARGV
 
 
-async def test_success_calls_exact_argv() -> None:
+async def test_success_calls_exact_argv(tmp_path: Path) -> None:
     seen: list[tuple[tuple[str, ...], dict[str, object]]] = []
     proc = FakeProc(code=0)
 
@@ -59,14 +59,14 @@ async def test_success_calls_exact_argv() -> None:
         seen.append((argv, kwargs))
         return proc
 
-    result = await restart_service(create_process=create)  # type: ignore[arg-type]
+    result = await restart_service(home=tmp_path, create_process=create)  # type: ignore[arg-type]
     assert result.ok is True and result.error is None
     assert len(seen) == 1
     assert seen[0][0] == EXPECTED
     assert proc.returncode == 0 and not proc.killed
 
 
-async def test_nonzero_reports_exit_without_stderr() -> None:
+async def test_nonzero_reports_exit_without_stderr(tmp_path: Path) -> None:
     secret = b"secret-token-xyz\nsecond line"
     proc = FakeProc(code=1, stdout=b"", stderr=secret)
 
@@ -74,22 +74,22 @@ async def test_nonzero_reports_exit_without_stderr() -> None:
         assert argv == EXPECTED
         return proc
 
-    result = await restart_service(create_process=create)  # type: ignore[arg-type]
+    result = await restart_service(home=tmp_path, create_process=create)  # type: ignore[arg-type]
     assert result.ok is False
     assert result.error is not None and "exit 1" in result.error
     assert "secret-token-xyz" not in result.error and "\n" not in result.error
 
 
-async def test_missing_systemctl_is_clear_error() -> None:
+async def test_missing_systemctl_is_clear_error(tmp_path: Path) -> None:
     async def create(*argv: str, **kwargs: object) -> FakeProc:
         raise FileNotFoundError("no systemctl")
 
-    result = await restart_service(create_process=create)  # type: ignore[arg-type]
+    result = await restart_service(home=tmp_path, create_process=create)  # type: ignore[arg-type]
     assert result.ok is False
     assert result.error is not None and "not found" in result.error.lower()
 
 
-async def test_timeout_kills_and_joins() -> None:
+async def test_timeout_kills_and_joins(tmp_path: Path) -> None:
     class HangingProc(FakeProc):
         async def communicate(self) -> tuple[bytes, bytes]:
             await asyncio.sleep(60)
@@ -100,7 +100,7 @@ async def test_timeout_kills_and_joins() -> None:
     async def create(*argv: str, **kwargs: object) -> HangingProc:
         return proc
 
-    result = await restart_service(timeout=0.02, create_process=create)  # type: ignore[arg-type]
+    result = await restart_service(home=tmp_path, timeout=0.02, create_process=create)  # type: ignore[arg-type]
     assert result.ok is False
     assert result.error is not None and "timed out" in result.error.lower()
     assert "uncertain" in result.error.lower() and "check status" in result.error.lower()
@@ -108,7 +108,7 @@ async def test_timeout_kills_and_joins() -> None:
     assert proc.killed is True and proc.waited is True
 
 
-async def test_cleanup_unverified_when_join_hangs() -> None:
+async def test_cleanup_unverified_when_join_hangs(tmp_path: Path) -> None:
     class StuckProc(FakeProc):
         async def communicate(self) -> tuple[bytes, bytes]:
             await asyncio.sleep(60)
@@ -124,14 +124,14 @@ async def test_cleanup_unverified_when_join_hangs() -> None:
     async def create(*argv: str, **kwargs: object) -> StuckProc:
         return proc
 
-    result = await restart_service(timeout=0.02, create_process=create)  # type: ignore[arg-type]
+    result = await restart_service(home=tmp_path, timeout=0.02, create_process=create)  # type: ignore[arg-type]
     assert result.ok is False
     assert result.error is not None and "unverified" in result.error.lower()
     assert "uncertain" in result.error.lower()
     assert proc.killed is True
 
 
-async def test_cancel_kills_and_reraise() -> None:
+async def test_cancel_kills_and_reraise(tmp_path: Path) -> None:
     started = asyncio.Event()
     proc = FakeProc(code=0)
 
@@ -145,7 +145,7 @@ async def test_cancel_kills_and_reraise() -> None:
     async def create(*argv: str, **kwargs: object) -> FakeProc:
         return proc
 
-    task = asyncio.create_task(restart_service(timeout=5.0, create_process=create))  # type: ignore[arg-type]
+    task = asyncio.create_task(restart_service(home=tmp_path, timeout=5.0, create_process=create))  # type: ignore[arg-type]
     await started.wait()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -153,7 +153,7 @@ async def test_cancel_kills_and_reraise() -> None:
     assert proc.killed is True and proc.waited is True
 
 
-async def test_double_cancel_still_joins() -> None:
+async def test_double_cancel_still_joins(tmp_path: Path) -> None:
     started = asyncio.Event()
     allow = asyncio.Event()
     proc = FakeProc(code=0)
@@ -176,7 +176,7 @@ async def test_double_cancel_still_joins() -> None:
     async def create(*argv: str, **kwargs: object) -> FakeProc:
         return proc
 
-    task = asyncio.create_task(restart_service(timeout=5.0, create_process=create))  # type: ignore[arg-type]
+    task = asyncio.create_task(restart_service(home=tmp_path, timeout=5.0, create_process=create))  # type: ignore[arg-type]
     await started.wait()
     task.cancel()
     await asyncio.sleep(0.02)

@@ -6,16 +6,37 @@ import logging
 import signal
 from collections.abc import Awaitable, Callable, Coroutine
 from contextlib import suppress
-from typing import Protocol
+from typing import Protocol, cast
 
 from naga_control.adapters.evdev.discovery import discover_naga_connections
 from naga_control.adapters.openrazer.lifecycle_monitor import OpenRazerLifecycleMonitor
 from naga_control.application.service_factory import create_service
 from naga_control.domain.hardware import HardwareState
 from naga_control.ipc.server import SessionBus, connect_session_bus, publish_service
-from naga_control.ipc.service import NagaControlInterface
+from naga_control.ipc.service import BUS_NAME, NagaControlInterface
 from naga_control.ports.hardware import NagaTopology
 from naga_control.service.hotplug import create_udev_topology_watcher
+
+_EXIT_FLUSH_TIMEOUT_S = 3.0
+
+
+class _NameReleasable(Protocol):
+    async def release_name(self, name: str) -> object: ...
+
+
+async def _flush_exit_reply(bus: SessionBus) -> None:
+    """Perform one bounded public roundtrip FIFO-behind the queued Exit reply.
+
+    Best effort: failures are logged and never mask the primary or resource
+    error, and the caller still disconnects afterwards.
+    """
+    if not callable(getattr(bus, "release_name", None)):
+        return
+    releasable = cast(_NameReleasable, bus)
+    try:
+        await asyncio.wait_for(releasable.release_name(BUS_NAME), timeout=_EXIT_FLUSH_TIMEOUT_S)
+    except Exception:
+        logging.getLogger(__name__).debug("exit flush barrier did not complete")
 
 
 class ServiceLifecycle(Protocol):
@@ -44,6 +65,10 @@ class AuxiliaryLifecycle(Protocol):
     async def start(self) -> None: ...
 
     async def stop(self) -> None: ...
+
+
+class DisconnectWatchable(Protocol):
+    async def wait_for_disconnect(self) -> None: ...
 
 
 class _PhysicalTopology:
@@ -95,12 +120,59 @@ async def run(
     bus: SessionBus | None = None
     interface: NagaControlInterface | None = None
     watcher: asyncio.Task[None] | None = None
+    bus_loss_watcher: asyncio.Task[None] | None = None
     service_start_attempted = False
     lifecycle_start_attempted = False
     body_failed = False
+    resource_task: asyncio.Task[None] | None = None
+    resource_lock = asyncio.Lock()
+    exit_requested = False
+    running_loop = asyncio.get_running_loop()
+
+    async def stop_entered_resources() -> None:
+        first_error: Exception | None = None
+        current_watcher = watcher
+        if current_watcher is not None:
+            if not current_watcher.done():
+                current_watcher.cancel()
+            try:
+                with suppress(asyncio.CancelledError):
+                    await current_watcher
+            except Exception as exc:
+                first_error = exc
+        stoppers: list[Callable[[], Awaitable[None]]] = []
+        if service_start_attempted:
+            stoppers.append(service.stop)
+        if lifecycle_start_attempted and openrazer_lifecycle is not None:
+            stoppers.insert(0, openrazer_lifecycle.stop)
+        for stop in stoppers:
+            try:
+                await stop()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
+
+    async def ensure_resources_stopped() -> None:
+        nonlocal resource_task
+        async with resource_lock:
+            if resource_task is None:
+                resource_task = asyncio.create_task(stop_entered_resources())
+            task = resource_task
+        await asyncio.shield(task)
+
+    def request_exit() -> None:
+        # Defer the wake so the async Exit handler's done-callback queues
+        # its method reply before the run loop wakes and tears down the bus.
+        nonlocal exit_requested
+        exit_requested = True
+        running_loop.call_soon(stopped.set)
+
     try:
         bus = await bus_factory()
         interface = NagaControlInterface(service, ready=False)
+        interface.set_shutdown_callbacks(ensure_resources_stopped, request_exit)
         await publish_service(bus, interface)
         if stopped.is_set():
             return
@@ -117,6 +189,21 @@ async def run(
             watcher = asyncio.create_task(topology_watcher())
         interface.mark_ready()
         logging.getLogger(__name__).info("Naga Control service state: %s", state.status)
+        raw_wait = getattr(bus, "wait_for_disconnect", None)
+        if callable(raw_wait):
+            watchable = cast(DisconnectWatchable, bus)
+
+            async def watch_bus_loss() -> None:
+                try:
+                    await watchable.wait_for_disconnect()
+                except asyncio.CancelledError:
+                    raise
+                except BaseException:
+                    stopped.set()
+                else:
+                    stopped.set()
+
+            bus_loss_watcher = asyncio.create_task(watch_bus_loss())
         await stopped.wait()
     except BaseException:
         body_failed = True
@@ -126,26 +213,23 @@ async def run(
             interface.mark_unavailable()
         if watcher is not None:
             watcher.cancel()
+        if bus_loss_watcher is not None:
+            bus_loss_watcher.cancel()
 
         async def cleanup() -> Exception | None:
             cleanup_error: Exception | None = None
-            if watcher is not None:
-                try:
-                    with suppress(asyncio.CancelledError):
-                        await watcher
-                except Exception as exc:
-                    cleanup_error = exc
-            stoppers: list[Callable[[], Awaitable[None]]] = []
-            if service_start_attempted:
-                stoppers.append(service.stop)
-            if lifecycle_start_attempted and openrazer_lifecycle is not None:
-                stoppers.insert(0, openrazer_lifecycle.stop)
-            for stop in stoppers:
-                try:
-                    await stop()
-                except Exception as exc:
-                    if cleanup_error is None:
-                        cleanup_error = exc
+            if bus_loss_watcher is not None:
+                with suppress(BaseException):
+                    await bus_loss_watcher
+            try:
+                await ensure_resources_stopped()
+            except Exception as exc:
+                cleanup_error = exc
+            if exit_requested and bus is not None:
+                # The queued Exit reply sits FIFO-ahead in the writer queue.
+                # One bounded public roundtrip after resource cleanup drains
+                # it before disconnect closes the socket.
+                await _flush_exit_reply(bus)
             if bus is not None:
                 try:
                     bus.disconnect()

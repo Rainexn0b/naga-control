@@ -18,6 +18,67 @@ installing or upgrading.
 
 ### Fixed
 
+## [0.5.2] - 2026-10-22
+
+This candidate prepares source-only non-systemd session support for attended
+validation; no portable artifact, Devuan install, or hardware certification is
+claimed. It needs a matching new build/release; older published AppImages such
+as v0.5.1 lack the session integration. See
+[non-systemd sessions](docs/non-systemd.md) and
+[GitHub releases](https://github.com/Rainexn0b/naga-control/releases) for
+current publication status.
+
+### Added
+
+- Candidate source-only non-systemd session support (needs a matching new
+  build/release; older published AppImages such as v0.5.1 lack it): managed
+  installer `--service-manager auto|systemd|session` (default `auto`,
+  usable user systemd preferred on fresh installs, persisted mode wins,
+  legacy missing mode means `systemd`, explicit mode change refused);
+  unprivileged session process with direct session D-Bus activation plus
+  service login entry `org.nagacontrol.Service.desktop`, no user unit and
+  no root boot service; canonical `~/.local/share/naga-control/service-manager`
+  and `session-service.sh status|start|stop|restart` controls with GUI
+  restart branching and no fallback on malformed mode/missing helper; safe
+  `PrepareShutdown`/`Exit` lifecycle on `org.nagacontrol.Service1` with the
+  existing seven methods unchanged; install/update/removal fence with
+  owned blocker and `ReloadConfig` before clean stop. Session mode needs a
+  shared live session D-Bus, unchanged FUSE2/x86_64, verified seat ACLs,
+  and manual matching OpenRazer with no automatic backend offer. Session
+  D-Bus use requires the desktop-provided `DBUS_SESSION_BUS_ADDRESS` and
+  fails closed before `dbus-send` on unset/empty/autolaunch; session
+  removal keeps private unique recovery state files with logged paths for
+  manual recovery, while trusted rollback v1 stays the original 4 files in
+  both modes. No
+  Devuan/hardware certification is claimed. See `docs/non-systemd.md`.
+
+### Changed
+
+- Fresh installs prefer a usable user systemd manager and otherwise use
+  `session` when a live session D-Bus is available; a persisted mode wins over
+  `auto`, legacy missing mode means `systemd`, and an explicit mode change is
+  refused with manual-migration guidance. The GUI restart control branches on
+  the canonical mode file with no fallback to the other manager. Architecture,
+  installation, desktop-startup, development, and troubleshooting docs now
+  distinguish systemd and session paths, including the `dbus-send` snapshot form
+  and helper-owned metadata.
+
+### Fixed
+
+- Session D-Bus checks fail closed before `dbus-send` on unset/empty/autolaunch
+  with no private-bus workaround; malformed mode files and missing helpers are
+  reported with no fallback. Session removal preserves private unique recovery
+  copies and fences on uncertain failure with logged paths for manual recovery;
+  trusted rollback v1 stays the original 4 files in both modes.
+
+### Known Limitations
+
+- Requires the custom OpenRazer baseline at `26b0eeb5ed70d638fa3528851adcd5e58369a7f5` (fork `Rainexn0b/openrazer`, branch `naga-v3-pro-compat`, Arch packages `3.12.1.pr2904.fix2-1` attached to this release); no released upstream minimum replaces it. Use compatible kernel module, daemon, Python client, udev rules, and metadata. The temporary Arch prerequisite bridge is explicitly opt-in; source pinning is not an indefinite security freeze.
+- Only Razer Naga V3 Pro wired `1532:00E7` and HyperSpeed `1532:00E8` are supported, one transport at a time. Bluetooth and other devices are excluded.
+- Do not run the GUI or service as root.
+- Session mode is experimental source-only, pending portable artifact checks and attended Devuan validation; no verified Devuan or general non-systemd claim is made. It needs a live session D-Bus shared with the GUI and OpenRazer, unchanged FUSE2/x86_64, verified seat ACLs, and manual matching OpenRazer with no automatic backend offer. There is no root SysV init or bootstrap service start, no crash-restart guarantee, and install success is not physical readiness.
+- Evidence for this candidate is source validation only (fake suites); no portable artifact, Devuan install, or hardware pass is claimed. Attended Devuan handoff items remain pending; see `docs/non-systemd.md` and hardware validation for scope.
+
 ## [0.5.1] - 2026-10-17
 
 This release adds an optional tray login-startup checkbox and a confirmed

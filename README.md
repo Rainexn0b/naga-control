@@ -29,13 +29,17 @@ reports, feedback, and contributions are welcome.
   supported effects.
 - Application (software) profiles with manual selection; mappings keep working
   when the GUI is closed.
-- User systemd service with session D-Bus control and a PySide6 panel.
+- User systemd service, or session service on non-systemd desktops, with
+  session D-Bus control and a PySide6 panel. See
+  [non-systemd sessions](docs/non-systemd.md).
 
 ## Install
 
-Requires Linux x86_64, a user systemd/session D-Bus desktop session, FUSE2
-runtime support (`libfuse.so.2` plus `/dev/fuse`), `curl`, and `sudo` for
-scoped operations only. See
+Requires Linux x86_64, FUSE2 runtime support (`libfuse.so.2` plus
+`/dev/fuse`), `curl`, and `sudo` for scoped operations only, plus a
+desktop session with session D-Bus: either a user systemd manager
+(systemd backend) or the session fallback (`dbus-send` plus `sleep` for
+status checks, no `systemctl`/`busctl` required). See
 [installer prerequisites](docs/troubleshooting.md#installer-prerequisites).
 The AppImage targets the Ubuntu 22.04/glibc 2.35 floor on x86_64; this is a
 build floor, not certification of every distribution.
@@ -64,6 +68,8 @@ Before upgrading, quit the GUI and release held controls; remapping pauses
 briefly during a consented service stop. Never run the installer, GUI, or
 service as root. For a managed install leave `APPIMAGE_EXTRACT_AND_RUN`
 unset (or `0`).
+Non-systemd desktops use the same managed installer with
+`--service-manager session`; see [non-systemd sessions](docs/non-systemd.md).
 
 A successful install runs the service but establishes no physical-button
 checks by itself; finish with the snapshot and F13/F14/F17 checks in
@@ -107,6 +113,8 @@ service after confirmation; that restart never touches OpenRazer. See
   diagnostics.
 - [Troubleshooting](docs/troubleshooting.md): prerequisites, upgrades and
   recovery, service checks.
+- [Non-systemd sessions](docs/non-systemd.md): session service manager,
+  login entry, helper, and lifecycle notes.
 - [Release notes](docs/release-notes.md): required OpenRazer baseline,
   hardware limits, and history ([changelog](changelog.md)).
 - [Architecture](docs/architecture.md) and

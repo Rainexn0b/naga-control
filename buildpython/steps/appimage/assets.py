@@ -10,6 +10,7 @@ SYSTEM_TEMPLATES = (
     "udev/70-naga-control.rules",
     "systemd/user/naga-control.service",
     "dbus-1/services/org.nagacontrol.Service1.service",
+    "autostart/org.nagacontrol.Service.desktop",
 )
 
 

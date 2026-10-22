@@ -84,6 +84,14 @@ bootstrap_and_run() {
     || die "could not bootstrap install_user.sh from $BOOTSTRAP_REF"
   curl -fsSL "$base/scripts/uninstall.sh" -o "$BOOTSTRAP_TMP/scripts/uninstall.sh" \
     || die "could not bootstrap uninstall.sh from $BOOTSTRAP_REF"
+  # Shared session helper follows the same ref only when the downloaded inner
+  # script requires it. Old tags/stubs lacking the marker keep working without
+  # the helper. Never source the installed helper as installer control.
+  if grep -qF '# NAGA_SESSION_HELPER_REQUIRED' "$BOOTSTRAP_TMP/scripts/install_user.sh" 2>/dev/null \
+    || grep -qF '# NAGA_SESSION_HELPER_REQUIRED' "$BOOTSTRAP_TMP/scripts/uninstall.sh" 2>/dev/null; then
+    curl -fsSL "$base/scripts/session_service.sh" -o "$BOOTSTRAP_TMP/scripts/session_service.sh" \
+      || die "could not bootstrap session_service.sh from $BOOTSTRAP_REF"
+  fi
   # The optional prerequisite helper is fetched by install_user.sh only on
   # explicit opt-in or consented offer, from the selected release tag for Arch
   # and from the source bootstrap ref for native (not the AppImage version).

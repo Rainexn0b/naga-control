@@ -259,6 +259,9 @@ def test_dispatcher_forwards_flag_without_unconditional_helper_fetch(
     shutil.copyfile(script, fake.remote / "install_user.sh")
     (fake.remote / "uninstall.sh").write_text("exit 0\n")
     (fake.remote / "install_openrazer.sh").write_text(HELPER_OK)
+    (fake.remote / "session_service.sh").write_text(
+        (ROOT / "scripts/session_service.sh").read_text()
+    )
     dispatcher = fake.root / "install.sh"
     shutil.copyfile(ROOT / "install.sh", dispatcher)
     args = ["--ref", "old-ref", "--version", TAG]

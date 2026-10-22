@@ -28,6 +28,13 @@ METHODS: dict[str, tuple[tuple[object, ...], str, str, object]] = {
     "BeginCalibration": ((), "", "b", True),
     "EndCalibration": ((), "", "b", False),
 }
+# Approved issue #8 lifecycle API: PrepareShutdown/Exit extend the contract
+# beyond the original seven application methods; generic readiness cases below
+# stay scoped to METHODS and new shutdown tests cover the lifecycle gating.
+LIFECYCLE_SIGNATURES: dict[str, tuple[str, str]] = {
+    "PrepareShutdown": ("", ""),
+    "Exit": ("", ""),
+}
 
 
 class ExportedMethod(Protocol):
@@ -122,8 +129,10 @@ def assert_unavailable(error: object) -> None:
 @pytest.mark.parametrize("name", METHODS)
 def test_exported_wire_signatures_are_unchanged(name: str) -> None:
     methods = exported(NagaControlInterface(Service()))
-    assert set(methods) == set(METHODS)
+    assert set(methods) == set(METHODS) | set(LIFECYCLE_SIGNATURES)
     assert (methods[name].in_signature, methods[name].out_signature) == METHODS[name][1:3]
+    for lifecycle, signatures in LIFECYCLE_SIGNATURES.items():
+        assert (methods[lifecycle].in_signature, methods[lifecycle].out_signature) == signatures
 
 
 @pytest.mark.parametrize("explicit_ready", [False, True], ids=["default", "ready-true"])

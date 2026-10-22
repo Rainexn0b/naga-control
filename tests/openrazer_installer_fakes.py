@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from tests.installer_command_fakes import FAKE
+from tests.session_installer_fakes import FAKE_DBUS, FAKE_SLEEP
 
 ROOT = Path(__file__).resolve().parents[1]
 PIN = "26b0eeb5ed70d638fa3528851adcd5e58369a7f5"
@@ -175,6 +176,10 @@ def harness(tmp_path: Path) -> InstallerHarness:
         path = bin_dir / command
         path.write_text(f"#!{sys.executable}\n{FAKE}")
         path.chmod(0o755)
+    (bin_dir / "dbus-send").write_text(f"#!{sys.executable}\n{FAKE_DBUS}")
+    (bin_dir / "dbus-send").chmod(0o755)
+    (bin_dir / "sleep").write_text(FAKE_SLEEP)
+    (bin_dir / "sleep").chmod(0o755)
     safe_tools = "bash mkdir mv chmod mktemp rm rmdir dirname grep sha256sum cp cmp wc flock head"
     for command in safe_tools.split():
         executable = shutil.which(command)
@@ -201,6 +206,7 @@ def harness(tmp_path: Path) -> InstallerHarness:
         "SAFE_CAT": safe_cat,
         "SAFE_STAT": shutil.which("stat") or "missing-stat",
         "USER": "wrong-inherited-user",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/fake-installer-bus",
     }
     for key in tuple(environment):
         if key.startswith("NAGA_CONTROL_") or key in {
@@ -225,6 +231,9 @@ def stage_app_installer(fake: InstallerHarness, *, helper: str | None = None) ->
     source = source.replace("/usr/lib/os-release", str(fake.root / "vendor-os-release"))
     source = source.replace("/usr/bin/python3", str(fake.root / "bin/system-python3"))
     (scripts / "install_user.sh").write_text(source)
+    # Trusted sibling helper for session mode (real helper, never installed copy).
+    (scripts / "session_service.sh").write_text((ROOT / "scripts/session_service.sh").read_text())
+    (scripts / "session_service.sh").chmod(0o755)
     if helper is not None:
         (scripts / "install_openrazer.sh").write_text(helper)
     (fake.root / "os-release").write_text(
