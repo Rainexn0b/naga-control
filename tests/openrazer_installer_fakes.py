@@ -201,6 +201,8 @@ def harness(tmp_path: Path) -> InstallerHarness:
         **os.environ,
         "PATH": str(bin_dir),
         "HOME": str(root / "home"),
+        # Isolate from inherited host XDG; explicit overrides still honored.
+        "XDG_CONFIG_HOME": str(root / "home" / ".config"),
         "TMPDIR": str(temporary),
         "FAKE_ROOT": str(root),
         "SAFE_CAT": safe_cat,
