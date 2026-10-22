@@ -15,7 +15,8 @@ jobs:
   quality:
     name: Quality Gate (Python 3.12)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Full fake installer/lifecycle suite exceeds the 20-minute runner budget.
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
