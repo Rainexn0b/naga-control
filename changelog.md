@@ -18,6 +18,13 @@ installing or upgrading.
 
 ### Fixed
 
+- AppImage startup reuses matching OpenRazer package-cache links without writes.
+  Cache preparation failures now report exit status 75; the packaged user service
+  does not retry that status and limits other failures to three starts per five
+  minutes with ten seconds between retries, preventing persistent-failure mount
+  storms while preserving `KillMode=mixed` shutdown ordering. Existing published
+  AppImages and installed units are unchanged until upgraded.
+
 ## [0.5.1] - 2026-10-17
 
 This release adds an optional tray login-startup checkbox and a confirmed

@@ -24,15 +24,23 @@ export APPDIR
 # The host client imports daemon macro/keyboard helpers, but never starts a daemon
 # here. Expose just these packages, not host site-packages or native bindings.
 LINK_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/naga-control/host-openrazer"
+cache_failure() {
+  printf 'Naga Control: cannot prepare OpenRazer cache at %s (package %s); check free space and permissions, then start again manually.\n' "$LINK_DIR" "$PACKAGE" >&2
+  exit 75
+}
+
 for PACKAGE in openrazer openrazer_daemon; do
   HOST_PACKAGE="$(env -u PYTHONHOME -u PYTHONPATH -u LD_LIBRARY_PATH /usr/bin/python3 -c 'import importlib.util, sys; spec = importlib.util.find_spec(sys.argv[1]); print(next(iter(spec.submodule_search_locations))) if spec and spec.submodule_search_locations else None' "$PACKAGE" 2>/dev/null || true)"
   if [ -n "$HOST_PACKAGE" ]; then
-    mkdir -p "$LINK_DIR" || exit 1
-    # Atomic replacement avoids following/racing another launcher's package link.
-    LINK_TMP="$(mktemp "$LINK_DIR/.$PACKAGE.XXXXXX")" || exit 1
-    if ! ln -sfnT "$HOST_PACKAGE" "$LINK_TMP" || ! mv -Tf "$LINK_TMP" "$LINK_DIR/$PACKAGE"; then
-      rm -f "$LINK_TMP"
-      exit 1
+    # A valid bridge needs no writes, including when the cache filesystem is full.
+    if [ ! -L "$LINK_DIR/$PACKAGE" ] || [ "$(readlink "$LINK_DIR/$PACKAGE")" != "$HOST_PACKAGE" ]; then
+      mkdir -p "$LINK_DIR" || cache_failure
+      # Atomic replacement avoids following/racing another launcher's package link.
+      LINK_TMP="$(mktemp "$LINK_DIR/.$PACKAGE.XXXXXX")" || cache_failure
+      if ! ln -sfnT "$HOST_PACKAGE" "$LINK_TMP" || ! mv -Tf "$LINK_TMP" "$LINK_DIR/$PACKAGE"; then
+        rm -f "$LINK_TMP"
+        cache_failure
+      fi
     fi
     export PYTHONPATH="$LINK_DIR"
   fi

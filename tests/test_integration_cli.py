@@ -1,3 +1,4 @@
+from configparser import ConfigParser
 from pathlib import Path
 
 import pytest
@@ -74,14 +75,25 @@ def test_install_without_exec_prefix_keeps_source_content(tmp_path: Path) -> Non
     assert "ExecStart=/usr/bin/env naga-control-service" in unit
 
 
-def test_packaged_unit_preserves_appimage_shutdown_order(tmp_path: Path) -> None:
+@pytest.mark.parametrize("exec_prefix", [None, Path("/opt/Naga.Control.AppImage")])
+def test_packaged_unit_preserves_shutdown_and_restart_policy(
+    tmp_path: Path, exec_prefix: Path | None
+) -> None:
     source = Path(__file__).resolve().parents[1] / "system"
     home = tmp_path / "home"
-    install(source, home=home, exec_prefix=Path("/opt/Naga.Control.AppImage"))
+    install(source, home=home, exec_prefix=exec_prefix)
 
     unit = (home / ".config/systemd/user/naga-control.service").read_text()
-    assert "ExecStart=/opt/Naga.Control.AppImage service\n" in unit
-    assert "KillMode=mixed\n" in unit
+    policy = ConfigParser(interpolation=None)
+    policy.read_string(unit)
+    expected = f"{exec_prefix} service" if exec_prefix else "/usr/bin/env naga-control-service"
+    assert policy["Service"]["ExecStart"] == expected
+    assert policy["Service"]["KillMode"] == "mixed"
+    assert policy["Unit"]["StartLimitIntervalSec"] == "5min"
+    assert policy["Unit"]["StartLimitBurst"] == "3"
+    assert policy["Service"]["Restart"] == "on-failure"
+    assert policy["Service"]["RestartSec"] == "10s"
+    assert policy["Service"]["RestartPreventExitStatus"] == "75"
 
 
 def test_install_fails_on_missing_sources(tmp_path: Path) -> None:

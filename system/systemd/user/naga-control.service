@@ -1,6 +1,9 @@
 [Unit]
 Description=Naga Control remapping service
 After=graphical-session.target
+# Bound persistent startup failures even when retries are spaced apart.
+StartLimitIntervalSec=5min
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -8,7 +11,9 @@ ExecStart=/usr/bin/env naga-control-service
 # Keep the AppImage FUSE process alive until Python finishes graceful teardown.
 KillMode=mixed
 Restart=on-failure
-RestartSec=2
+RestartSec=10s
+# AppRun cache preparation needs operator repair, not another FUSE mount.
+RestartPreventExitStatus=75
 
 [Install]
 WantedBy=default.target
