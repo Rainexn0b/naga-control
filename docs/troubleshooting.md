@@ -212,6 +212,57 @@ Require `status` = `available`, then perform physical F13/F14 DPI-stage and F17
 held-ALT down/up checks with one transport and the precautions in
 [Hardware Validation](hardware-validation.md). Installation never proves them.
 
+## AppImage cache failure, ENOSPC, or repeated startup attempts
+
+The unreleased launcher reuses matching links in
+`${XDG_CACHE_HOME:-$HOME/.cache}/naga-control/host-openrazer` without rewriting
+them. Creating or replacing a link still requires writable cache storage. A
+preparation failure prints the cache path and exits with status **75 before
+bundled Python starts**. This can reflect full storage, exhausted filesystem
+metadata, permissions, or an obstructing directory, not mouse availability.
+The bridge still exposes only `openrazer` and `openrazer_daemon`, not the whole
+host Python package directory. Reuse is not a guarantee that later application
+writes will succeed on a full filesystem.
+
+The matching packaged user unit keeps `KillMode=mixed`, uses `RestartSec=10s`,
+allows at most three starts per five minutes, and prevents automatic restart
+for status 75. Other failures can retry within that limit. These changes do
+**not** patch previously published images or already-installed units; inspect
+`systemctl --user cat naga-control.service` to see the effective policy.
+Do not change `KillMode` or raise `TasksMax` to work around a startup loop; see
+[AppImage shutdown ordering](appimage-shutdown-investigation.md).
+
+For recovery, first stop Naga and inspect without D-Bus activation:
+
+```bash
+systemctl --user stop naga-control.service
+systemctl --user status naga-control.service
+journalctl --user -u naga-control.service -b -n 100 --no-pager
+df -h "$HOME" "${XDG_CACHE_HOME:-$HOME/.cache}"
+df -i "$HOME" "${XDG_CACHE_HOME:-$HOME/.cache}"
+```
+
+Quit the GUI and avoid snapshot/bus calls that can activate the service while
+repairing storage. On Btrfs, free bytes alone do not exclude metadata ENOSPC;
+have an administrator inspect filesystem allocation as well. Repair free space
+and cache permissions without running Naga as root or deleting profiles.
+For an older installed unit, a user-unit drop-in with the limits above can
+bound retries without replacing the image; it cannot give the old launcher
+status-75 behavior. Reload the user manager after a reviewed unit update.
+Only after storage, application files, and OpenRazer prerequisites are coherent,
+release held controls and manually recover with:
+
+```bash
+systemctl --user reset-failed naga-control.service
+systemctl --user start naga-control.service
+```
+
+Old restart storms may leave disconnected AppImage FUSE mounts. Inspect mount
+identity and confirm `Transport endpoint is not connected` with no live Naga
+process before unmounting each exact affected path normally with `fusermount -u`.
+Do not bulk-delete `/tmp/.mount_*`, unmount live images, or use force/lazy cleanup
+as a default. Multiple mounts are views of one image, not duplicate disk copies.
+
 ## Service says `absent` or mappings do nothing
 
 If the mouse is detected but the OpenRazer Python client is missing, the Device

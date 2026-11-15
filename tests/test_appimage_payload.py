@@ -23,6 +23,10 @@ def test_real_appdir_payload_installs_without_build_sources(
     assert len(installed) == 8
     unit = (home / ".config/systemd/user/naga-control.service").read_text()
     assert "KillMode=mixed" in unit
+    assert "StartLimitIntervalSec=5min\n" in unit
+    assert "StartLimitBurst=3\n" in unit
+    assert "RestartSec=10s\n" in unit
+    assert "RestartPreventExitStatus=75\n" in unit
     assert f"ExecStart={image} service" in unit
     assert (appdir / "AppRun").stat().st_mode & 0o111
     assert (appdir / "AppRun").read_bytes() == (
